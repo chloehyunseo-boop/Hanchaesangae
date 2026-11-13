@@ -1,0 +1,17 @@
+# 매시 50분에 기상청·공단 데이터를 받아 data/*.json을 갱신하는 워크플로.
+# 11/15(친구 라인)에 실제 호출 코드를 넣어요. 지금은 자리만 잡아 둠.
+# 인증키는 여기(코드)에 절대 쓰지 않고, 저장소 Settings > Secrets에만 넣어요.
+
+name: update-data
+on:
+  schedule:
+    - cron: "50 * * * *" # 매시 50분(UTC). 정각 혼잡을 피하려는 것 — 로드맵 3번
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: placeholder
+        run: echo "11/15에 실제 데이터 갱신 스텝을 넣어요"

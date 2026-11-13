@@ -1,0 +1,5 @@
+{
+  "_설명": "공연장·시설·주거지 좌표. 11/14 하린 라인에서 실제 GeoJSON으로 채워요. 지금은 자리만 잡아 둠.",
+  "type": "FeatureCollection",
+  "features": []
+}
