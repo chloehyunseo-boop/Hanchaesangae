@@ -29,9 +29,9 @@ export const CALC_GRID = {
 export const KMA_GRID = {
   nx: 62,
   ny: 126,
-  // 계산에 쓴 기준점: KSPO돔(체조경기장) 대략 중심
-  refLat: 37.5203,
-  refLon: 127.1268,
+  // 계산에 쓴 기준점: KSPO DOME 중심 (data/site.geojson, 11/15 확정 좌표로 재계산해도 nx=62, ny=126)
+  refLat: 37.519163,
+  refLon: 127.127359,
 };
 
 /**
