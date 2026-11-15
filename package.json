@@ -1,0 +1,9 @@
+{
+  "name": "olpak-wind-map",
+  "private": true,
+  "type": "module",
+  "description": "올팍 바람지도 — 데이터 갱신 스크립트. 화면(index.html, agency.html)은 빌드 없이 브라우저에서 바로 열어요.",
+  "scripts": {
+    "update-weather": "node scripts/update-weather.mjs"
+  }
+}

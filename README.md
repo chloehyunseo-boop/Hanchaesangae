@@ -16,5 +16,6 @@
 - `engine/` — 계산 코드 (common.js 공통 규격, noise.js 소음, plume.js 배출가스, weather.js 예보 파싱)
 - `data/` — 좌표·가정값·갱신되는 날씨/공연 데이터
 - `validation/` — 검증 스크립트
-- `.github/workflows/` — 매시 자동 갱신
+- `.github/workflows/` — 매시 자동 갱신 (`scripts/update-weather.mjs` 실행)
+- `scripts/` — 데이터 갱신 스크립트 (Node, GitHub Actions에서만 실행)
 - `decisions.md` — 작업마다 남기는 3줄 결정 기록 (기획서 '모델 설계'의 원재료)

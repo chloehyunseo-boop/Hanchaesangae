@@ -76,14 +76,82 @@ export function latLonToKmaGrid(lat, lon) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. 풍향 기준 — 아직 비어 있음 (11/15 작업)
+// 3. 풍향 기준 — 11/15 작업
 // ---------------------------------------------------------------------------
-// 기상청 VEC(바람이 불어오는 방향, 0~360도)를
-// "음원 → 수음점" 방향의 바람 성분으로 바꾸는 함수를 여기에 하나만 둬요.
-// export function windComponentTowardReceiver(vecDeg, sourceToReceiverBearingDeg) { ... }
+// 기상청 VEC는 "바람이 불어오는 방향"(0~360도, 0=북)이에요. 두 엔진 모두
+// "음원 → 수음점" 쪽으로 바람이 얼마나 부는지가 필요해서, 이 변환은 여기
+// 한 곳에만 둬요. 새 계수는 없고, 방위각 기하 계산만이에요.
+
+// 풍향 불확실성 부채꼴. 임시값: 중심에서 양쪽으로 22.5도(전체 폭 45도).
+// 11/27 예보-실측 비교로 구한 원형 각도 오차의 90백분위수로 바꿔요. (로드맵 2번 공통 조건)
+export const WIND_FAN_HALF_WIDTH_DEG = 22.5;
+
+/**
+ * 바람이 "음원 → 수음점" 방향으로 얼마나 부는지 계산해요.
+ * @param {number} vecFromDeg 기상청 VEC — 바람이 불어오는 방향 (도, 0=북, 시계방향)
+ * @param {number} sourceToReceiverBearingDeg 음원에서 수음점을 바라보는 방위각 (도, 0=북, 시계방향)
+ * @returns {{ diffDeg: number, alignment: number, withinFan: boolean }}
+ *   diffDeg: 바람이 "실제로 불어가는" 방향과 음원→수음점 방향의 차이 (-180~180, 0이면 정확히 그 방향)
+ *   alignment: cos(diffDeg) — 1이면 정확히 그 방향, -1이면 정반대
+ *   withinFan: diffDeg가 ±WIND_FAN_HALF_WIDTH_DEG 부채꼴 안인지
+ */
+export function windComponentTowardReceiver(vecFromDeg, sourceToReceiverBearingDeg) {
+  const windGoingToDeg = (vecFromDeg + 180) % 360;
+  let diff = windGoingToDeg - sourceToReceiverBearingDeg;
+  diff = ((diff + 180) % 360 + 360) % 360 - 180; // -180~180로 정규화
+  return {
+    diffDeg: diff,
+    alignment: Math.cos((diff * Math.PI) / 180),
+    withinFan: Math.abs(diff) <= WIND_FAN_HALF_WIDTH_DEG,
+  };
+}
 
 // ---------------------------------------------------------------------------
-// 4. 출력 형식 — 아직 비어 있음 (11/19 "엔진 연결"에서 확정)
+// 4. 기상 입력 형식 — 11/15 초안 (engine/weather.js가 이 모양으로 돌려줘요)
 // ---------------------------------------------------------------------------
-// 소음 엔진과 배출가스 엔진이 격자 칸마다 돌려주는 값의 모양(강/중/약 등)을
-// 여기에 타입으로 적어 둬요.
+/**
+ * @typedef {Object} ForecastItem
+ * @property {string} baseDate   발표일(YYYYMMDD) — 이 예보가 언제 나온 예보인지
+ * @property {string} baseTime   발표시각(HHMM)
+ * @property {string} fcstDate   예보 대상일(YYYYMMDD)
+ * @property {string} fcstTime   예보 대상시각(HHMM)
+ * @property {string} category   기상청 코드: VEC(풍향) WSD(풍속) TMP(기온) SKY(하늘상태) PTY(강수형태) 등
+ * @property {string} value      원본 예보값 (문자열 그대로, 단위는 기상청 코드 정의 따름)
+ * @property {"ultra"|"vilage"} source 초단기예보(ultra)인지 단기예보(vilage)인지
+ */
+
+/**
+ * @typedef {Object} ForecastRecord
+ * @property {string} 저장시각      ISO 문자열 — 이 파일을 쓴 시각 (실행 시각, 발표 시각 아님)
+ * @property {ForecastItem[]} 예보
+ * @property {Array<{시각: string, 사유: string}>} 실패기록  호출 실패나 파싱 실패를 그대로 남겨요(값을 임의로 채우지 않음)
+ */
+
+// ---------------------------------------------------------------------------
+// 5. 소스(음원) 형식 — 11/15 초안
+// ---------------------------------------------------------------------------
+/**
+ * 소음 음원(공연)과 배출가스 음원(발전차)이 공통으로 갖는 모양이에요.
+ * 종류별로 더 필요한 값은 각자 확장해서 써요(이 모양을 덮어쓰지 않음).
+ * @typedef {Object} SourceSpec
+ * @property {"stage"|"generator"} kind
+ * @property {number} x  EPSG:5186 미터 좌표
+ * @property {number} y
+ * @property {{start: string|null, end: string|null, 출처: "KOPIS명시"|"런타임추정"|"수동입력"|"미확인"}} time
+ *   time.출처가 "미확인"이면 이 음원은 계산에 넣지 않아요(로드맵 2번 공통 조건).
+ */
+
+// ---------------------------------------------------------------------------
+// 6. 출력 형식 — 11/15 초안 (M2 "엔진 연결"에서 최종 확정, 지금은 바뀔 수 있음)
+// ---------------------------------------------------------------------------
+/**
+ * 소음 엔진(noise.js)과 배출가스 엔진(plume.js)이 25m 계산 격자 한 칸·한 시각에 대해
+ * 돌려주는 값의 모양이에요. 둘 다 같은 모양을 써서, 지도 쪽 코드가 레이어만 바꿔 그리게 해요.
+ * @typedef {Object} OutputCell
+ * @property {number} x  EPSG:5186 미터 좌표 (격자 칸 중심)
+ * @property {number} y
+ * @property {string} hour  ISO 시각 (1시간 단위)
+ * @property {"noise"|"exhaust"} layer
+ * @property {number} value  소음은 dB(A), 배출가스는 NO2 ppm (로드맵 2번)
+ * @property {"강"|"중"|"약"|null} level  로드맵 2번 3단계 기준으로 분류. 기준 미만이면 null
+ */

@@ -1,6 +1,8 @@
-# 매시 50분에 기상청·공단 데이터를 받아 data/*.json을 갱신하는 워크플로.
-# 11/15(친구 라인)에 실제 호출 코드를 넣어요. 지금은 자리만 잡아 둠.
-# 인증키는 여기(코드)에 절대 쓰지 않고, 저장소 Settings > Secrets에만 넣어요.
+# 매시 50분에 기상청 데이터를 받아 data/weather.json을 갱신하는 워크플로.
+# 공단 데이터(공연정보·대관정보 등) 연동은 11/16 이후, 공단 답변을 보고 추가해요.
+# 인증키는 여기(코드)에 절대 쓰지 않고, 저장소 Settings > Secrets and variables > Actions에
+# KMA_SERVICE_KEY 이름으로 넣어요. 공개 저장소의 스케줄 Actions는 60일 동안 커밋이 없으면
+# 자동으로 꺼져요 — 기획서에 이 대책을 적어 둬야 해요(로드맵 8번, 변경사항 01).
 
 name: update-data
 on:
@@ -8,10 +10,28 @@ on:
     - cron: "50 * * * *" # 매시 50분(UTC). 정각 혼잡을 피하려는 것 — 로드맵 3번
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: placeholder
-        run: echo "11/15에 실제 데이터 갱신 스텝을 넣어요"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 기상청 예보 갱신
+        env:
+          KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}
+        run: node scripts/update-weather.mjs
+
+      - name: 바뀐 데이터만 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/weather.json
+          git diff --cached --quiet || git commit -m "auto: 기상 데이터 갱신 ($(date -u +%Y-%m-%dT%H:%MZ))"
+          git push
