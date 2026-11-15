@@ -25,3 +25,9 @@
 - 했음: `engine/common.js`에 풍향 변환 함수(`windComponentTowardReceiver`, VEC를 음원→수음점 방향 성분으로 바꿔요)와 기상 입력·소스·출력 형식(JSDoc 타입)을 추가했어요. `engine/weather.js`에 기상청 초단기예보·단기예보 실제 호출·파싱·병합 로직을 작성했어요(로드맵 2번 공통 조건대로 0~6시간 초단기 우선, 실패는 꾸며내지 않고 그대로 기록). `.github/workflows/update-data.yml`을 실제로 `scripts/update-weather.mjs`를 실행해 `data/weather.json`을 커밋하도록 바꿨어요. 인증키는 `secrets.KMA_SERVICE_KEY`로만 받아요.
 - 가정했음: 단기예보 발표 시각이 "오래됐다"고 볼 기준(몇 분)은 아직 못 정해서, 지금은 초단기예보가 있으면 무조건 써요 — 사용자가 오늘 직접 API를 호출해 실제 발표 시각을 확인하면 그 기준을 채울 수 있어요.
 - 포기했음(오늘은 안 함): 실제 서비스키로 호출해서 응답이 기대한 모양(VEC·WSD가 1시간마다 다 있는지 등)인지 확인하는 건 못 했어요 — 이건 사용자가 자기 키로 직접 해야 하는 일(로드맵 11/15 직접 할 일)이라 코드만 준비해 뒀어요. 공단 공연정보 API 연동은 변경사항 01에 따라 11/16 공단 답변 이후로 미뤘어요.
+
+## 2026-11-15 (이어서) · 친구 라인 · API 실제 호출 테스트, GitHub push
+
+- 했음: 사용자가 자기 서비스키로 `getVilageFcst`를 직접 호출해봤어요. 응답에 카테고리 12종(TMP, UUU, VVV, VEC, WSD, SKY, PTY, POP, WAV, PCP, REH, SNO)이 시간마다 다 들어있어서 `weather.js`가 가정한 응답 모양과 일치함을 확인했어요. 3개 커밋(`engine/common.js`·`weather.js`·workflow 등)을 GitHub에 push 완료했어요.
+- 가정했음: 저장소가 `chloehyunseo-boop/-`에서 `chloehyunseo-boop/Hanchaesangae`로 이름이 바뀐 걸 push 중 리다이렉트 안내로 알게 돼서, origin 주소를 새 이름으로 갱신했어요.
+- 포기했음(오늘은 안 함): ASOS 과거자료 다운로드, API허브 과거 예보 테스트, 가장 가까운 AWS 확정은 아직 안 했어요 — 사용자의 다음 직접 할 일이에요.
