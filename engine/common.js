@@ -10,7 +10,10 @@
 export const CALC_GRID = {
   cellSizeM: 25,       // 계산 격자 한 칸 크기 (표시용. 기상 해상도 아님)
   crs: "EPSG:5186",    // 투영좌표계. 지도에 그릴 때만 위경도(EPSG:4326)로 변환
-  // bounds: 11/14~11/15에 공원 경계 + 1km로 확정
+  // bounds: data/site.geojson의 공원 경계 + 1km로 채워요.
+  // 11/16 기준 site.geojson이 아직 빈 틀(features: [])이라 못 채웠어요 —
+  // 하린 라인에서 공원 경계 좌표를 채운 뒤 다시 계산해요(숫자를 임의로 넣지 않음).
+  bounds: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -137,8 +140,20 @@ export function windComponentTowardReceiver(vecFromDeg, sourceToReceiverBearingD
  * @property {"stage"|"generator"} kind
  * @property {number} x  EPSG:5186 미터 좌표
  * @property {number} y
- * @property {{start: string|null, end: string|null, 출처: "KOPIS명시"|"런타임추정"|"수동입력"|"미확인"}} time
+ * @property {{start: string|null, end: string|null, 출처: "공단API명시"|"런타임추정"|"수동입력"|"미확인"}} time
  *   time.출처가 "미확인"이면 이 음원은 계산에 넣지 않아요(로드맵 2번 공통 조건).
+ */
+
+/**
+ * kind가 "generator"인 SourceSpec은 발전차 한 대당 하나씩 아래 필드를 더 가져요.
+ * 실제 값(대수, 출력, tier4 여부 등)의 근거는 docs/발전차_배출가스_가정값과_근거.md를 따라요
+ * (11/16 기준 그 문서가 아직 없어서, 여기서는 구조만 정해요 — 숫자는 넣지 않음).
+ * @typedef {Object} GeneratorSourceSpec
+ * @property {"generator"} kind
+ * @property {number} 엔진출력_kW
+ * @property {"엔진"|"전기"|"미확인"} 출력종류
+ * @property {boolean|null} tier4여부  null이면 미확인
+ * @property {"확인"|"시연용가정"} 정보출처  "시연용가정"이면 화면에 가정값 표시 필요(CLAUDE.md 규칙 2)
  */
 
 // ---------------------------------------------------------------------------
@@ -154,4 +169,9 @@ export function windComponentTowardReceiver(vecFromDeg, sourceToReceiverBearingD
  * @property {"noise"|"exhaust"} layer
  * @property {number} value  소음은 dB(A), 배출가스는 NO2 ppm (로드맵 2번)
  * @property {"강"|"중"|"약"|null} level  로드맵 2번 3단계 기준으로 분류. 기준 미만이면 null
+ * @property {string[]} flags  이 칸의 값에 적용된 주의사항. 예: "근거리불확실"(발전차 100m 이내),
+ *   "약풍미표시"(풍속 과소), "사양미확인"(발전차 사양 정보출처가 "시연용가정"),
+ *   "시연용가정"(가정값으로 계산됨), "기상보정미적용"(K4 등 아직 미적용). 없으면 빈 배열.
+ * @property {string} scenario  이 값이 어느 계산 시나리오로 나왔는지(로드맵 2번).
+ *   예: "ISO9613-2_상한", "CONCAWE_전체", "계약기준역산", "문헌기반가정"
  */
