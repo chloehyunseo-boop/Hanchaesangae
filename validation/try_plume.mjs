@@ -10,6 +10,11 @@ if (!when || !["맑음", "구름많음", "흐림"].includes(sky)) {
   process.exit(1);
 }
 const DOME = { lat: 37.519163, lon: 127.127359 };
+if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(when) || [kw, ws, dist].some((v) => !Number.isFinite(Number(v)))) {
+  console.log(`입력 형식이 달라요. 받은 값: 출력=${kw}, 풍속=${ws}, 거리=${dist}, 시각=${JSON.stringify(when)}`);
+  console.log('시각은 "2026-11-21 12:00"처럼 따옴표 안에 써 주세요.');
+  process.exit(1);
+}
 const t = new Date(when.replace(" ", "T") + ":00+09:00");
 const R = 6371000, d = Number(dist) / R, la = (DOME.lat * Math.PI) / 180;
 const rec = { lat: DOME.lat, lon: DOME.lon + ((Math.atan2(Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) ** 2)) * 180) / Math.PI };
