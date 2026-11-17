@@ -110,6 +110,43 @@ export function windComponentTowardReceiver(vecFromDeg, sourceToReceiverBearingD
 }
 
 // ---------------------------------------------------------------------------
+// 3.5 거리·방위각 — 11/17 임시
+// ---------------------------------------------------------------------------
+// SourceSpec.x/y는 원래 EPSG:5186(미터) 기준인데, 지금 가진 음원 좌표
+// (data/olpark_sites.geojson)는 아직 위경도(EPSG:4326)예요. 5186 투영 변환은
+// M2 "지도 연결"에서 하기로 하고, 지금은 공원처럼 좁은 범위(수 km 이내)에서
+// 오차가 1% 미만인 하버사인(haversine) 공식으로 거리·방위각을 구해요.
+// 공식 자체는 측지학 공개 표준이고, 새로 지어낸 계수는 없어요.
+const EARTH_RADIUS_M = 6371000;
+
+/**
+ * 두 위경도 지점 사이의 직선거리(미터)를 하버사인 공식으로 계산해요.
+ * @returns {number} 거리 (m)
+ */
+export function haversineDistanceM(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * 지점1에서 지점2를 바라보는 방위각(도, 0=북, 시계방향)을 계산해요.
+ * @returns {number} 방위각 (0~360도)
+ */
+export function bearingDeg(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
+// ---------------------------------------------------------------------------
 // 4. 기상 입력 형식 — 11/15 초안 (engine/weather.js가 이 모양으로 돌려줘요)
 // ---------------------------------------------------------------------------
 /**
