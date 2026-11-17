@@ -252,7 +252,8 @@ function mgPerM3ToPpm(mgPerM3) {
 
 /** CLAUDE.md 6번: NO2 1시간 기준(0.10ppm) 대비 강 50%↑ · 중 10~50% · 약 2~10% */
 export function classifyExhaustLevel(ppm) {
-  const ratio = ppm / NO2_HOURLY_STANDARD_PPM;
+  // 나눗셈 부동소수점 오차(예: 0.01/0.1 = 0.0999…)로 경계값이 한 단계 아래로 떨어지지 않게 반올림해요.
+  const ratio = Math.round((ppm / NO2_HOURLY_STANDARD_PPM) * 1e9) / 1e9;
   if (ratio >= 0.5) return "강";
   if (ratio >= 0.1) return "중";
   if (ratio >= 0.02) return "약";
