@@ -14,7 +14,8 @@
 - `index.html` — 시민 화면
 - `agency.html` — 공단 화면
 - `engine/` — 계산 코드 (common.js 공통 규격, noise.js 소음, plume.js 배출가스, weather.js 예보 파싱)
-- `data/` — 좌표·가정값·갱신되는 날씨/공연 데이터 (olpark_sites.geojson: 공연장·무대·주거지 좌표)
+- `data/` — 좌표·가정값·갱신되는 날씨/공연 데이터 (site.geojson: 공연장·무대·주거지 좌표)
+- `docs/` — 가정값·근거를 정리한 상세 문서 (발전차 배출가스, 공원 좌표, 민원 정리)
 - `validation/` — 검증 스크립트
 - `.github/workflows/` — 매시 자동 갱신 (`scripts/update-weather.mjs` 실행)
 - `scripts/` — 데이터 갱신 스크립트 (Node, GitHub Actions에서만 실행)

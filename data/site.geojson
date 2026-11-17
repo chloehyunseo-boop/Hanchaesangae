@@ -1,5 +1,346 @@
 {
-  "_설명": "공연장·시설·주거지 좌표. 11/14 하린 라인에서 실제 GeoJSON으로 채워요. 지금은 자리만 잡아 둠.",
-  "type": "FeatureCollection",
-  "features": []
+ "_설명": "공연장·야외 무대·수영장·대표 주거지 좌표(WGS84). 근거와 처리 규칙은 docs/올팍_좌표.md. 공연장·수영장·주거지는 구글 지도 장소 카드 plus code 변환(±7m), 야외 무대는 하린이 위성사진에서 지정(2026-11-15).",
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.127359,
+     37.519163
+    ]
+   },
+   "properties": {
+    "name": "KSPO DOME",
+    "type": "공연장(실내)",
+    "pluscode": "8Q99G49G+MW9",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.126234,
+     37.517363
+    ]
+   },
+   "properties": {
+    "name": "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)",
+    "type": "공연장(실내)",
+    "pluscode": "8Q99G48G+WFX",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.127516,
+     37.514713
+    ]
+   },
+   "properties": {
+    "name": "올림픽홀",
+    "type": "공연장(실내)",
+    "pluscode": "8Q99G47H+V2J",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.125016,
+     37.516688
+    ]
+   },
+   "properties": {
+    "name": "우리금융아트홀",
+    "type": "공연장(실내)",
+    "pluscode": "8Q99G48G+M2C",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.126828,
+     37.513362
+    ]
+   },
+   "properties": {
+    "name": "올림픽공원 K아트홀",
+    "type": "공연장(실내)",
+    "pluscode": "8Q99G47G+8PW",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.128328,
+     37.515388
+    ]
+   },
+   "properties": {
+    "name": "올림픽공원 테니스경기장",
+    "type": "공연장(실내외)",
+    "pluscode": "8Q99G48H+584",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.123328,
+     37.516937
+    ]
+   },
+   "properties": {
+    "name": "올림픽공원 벨로드롬",
+    "type": "공연장(실내외)",
+    "pluscode": "8Q99G48F+Q8G",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": ""
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.125141,
+     37.518888
+    ]
+   },
+   "properties": {
+    "name": "88잔디마당",
+    "type": "공연장(야외)",
+    "pluscode": "8Q99G49G+H32",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "장소 중심점. 무대 위치 아님"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.124859,
+     37.519113
+    ]
+   },
+   "properties": {
+    "name": "88잔디마당 무대",
+    "type": "음원(야외 무대)",
+    "pluscode": "8Q99G49F+JWX",
+    "source": "하린 확인: 구글 지도 위성사진 위 무대 위치 핀 + 공연 항공사진 (2026-11-15)",
+    "note": "무대는 잔디마당 북서쪽 끝, 객석은 남동쪽으로 펼쳐짐 → 무대 정면은 대략 남동 방향(정확한 각도 미확인)"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.125391,
+     37.521213
+    ]
+   },
+   "properties": {
+    "name": "88호수 수변무대",
+    "type": "공연장(야외)",
+    "pluscode": "8Q99G4CG+F5J",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "구글 장소명 '88호수 수변무대'. 몽촌호수 쪽 '수변무대'(8Q99G499+53X)와 다른 곳"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.125444,
+     37.521186
+    ]
+   },
+   "properties": {
+    "name": "88호수 수변무대 무대",
+    "type": "음원(야외 무대)",
+    "pluscode": "",
+    "source": "하린 확인: 구글 지도 위성사진에서 무대 위치 지정 (2026-11-15)",
+    "note": "구글 장소 좌표와 약 5m 차이"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.116359,
+     37.518613
+    ]
+   },
+   "properties": {
+    "name": "평화의광장",
+    "type": "공연장(야외)",
+    "pluscode": "8Q99G498+CGX",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "장소 중심점"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.116525,
+     37.518631
+    ]
+   },
+   "properties": {
+    "name": "평화의광장 무대 A",
+    "type": "음원(야외 무대)",
+    "pluscode": "",
+    "source": "하린 확인: 구글 지도 위성사진에서 무대 위치 지정 (2026-11-15)",
+    "note": "무대 설치 위치 1"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.115703,
+     37.518389
+    ]
+   },
+   "properties": {
+    "name": "평화의광장 무대 B(세계평화의문 앞)",
+    "type": "음원(야외 무대)",
+    "pluscode": "",
+    "source": "하린 확인: 구글 지도 위성사진에서 무대 위치 지정 (2026-11-15)",
+    "note": "무대 설치 위치 2. A와 따로 계산, 합치지 않음"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.127609,
+     37.512912
+    ]
+   },
+   "properties": {
+    "name": "장미광장",
+    "type": "공연장(야외)",
+    "pluscode": "8Q99G47H+529",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "로즈아워페스타 등 앰프 공연 있음(민원 VB0000120345, 2023·2024). 무대 위치 미확인 → 장소 중심점을 음원으로 쓰고 '무대 위치 가정' 표시"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.127172,
+     37.520837
+    ]
+   },
+   "properties": {
+    "name": "올림픽수영장",
+    "type": "강습 영향",
+    "pluscode": "8Q99G4CG+8VM",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "주소 올림픽로 424, ksponco.or.kr 확인"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.130516,
+     37.514512
+    ]
+   },
+   "properties": {
+    "name": "올림픽선수기자촌",
+    "type": "주거지(동)",
+    "pluscode": "8Q99G47J+R62",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "대표 수음점(검증·설명용). '가장 가까운 아파트'라고 쓰지 않음"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.116734,
+     37.526663
+    ]
+   },
+   "properties": {
+    "name": "풍납극동아파트",
+    "type": "주거지(북)",
+    "pluscode": "8Q99G4G8+MM9",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "대표 수음점(검증·설명용). '가장 가까운 아파트'라고 쓰지 않음"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.108953,
+     37.519188
+    ]
+   },
+   "properties": {
+    "name": "잠실파크리오아파트",
+    "type": "주거지(서)",
+    "pluscode": "8Q99G495+MHG",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "대표 수음점(검증·설명용). '가장 가까운 아파트'라고 쓰지 않음"
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     127.127578,
+     37.510213
+    ]
+   },
+   "properties": {
+    "name": "올림픽파크센트레빌아파트",
+    "type": "주거지(남)",
+    "pluscode": "8Q99G46H+32P",
+    "source": "구글 지도 장소 카드 plus code (2026-11-15 조회, 오차 약 ±7m)",
+    "note": "대표 수음점(검증·설명용). '가장 가까운 아파트'라고 쓰지 않음"
+   }
+  }
+ ]
 }

@@ -1,6 +1,7 @@
 // engine/plume.js — 발전차 배출가스 엔진 (하린 라인)
 // 가우시안 플룸(ISC3 도시형 확산계수 참고), AP-42 배출계수, NO2 환산.
-// 모든 수치·수식의 출처는 발전차_배출가스_가정값과_근거.md(2026-11-15, 하린, 원문 대조 완료)를 따라요.
+// 모든 수치·수식의 출처는 docs/발전차_배출가스_가정값과_근거.md(원문 대조 완료)와
+// data/assumptions.json의 "배출가스" 항목을 따라요 — 값이 둘에서 다르면 assumptions.json이 코드용 기준.
 // 로드맵 2번 "배출가스" 참고. 11/17 1차 작성(M2) — 안정도 등급 자동판정의 마지막 단계
 // (풍속×순복사지수 → A~F, EPA 기상관측지침 표 6-4)는 그 표의 실제 풍속 구간 값을
 // 아직 원문에서 확인 못해서 비워뒀어요(아래 estimateNetRadiationIndex 설명 참고).
@@ -90,15 +91,21 @@ export function insolationClass(elevationDeg) {
 }
 
 /**
- * 기상청 SKY(맑음/구름많음/흐림)·낮밤으로 순복사 지수를 근사해요(표 6-6, '기본' 보수적 근사).
- * 비교 시나리오(낮 구름많음 −2, 흐림 0)는 아직 안 붙였어요.
+ * 기상청 SKY(맑음/구름많음/흐림)·낮밤으로 순복사 지수를 근사해요.
+ * data/assumptions.json의 배출가스.안정도_Turner기반근사.SKY매핑_기본을 그대로 따라요 — 낮의
+ * 구름많음·흐림은 "일사등급 그대로"가 아니라 "일사등급 − 1(또는 2)"이고, 수정 후 1 미만이면
+ * 1로 올려요(같은 출처의 '주의' 항목). 비교 시나리오(구름많음 낮 −2, 흐림 0)는 아직 안 붙였어요.
  * @param {{sky: "맑음"|"구름많음"|"흐림", isDaytime: boolean, lat: number, lon: number, dateUtc: Date}} p
  * @returns {number} 순복사 지수
  */
 export function estimateNetRadiationIndex({ sky, isDaytime, lat, lon, dateUtc }) {
-  if (sky === "맑음") return isDaytime ? insolationClass(solarElevationDeg(lat, lon, dateUtc)) : -2;
-  if (sky === "구름많음") return -1;
-  return isDaytime ? -2 : -1; // 흐림
+  if (!isDaytime) {
+    return sky === "맑음" ? -2 : -1; // 구름많음·흐림 모두 밤 −1
+  }
+  const insolation = insolationClass(solarElevationDeg(lat, lon, dateUtc));
+  if (sky === "맑음") return insolation;
+  if (sky === "구름많음") return Math.max(1, insolation - 1);
+  return Math.max(1, insolation - 2); // 흐림
 }
 
 /**

@@ -10,9 +10,10 @@
 export const CALC_GRID = {
   cellSizeM: 25,       // 계산 격자 한 칸 크기 (표시용. 기상 해상도 아님)
   crs: "EPSG:5186",    // 투영좌표계. 지도에 그릴 때만 위경도(EPSG:4326)로 변환
-  // bounds: data/site.geojson의 공원 경계 + 1km로 채워요.
-  // 11/16 기준 site.geojson이 아직 빈 틀(features: [])이라 못 채웠어요 —
-  // 하린 라인에서 공원 경계 좌표를 채운 뒤 다시 계산해요(숫자를 임의로 넣지 않음).
+  // bounds: 공원 "경계 폴리곤" + 1km로 채워요.
+  // 11/17 기준 data/site.geojson엔 공연장·무대·주거지 "지점" 좌표만 있고, 공원 외곽
+  // 경계선(폴리곤) 자체는 아직 없어요 — 지점들의 바운딩박스로 대신하면 공원 경계보다
+  // 작게 잡힐 수 있어서(산책로·녹지가 지점 바깥에도 있음), 경계 폴리곤이 생길 때까지 비워 둬요.
   bounds: null,
 };
 
@@ -29,9 +30,9 @@ export const CALC_GRID = {
 export const KMA_GRID = {
   nx: 62,
   ny: 126,
-  // 계산에 쓴 기준점: KSPO돔(체조경기장) 대략 중심
-  refLat: 37.5203,
-  refLon: 127.1268,
+  // 계산에 쓴 기준점: KSPO DOME 중심 (data/site.geojson, 11/15 확정 좌표로 재계산해도 nx=62, ny=126)
+  refLat: 37.519163,
+  refLon: 127.127359,
 };
 
 /**
