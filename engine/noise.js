@@ -28,14 +28,70 @@ export function classifyNoiseLevel(dBA) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// ISO 9613-2 감쇠항 — 1차: 거리 감쇠(Adiv) + 공기 흡수(Aatm)
+// ---------------------------------------------------------------------------
+// Aground(지면 효과)·Abar(차폐)는 아직 원문(ISO 9613-2 7.3절)을 못 봐서(유료) 비워 뒀어요.
+
+/**
+ * 거리 감쇠(Adiv, dB) — 점음원 구면 확산. ISO 9613-2의 잘 알려진 식이에요.
+ * Adiv = 20·log10(d/d0) + 11, d0 = 1m.
+ * @param {number} distanceM 음원-수음점 거리(m)
+ */
+export function calcAdiv(distanceM) {
+  return 20 * Math.log10(distanceM / 1) + 11;
+}
+
+// ISO 9613-1(=ANSI/ASA S1.26)의 공기 흡수 계수 식. 표준 원문 자체는 이번에 못 열어봤고,
+// Bass·Sutherland·Zuckerwar·Blackstock·Hester(1995, JASA 97(1), 680-683,
+// doi:10.1121/1.412989)의 공개식을 따랐어요 — python-acoustics 등 여러 공개 구현이 같은 식을
+// 써요. 상수는 그 논문 기준이에요.
+const T0 = 293.15; // 기준 온도(K)
+const T01 = 273.16; // 물의 삼중점(K)
+const P_REF_KPA = 101.325; // 기준 기압(kPa)
+
+/**
+ * 공기 흡수 감쇠 계수(alpha, dB/m)를 계산해요.
+ * @param {number} freqHz 주파수(Hz)
+ * @param {number} tempC 기온(℃)
+ * @param {number} rhPercent 상대습도(%)
+ * @param {number} [pressureKPa] 기압(kPa, 기본 표준대기압)
+ * @returns {number} dB/m
+ */
+export function atmosphericAbsorptionDbPerM(freqHz, tempC, rhPercent, pressureKPa = P_REF_KPA) {
+  const T = tempC + 273.15;
+  const pr = pressureKPa / P_REF_KPA;
+
+  const psatOverPref = 10.0 ** (-6.8346 * (T01 / T) ** 1.261 + 4.6151);
+  const h = (rhPercent * psatOverPref) / pr;
+
+  const frO = pr * (24.0 + (4.04e4 * h * (0.02 + h)) / (0.391 + h));
+  const frN =
+    pr *
+    (T / T0) ** -0.5 *
+    (9.0 + 280.0 * h * Math.exp(-4.17 * ((T / T0) ** (-1.0 / 3.0) - 1.0)));
+
+  const classical = 1.84e-11 * (1 / pr) * Math.sqrt(T / T0);
+  const aO = 0.01275 * Math.exp(-2239.1 / T) * (frO / (frO ** 2 + freqHz ** 2));
+  const aN = 0.1068 * Math.exp(-3352.0 / T) * (frN / (frN ** 2 + freqHz ** 2));
+
+  return 8.686 * freqHz ** 2 * (classical + (T / T0) ** -2.5 * (aO + aN));
+}
+
+/** Aatm(dB) = alpha(dB/m) × 거리(m) */
+export function calcAatm(distanceM, freqHz, tempC, rhPercent, pressureKPa = P_REF_KPA) {
+  return atmosphericAbsorptionDbPerM(freqHz, tempC, rhPercent, pressureKPa) * distanceM;
+}
+
 /**
  * ISO 9613-2 상한 시나리오 (Lp = LW + Dc − A, A = Adiv+Aatm+Aground+Abar).
- * @throws {Error} ISO 9613-2 원문 감쇠항 수식을 아직 확인 못해서 미구현이에요.
+ * @throws {Error} Aground(지면 효과) 원문 수식을 아직 확인 못해서 전체 합산은 미구현이에요.
+ *   거리 감쇠·공기 흡수만 쓰려면 calcAdiv()/calcAatm()을 따로 부르세요.
  */
 export function calcNoiseIso9613Upper(/* { sourceLat, sourceLon, receiverLat, receiverLon, LW, windVecFromDeg, ... } */) {
   throw new Error(
-    "미구현 — ISO 9613-2 원문의 감쇠항(Adiv/Aatm/Aground/Abar) 수식을 아직 확인 못했어요. " +
-      "원문 확인 후 여기에 채워요(CLAUDE.md 규칙 2·5)."
+    "미구현 — Aground(지면 효과, ISO 9613-2 7.3절) 수식을 아직 확인 못했어요(원문 유료). " +
+      "Adiv·Aatm은 calcAdiv()/calcAatm()으로 따로 쓸 수 있어요. 원문 확인 후 여기에 채워요(CLAUDE.md 규칙 2·5)."
   );
 }
 
