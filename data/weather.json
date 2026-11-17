@@ -1,6 +1,6 @@
 {
   "_설명": "GitHub Actions가 매시 50분에 갱신해요. 값이 없는 시각은 비워 둬요(임의로 채우지 않음).",
-  "저장시각": "2026-11-17T12:39:51.472Z",
+  "저장시각": "2026-11-17T13:58:37.693Z",
   "예보": [
     {
       "baseDate": "20261117",
@@ -17,284 +17,68 @@
       "fcstDate": "20261117",
       "fcstTime": "1200",
       "category": "UUU",
-      "value": "0",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "VVV",
-      "value": "-0.4",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "VEC",
-      "value": "11",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "WSD",
-      "value": "1",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "SKY",
-      "value": "3",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "PTY",
-      "value": "0",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "POP",
-      "value": "20",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "WAV",
-      "value": "0",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "PCP",
-      "value": "강수없음",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "REH",
-      "value": "55",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "SNO",
-      "value": "적설없음",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "TMP",
-      "value": "14",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "UUU",
-      "value": "-1",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "VVV",
-      "value": "-0.3",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "VEC",
-      "value": "70",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "WSD",
-      "value": "1",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "SKY",
-      "value": "3",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "PTY",
-      "value": "0",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "POP",
-      "value": "20",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "WAV",
-      "value": "0",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "PCP",
-      "value": "강수없음",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "REH",
-      "value": "55",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "SNO",
-      "value": "적설없음",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1400",
-      "category": "TMP",
-      "value": "14",
-      "source": "vilage"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1400",
-      "category": "UUU",
       "value": "-0.8",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "VVV",
       "value": "-0.1",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "VEC",
-      "value": "77",
-      "source": "ultra"
+      "value": "84",
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "WSD",
       "value": "1",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "SKY",
       "value": "4",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "PTY",
       "value": "0",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "POP",
       "value": "30",
-      "source": "ultra"
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "WAV",
       "value": "0",
       "source": "vilage"
@@ -303,7 +87,7 @@
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "PCP",
       "value": "강수없음",
       "source": "vilage"
@@ -312,16 +96,16 @@
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "REH",
-      "value": "65",
-      "source": "ultra"
+      "value": "75",
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1200",
       "category": "SNO",
       "value": "적설없음",
       "source": "vilage"
@@ -330,7 +114,7 @@
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
+      "fcstTime": "1300",
       "category": "TMP",
       "value": "14",
       "source": "vilage"
@@ -339,50 +123,266 @@
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
+      "fcstTime": "1300",
       "category": "UUU",
-      "value": "-0.2",
-      "source": "ultra"
+      "value": "-1.7",
+      "source": "vilage"
     },
     {
       "baseDate": "20261117",
       "baseTime": "1100",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
+      "fcstTime": "1300",
       "category": "VVV",
+      "value": "0",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "VEC",
+      "value": "90",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "WSD",
+      "value": "1.8",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "SKY",
+      "value": "4",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "PTY",
+      "value": "0",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "POP",
+      "value": "30",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "WAV",
+      "value": "0",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "PCP",
+      "value": "강수없음",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "REH",
+      "value": "75",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1300",
+      "category": "SNO",
+      "value": "적설없음",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "TMP",
+      "value": "14",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "UUU",
       "value": "0",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
-      "category": "VEC",
-      "value": "72",
+      "fcstTime": "1400",
+      "category": "VVV",
+      "value": "0.4",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
+      "fcstTime": "1400",
+      "category": "VEC",
+      "value": "180",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
       "category": "WSD",
       "value": "0.1",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1500",
+      "fcstTime": "1400",
       "category": "SKY",
       "value": "4",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "PTY",
+      "value": "0",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "POP",
+      "value": "20",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
       "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "WAV",
+      "value": "0",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "PCP",
+      "value": "강수없음",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "REH",
+      "value": "55",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1400",
+      "category": "SNO",
+      "value": "적설없음",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1100",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "TMP",
+      "value": "14",
+      "source": "vilage"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "UUU",
+      "value": "0.6",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "VVV",
+      "value": "0.3",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "VEC",
+      "value": "243",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "WSD",
+      "value": "1",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1500",
+      "category": "SKY",
+      "value": "3",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1500",
       "category": "PTY",
@@ -391,11 +391,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1500",
       "category": "POP",
-      "value": "30",
+      "value": "20",
       "source": "ultra"
     },
     {
@@ -418,11 +418,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1500",
       "category": "REH",
-      "value": "70",
+      "value": "60",
       "source": "ultra"
     },
     {
@@ -454,52 +454,52 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "UUU",
-      "value": "0.1",
+      "value": "0.8",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "VVV",
-      "value": "0",
+      "value": "0.2",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "VEC",
-      "value": "270",
+      "value": "256",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "WSD",
-      "value": "0.1",
+      "value": "1",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "SKY",
-      "value": "4",
+      "value": "3",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "PTY",
@@ -508,11 +508,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "POP",
-      "value": "30",
+      "value": "20",
       "source": "ultra"
     },
     {
@@ -535,11 +535,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "REH",
-      "value": "75",
+      "value": "70",
       "source": "ultra"
     },
     {
@@ -562,34 +562,34 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "UUU",
-      "value": "-0.3",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1700",
-      "category": "VVV",
       "value": "0",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
-      "category": "VEC",
-      "value": "90",
+      "category": "VVV",
+      "value": "0.1",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1700",
+      "category": "VEC",
+      "value": "135",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "WSD",
@@ -598,16 +598,16 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "SKY",
-      "value": "4",
+      "value": "3",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "PTY",
@@ -616,11 +616,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "POP",
-      "value": "30",
+      "value": "20",
       "source": "ultra"
     },
     {
@@ -643,11 +643,11 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "REH",
-      "value": "80",
+      "value": "75",
       "source": "ultra"
     },
     {
@@ -670,66 +670,66 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "UUU",
-      "value": "0.2",
-      "source": "vilage"
+      "value": "0.3",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "VVV",
       "value": "0",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "VEC",
       "value": "270",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "WSD",
-      "value": "0.2",
-      "source": "vilage"
+      "value": "0.1",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "SKY",
-      "value": "4",
-      "source": "vilage"
+      "value": "3",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "PTY",
-      "value": "1",
-      "source": "vilage"
+      "value": "0",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "POP",
-      "value": "60",
-      "source": "vilage"
+      "value": "20",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
@@ -751,12 +751,12 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1800",
       "category": "REH",
-      "value": "90",
-      "source": "vilage"
+      "value": "85",
+      "source": "ultra"
     },
     {
       "baseDate": "20261117",
@@ -7519,25 +7519,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "LGT",
-      "value": "0",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "LGT",
-      "value": "0",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1400",
       "category": "LGT",
@@ -7546,7 +7528,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1500",
       "category": "LGT",
@@ -7555,7 +7537,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "LGT",
@@ -7564,7 +7546,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "LGT",
@@ -7573,25 +7555,16 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "RN1",
-      "value": "강수없음",
+      "fcstTime": "1800",
+      "category": "LGT",
+      "value": "0",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1300",
-      "category": "RN1",
-      "value": "강수없음",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1400",
       "category": "RN1",
@@ -7600,7 +7573,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1500",
       "category": "RN1",
@@ -7609,7 +7582,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1600",
       "category": "RN1",
@@ -7618,7 +7591,7 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "RN1",
@@ -7627,56 +7600,56 @@
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1200",
-      "category": "T1H",
-      "value": "15",
+      "fcstTime": "1800",
+      "category": "RN1",
+      "value": "강수없음",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1300",
+      "fcstTime": "1400",
       "category": "T1H",
       "value": "16",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
-      "fcstTime": "1400",
+      "fcstTime": "1500",
+      "category": "T1H",
+      "value": "16",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1600",
       "category": "T1H",
       "value": "15",
       "source": "ultra"
     },
     {
       "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1500",
-      "category": "T1H",
-      "value": "14",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
-      "fcstDate": "20261117",
-      "fcstTime": "1600",
-      "category": "T1H",
-      "value": "14",
-      "source": "ultra"
-    },
-    {
-      "baseDate": "20261117",
-      "baseTime": "1100",
+      "baseTime": "1300",
       "fcstDate": "20261117",
       "fcstTime": "1700",
       "category": "T1H",
       "value": "13",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261117",
+      "baseTime": "1300",
+      "fcstDate": "20261117",
+      "fcstTime": "1800",
+      "category": "T1H",
+      "value": "12",
       "source": "ultra"
     }
   ],
