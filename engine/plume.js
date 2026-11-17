@@ -2,9 +2,8 @@
 // 가우시안 플룸(ISC3 도시형 확산계수 참고), AP-42 배출계수, NO2 환산.
 // 모든 수치·수식의 출처는 docs/발전차_배출가스_가정값과_근거.md(원문 대조 완료)와
 // data/assumptions.json의 "배출가스" 항목을 따라요 — 값이 둘에서 다르면 assumptions.json이 코드용 기준.
-// 로드맵 2번 "배출가스" 참고. 11/17 1차 작성(M2) — 안정도 등급 자동판정의 마지막 단계
-// (풍속×순복사지수 → A~F, EPA 기상관측지침 표 6-4)는 그 표의 실제 풍속 구간 값을
-// 아직 원문에서 확인 못해서 비워뒀어요(아래 estimateNetRadiationIndex 설명 참고).
+// 로드맵 2번 "배출가스" 참고. 11/17 1차 작성(M2): 확산·배출량 + 안정도 자동판정
+// (NOAA 태양 위치, Turner 표 6-4~6-6, 기본/비교 시나리오)까지 들어 있어요.
 
 import { haversineDistanceM, bearingDeg, windComponentTowardReceiver } from "./common.js";
 
@@ -66,23 +65,98 @@ export function advectionWindSpeed(wsd10m, stability) {
 // ---------------------------------------------------------------------------
 // 대기 안정도 — 가정값 문서 "대기 안정도" 표 (Turner 기반 근사)
 // ---------------------------------------------------------------------------
+// 태양 위치: NOAA Solar Calculator의 공개 계산식(Meeus "Astronomical Algorithms" 기반)을 그대로 옮겼어요.
+// 출처: NOAA Global Monitoring Laboratory, Solar Calculation Details
+//   https://gml.noaa.gov/grad/solcalc/calcdetails.html
+// 대기 굴절 보정은 하지 않아요(일사 등급 경계 15°·35°·60° 판정에는 영향이 작음).
+// 일출·일몰은 같은 출처의 기준(태양 중심이 지평선 아래 0.833°)을 써요.
+const DEG = Math.PI / 180;
+
 /**
- * 태양 고도(도)를 공개된 적위·시간각 공식으로 근사해요. 맑은 낮의 일사 등급에만 써요.
- * 시간대 보정은 생략했어요(경도로 근사) — 올림픽공원처럼 좁은 범위에선 영향이 작아요.
+ * 태양 적위(도)와 균시차(분)를 계산해요.
+ * @param {Date} dateUtc
  */
-export function solarElevationDeg(lat, lon, dateUtc) {
-  const dayOfYear = Math.floor((dateUtc - Date.UTC(dateUtc.getUTCFullYear(), 0, 0)) / 86400000);
-  const decl = 23.45 * Math.sin((Math.PI / 180) * (360 / 365) * (284 + dayOfYear));
-  const solarTimeHr = dateUtc.getUTCHours() + dateUtc.getUTCMinutes() / 60 + lon / 15;
-  const hourAngle = 15 * (solarTimeHr - 12);
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const sinAlt =
-    Math.sin(toRad(lat)) * Math.sin(toRad(decl)) +
-    Math.cos(toRad(lat)) * Math.cos(toRad(decl)) * Math.cos(toRad(hourAngle));
-  return (Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180) / Math.PI;
+function solarDeclinationAndEqTime(dateUtc) {
+  const jd = dateUtc.getTime() / 86400000 + 2440587.5; // 율리우스일
+  const t = (jd - 2451545.0) / 36525.0; // 율리우스 세기
+  const l0 = (280.46646 + t * (36000.76983 + t * 0.0003032)) % 360;
+  const m = 357.52911 + t * (35999.05029 - 0.0001537 * t);
+  const e = 0.016708634 - t * (0.000042037 + 0.0000001267 * t);
+  const c =
+    Math.sin(m * DEG) * (1.914602 - t * (0.004817 + 0.000014 * t)) +
+    Math.sin(2 * m * DEG) * (0.019993 - 0.000101 * t) +
+    Math.sin(3 * m * DEG) * 0.000289;
+  const omega = 125.04 - 1934.136 * t;
+  const lambda = l0 + c - 0.00569 - 0.00478 * Math.sin(omega * DEG);
+  const eps0 = 23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60;
+  const eps = eps0 + 0.00256 * Math.cos(omega * DEG);
+  const decl = Math.asin(Math.sin(eps * DEG) * Math.sin(lambda * DEG)) / DEG;
+  const y = Math.tan((eps / 2) * DEG) ** 2;
+  const eqTime =
+    4 *
+    (y * Math.sin(2 * l0 * DEG) -
+      2 * e * Math.sin(m * DEG) +
+      4 * e * y * Math.sin(m * DEG) * Math.cos(2 * l0 * DEG) -
+      0.5 * y * y * Math.sin(4 * l0 * DEG) -
+      1.25 * e * e * Math.sin(2 * m * DEG)) /
+    DEG;
+  return { decl, eqTime };
 }
 
-/** 표 6-5(p.6-14): 태양 고도 → 일사 등급(1~4). 맑은 낮에만 써요. */
+/**
+ * 태양 고도(도). 지평선 위가 양수예요.
+ * @param {number} lat 위도(도)
+ * @param {number} lon 경도(도, 동경 +)
+ * @param {Date} dateUtc
+ */
+export function solarElevationDeg(lat, lon, dateUtc) {
+  const { decl, eqTime } = solarDeclinationAndEqTime(dateUtc);
+  const utcMin = dateUtc.getUTCHours() * 60 + dateUtc.getUTCMinutes() + dateUtc.getUTCSeconds() / 60;
+  const trueSolarMin = (((utcMin + eqTime + 4 * lon) % 1440) + 1440) % 1440;
+  const hourAngle = trueSolarMin / 4 - 180;
+  const cosZen =
+    Math.sin(lat * DEG) * Math.sin(decl * DEG) + Math.cos(lat * DEG) * Math.cos(decl * DEG) * Math.cos(hourAngle * DEG);
+  return 90 - Math.acos(Math.max(-1, Math.min(1, cosZen))) / DEG;
+}
+
+/**
+ * 그 날의 일출·일몰 시각(UTC Date)을 계산해요. dateUtc에 가장 가까운 남중 시각을 기준으로 해요.
+ * @returns {{sunrise: Date, sunset: Date, solarNoon: Date}}
+ */
+export function sunriseSunset(lat, lon, dateUtc) {
+  // 1) dateUtc에 가장 가까운 태양 남중 시각
+  const { eqTime } = solarDeclinationAndEqTime(dateUtc);
+  const noonMinOfUtcDay = 720 - 4 * lon - eqTime;
+  const dayStart = Date.UTC(dateUtc.getUTCFullYear(), dateUtc.getUTCMonth(), dateUtc.getUTCDate());
+  let noonMs = dayStart + noonMinOfUtcDay * 60000;
+  const diff = dateUtc.getTime() - noonMs;
+  if (diff > 12 * 3600000) noonMs += 86400000;
+  if (diff < -12 * 3600000) noonMs -= 86400000;
+  // 2) 남중 시각의 적위로 일출 시간각 계산 (지평선 아래 0.833°)
+  const { decl } = solarDeclinationAndEqTime(new Date(noonMs));
+  const cosH =
+    Math.cos(90.833 * DEG) / (Math.cos(lat * DEG) * Math.cos(decl * DEG)) - Math.tan(lat * DEG) * Math.tan(decl * DEG);
+  const haDeg = Math.acos(Math.max(-1, Math.min(1, cosH))) / DEG;
+  return {
+    solarNoon: new Date(noonMs),
+    sunrise: new Date(noonMs - haDeg * 4 * 60000),
+    sunset: new Date(noonMs + haDeg * 4 * 60000),
+  };
+}
+
+/**
+ * Turner 방법의 '밤'인지 판정해요: 일몰 1시간 전 ~ 일출 1시간 후 (표 6-6, p.6-15).
+ * @returns {boolean}
+ */
+export function isTurnerNight(lat, lon, dateUtc) {
+  const { sunrise, sunset } = sunriseSunset(lat, lon, dateUtc);
+  const t = dateUtc.getTime();
+  const dayStart = sunrise.getTime() + 3600000;
+  const dayEnd = sunset.getTime() - 3600000;
+  return !(t >= dayStart && t < dayEnd);
+}
+
+/** 표 6-5(p.6-14): 태양 고도 → 일사 등급(1~4). */
 export function insolationClass(elevationDeg) {
   if (elevationDeg > 60) return 4;
   if (elevationDeg > 35) return 3;
@@ -90,35 +164,80 @@ export function insolationClass(elevationDeg) {
   return 1;
 }
 
-/**
- * 기상청 SKY(맑음/구름많음/흐림)·낮밤으로 순복사 지수를 근사해요.
- * data/assumptions.json의 배출가스.안정도_Turner기반근사.SKY매핑_기본을 그대로 따라요 — 낮의
- * 구름많음·흐림은 "일사등급 그대로"가 아니라 "일사등급 − 1(또는 2)"이고, 수정 후 1 미만이면
- * 1로 올려요(같은 출처의 '주의' 항목). 비교 시나리오(구름많음 낮 −2, 흐림 0)는 아직 안 붙였어요.
- * @param {{sky: "맑음"|"구름많음"|"흐림", isDaytime: boolean, lat: number, lon: number, dateUtc: Date}} p
- * @returns {number} 순복사 지수
- */
-export function estimateNetRadiationIndex({ sky, isDaytime, lat, lon, dateUtc }) {
-  if (!isDaytime) {
-    return sky === "맑음" ? -2 : -1; // 구름많음·흐림 모두 밤 −1
-  }
-  const insolation = insolationClass(solarElevationDeg(lat, lon, dateUtc));
-  if (sky === "맑음") return insolation;
-  if (sky === "구름많음") return Math.max(1, insolation - 1);
-  return Math.max(1, insolation - 2); // 흐림
+/** 기상청 단기예보 SKY 코드 → 하늘상태 (1 맑음, 3 구름많음, 4 흐림) */
+export function skyCodeToName(code) {
+  const map = { 1: "맑음", 3: "구름많음", 4: "흐림" };
+  const name = map[Number(code)];
+  if (!name) throw new Error(`알 수 없는 SKY 코드: ${code}`);
+  return name;
 }
 
 /**
- * 순복사 지수 + 10m 풍속으로 안정도 등급(A~F)을 정해요 — EPA 기상관측지침 표 6-4(p.6-14).
- * 11/17 기준: 이 표의 정확한 풍속 구간 경계값을 원문에서 아직 확인 못해서 미구현이에요.
- * (CLAUDE.md 규칙 2 — 확인 안 된 숫자를 지어내지 않음). 표를 직접 보고 채워주세요.
+ * 기상청 SKY와 시각으로 순복사 지수를 근사해요 (Turner 기반 근사).
+ * 근거: data/assumptions.json 배출가스.안정도_Turner기반근사 (SKY매핑_기본 / SKY매핑_비교).
+ * - 기본(보수적 근사): 맑음 밤 −2·낮 일사등급, 구름많음 밤 −1·낮 일사등급−1, 흐림 밤 −1·낮 일사등급−2
+ * - 비교: 구름많음 낮 일사등급−2, 흐림 낮·밤 0 (표 6-6 1번: 10/10·저운고 규칙)
+ * 수정한 일사등급이 1 미만이면 1로 올려요(표 6-6 3(c)(5)).
+ * @param {{sky: "맑음"|"구름많음"|"흐림", lat: number, lon: number, dateUtc: Date,
+ *          scenario?: "기본"|"비교", isDaytime?: boolean}} p
+ *   isDaytime을 주지 않으면 일출·일몰로 자동 판정해요.
+ * @returns {number} 순복사 지수 (4 ~ −2)
+ */
+export function estimateNetRadiationIndex({ sky, lat, lon, dateUtc, scenario = "기본", isDaytime }) {
+  const day = isDaytime ?? !isTurnerNight(lat, lon, dateUtc);
+  if (scenario === "비교" && sky === "흐림") return 0;
+  if (!day) return sky === "맑음" ? -2 : -1;
+  const insolation = insolationClass(solarElevationDeg(lat, lon, dateUtc));
+  if (sky === "맑음") return insolation;
+  if (sky === "구름많음") return Math.max(1, insolation - (scenario === "비교" ? 2 : 1));
+  return Math.max(1, insolation - 2); // 흐림(기본)
+}
+
+// 표 6-4(p.6-14) Turner's Key to the P-G Stability Categories.
+// 행 = 10m 풍속 구간(m/s 상한, 원문의 노트 단위 구간을 원문이 함께 적은 m/s로),
+// 열 = 순복사 지수 [4, 3, 2, 1, 0, −1, −2], 값 = 안정도 번호(1=A … 6=F, 7=G).
+// 원문 PDF 화면에서 직접 대조(2026-11-15).
+const TURNER_TABLE = [
+  { maxWs: 0.7, row: [1, 1, 2, 3, 4, 6, 7] },
+  { maxWs: 1.8, row: [1, 2, 2, 3, 4, 6, 7] },
+  { maxWs: 2.8, row: [1, 2, 3, 4, 4, 5, 6] },
+  { maxWs: 3.3, row: [2, 2, 3, 4, 4, 5, 6] },
+  { maxWs: 3.8, row: [2, 2, 3, 4, 4, 4, 5] },
+  { maxWs: 4.8, row: [2, 3, 3, 4, 4, 4, 5] },
+  { maxWs: 5.4, row: [3, 3, 4, 4, 4, 4, 5] },
+  { maxWs: 5.9, row: [3, 3, 4, 4, 4, 4, 4] },
+  { maxWs: Infinity, row: [3, 4, 4, 4, 4, 4, 4] },
+];
+const STABILITY_LETTER = { 1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "F" }; // 6·7은 F로 합침(원문 주)
+
+/**
+ * 순복사 지수 + 10m 풍속 → 안정도(A~F). EPA 기상관측지침 표 6-4.
+ * 기상청 풍속은 0.1m/s 단위라 원문 구간 사이(예: 0.7과 0.8 사이)의 값은 상한 기준으로 처리해요.
+ * @param {{netRadiationIndex: number, wsd10m: number}} p
  * @returns {StabilityClass}
  */
-export function estimateStabilityClass(/* { netRadiationIndex, wsd10m } */) {
-  throw new Error(
-    "미구현 — EPA 기상관측지침 표 6-4(풍속×순복사지수 → A~F)의 정확한 구간값 확인 필요. " +
-      "확인 전까지는 calcExhaustGaussianPlume()에 stability를 직접 넣어서 써요."
-  );
+export function estimateStabilityClass({ netRadiationIndex, wsd10m }) {
+  const col = 4 - netRadiationIndex; // 4→0, 3→1, … −2→6
+  if (!(col >= 0 && col <= 6 && Number.isInteger(col))) throw new Error(`순복사 지수 범위 밖: ${netRadiationIndex}`);
+  const ws = Math.round(wsd10m * 10) / 10;
+  const r = TURNER_TABLE.find((r) => ws <= r.maxWs);
+  return STABILITY_LETTER[r.row[col]];
+}
+
+/**
+ * 예보 한 시각의 값으로 안정도를 한 번에 구해요 (안정도 판정에는 10m 풍속을 그대로 써요).
+ * @param {{sky: "맑음"|"구름많음"|"흐림", wsd10m: number, lat: number, lon: number, dateUtc: Date, scenario?: "기본"|"비교"}} p
+ * @returns {{stability: StabilityClass, netRadiationIndex: number, solarElevation: number, isNight: boolean}}
+ */
+export function stabilityFromForecast({ sky, wsd10m, lat, lon, dateUtc, scenario = "기본" }) {
+  const isNight = isTurnerNight(lat, lon, dateUtc);
+  const netRadiationIndex = estimateNetRadiationIndex({ sky, lat, lon, dateUtc, scenario, isDaytime: !isNight });
+  return {
+    stability: estimateStabilityClass({ netRadiationIndex, wsd10m }),
+    netRadiationIndex,
+    solarElevation: solarElevationDeg(lat, lon, dateUtc),
+    isNight,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +271,7 @@ export function classifyExhaustLevel(ppm) {
  * @param {number} p.receiverLon  수음점 경도
  * @param {number} p.enginePowerKW  발전차 엔진 출력
  * @param {number} [p.loadFactor]  부하율 (기본 1.0)
- * @param {import("./plume.js").StabilityClass} p.stability  안정도 등급(A~F) — 지금은 직접 넣어요
+ * @param {import("./plume.js").StabilityClass} p.stability  안정도 등급(A~F) — stabilityFromForecast()로 구해서 넣어요
  * @param {number} p.wsd10m  기상청 10m 풍속(m/s)
  * @param {number} p.windVecFromDeg  기상청 VEC(바람이 불어오는 방향, 0=북)
  * @param {"확인"|"시연용가정"} [p.정보출처]  발전차 사양 출처. "시연용가정"이면 flags에 표시
