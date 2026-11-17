@@ -23,6 +23,7 @@ for (const scenario of ["기본", "비교"]) {
   const s = stabilityFromForecast({ sky, wsd10m: Number(ws), lat: DOME.lat, lon: DOME.lon, dateUtc: t, scenario });
   const r = calcExhaustGaussianPlume({ sourceLat: DOME.lat, sourceLon: DOME.lon, receiverLat: rec.lat, receiverLon: rec.lon,
     enginePowerKW: Number(kw), stability: s.stability, wsd10m: Number(ws), windVecFromDeg: 270 });
+  if (r.value === null) { console.log(`[${scenario}] 계산 불가: ${r.reason}`); continue; }
   console.log(`[${scenario}] ${s.isNight ? "밤" : "낮"}, 태양 고도 ${s.solarElevation.toFixed(1)}°, 안정도 ${s.stability}` +
     ` → NO2 ${r.value.toFixed(4)} ppm (기준의 ${((r.value / 0.1) * 100).toFixed(0)}%) → ${classifyExhaustLevel(r.value) ?? "미표시"}` +
     (r.flags.length ? `  [${r.flags.join(", ")}]` : ""));

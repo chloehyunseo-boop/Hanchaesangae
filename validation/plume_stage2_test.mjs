@@ -74,7 +74,26 @@ for (const [kw, st, ws, x, exp] of cases) {
   const demo = run(500, "D", 3, 270, dest(90, 300), { 정보출처: "시연용가정" });
   check("시연용가정 표시", demo.flags.includes("시연용가정"), demo.flags.join(","));
 }
-// 7) 단계 경계 (기준 0.10ppm 대비)
+// 7) 외부 검토(11/17) 반영: 잘못된 입력·같은 좌표는 0이 아니라 계산 불가
+{
+  const bads = [
+    ["풍속 −1", { wsd10m: -1 }], ["풍속 NaN", { wsd10m: NaN }], ["엔진 출력 음수", { kw: -500 }],
+    ["부하율 1.5", { loadFactor: 1.5 }], ["안정도 G", { stab: "G" }], ["풍향 400", { vec: 400 }],
+  ];
+  for (const [name, o] of bads) {
+    const r = run(o.kw ?? 500, o.stab ?? "D", o.wsd10m ?? 3, o.vec ?? 270, dest(90, 300), o.loadFactor !== undefined ? { loadFactor: o.loadFactor } : {});
+    check(`잘못된 입력: ${name}`, r.value === null && r.flags.includes("계산불가"), `value=${r.value}, ${r.reason}`);
+  }
+  const nan = run(500, "D", 3, 270, { lat: NaN, lon: 127 });
+  check("잘못된 입력: 좌표 NaN", nan.value === null, `value=${nan.value}, ${nan.reason}`);
+  const same = run(500, "D", 3, 270, { lat: DOME.lat, lon: DOME.lon });
+  check("음원과 같은 좌표", same.value === null && same.flags.includes("계산불가"), `value=${same.value}, ${same.reason}`);
+  // 직선거리 150m지만 풍축에서 70° 벗어나 풍하 거리 x≈51m → 근거리불확실
+  const off = run(500, "D", 3, 270, dest(90 + 70, 150));
+  check("근거리 판정은 풍하 거리 x 기준", off.flags.includes("근거리불확실"), `x≈${(150 * Math.cos((70 * Math.PI) / 180)).toFixed(0)}m, ${off.flags.join(",")}`);
+}
+// 8) 단계 경계 (기준 0.10ppm 대비)
 check("단계 경계", classifyExhaustLevel(0.05) === "강" && classifyExhaustLevel(0.0499) === "중" && classifyExhaustLevel(0.01) === "중" && classifyExhaustLevel(0.0099) === "약" && classifyExhaustLevel(0.002) === "약" && classifyExhaustLevel(0.0019) === null, "0.05 강 / 0.01 중 / 0.002 약 / 그 미만 미표시");
+check("경계 바로 아래는 아래 단계", classifyExhaustLevel(0.04999999999) === "중" && classifyExhaustLevel(0.00999999999) === "약" && classifyExhaustLevel(0.00199999999) === null, "0.04999999999 중 / 0.00999999999 약 / 0.00199999999 미표시");
 
 console.log(fails ? `\n기대와 다른 항목 ${fails}개 — 위 ❌ 확인` : "\n모든 항목이 기대값과 같아요");

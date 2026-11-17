@@ -176,7 +176,10 @@ export function skyCodeToName(code) {
  * 기상청 SKY와 시각으로 순복사 지수를 근사해요 (Turner 기반 근사).
  * 근거: data/assumptions.json 배출가스.안정도_Turner기반근사 (SKY매핑_기본 / SKY매핑_비교).
  * - 기본(보수적 근사): 맑음 밤 −2·낮 일사등급, 구름많음 밤 −1·낮 일사등급−1, 흐림 밤 −1·낮 일사등급−2
- * - 비교: 구름많음 낮 일사등급−2, 흐림 낮·밤 0 (표 6-6 1번: 10/10·저운고 규칙)
+ * - 비교(민감도 가정): 구름많음 낮 일사등급−2, 흐림이면 낮·밤 0.
+ *   원문 표 6-6 1번의 지수 0은 '운량 10/10 + 운고 7,000ft 미만'일 때만이에요. 기상청 '흐림'(9~10할, 운고 없음)이
+ *   그 조건이라고 '가정'한 것이지 원문 규칙을 그대로 구현한 게 아니에요. 표 6-4·6-5는 원문 그대로,
+ *   표 6-6은 기상청 SKY 기반 근사예요.
  * 수정한 일사등급이 1 미만이면 1로 올려요(표 6-6 3(c)(5)).
  * @param {{sky: "맑음"|"구름많음"|"흐림", lat: number, lon: number, dateUtc: Date,
  *          scenario?: "기본"|"비교", isDaytime?: boolean}} p
@@ -217,6 +220,7 @@ const STABILITY_LETTER = { 1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "F
  * @returns {StabilityClass}
  */
 export function estimateStabilityClass({ netRadiationIndex, wsd10m }) {
+  if (typeof wsd10m !== "number" || !Number.isFinite(wsd10m) || wsd10m < 0) throw new Error(`풍속은 0 이상의 숫자여야 해요: ${wsd10m}`);
   const col = 4 - netRadiationIndex; // 4→0, 3→1, … −2→6
   if (!(col >= 0 && col <= 6 && Number.isInteger(col))) throw new Error(`순복사 지수 범위 밖: ${netRadiationIndex}`);
   const ws = Math.round(wsd10m * 10) / 10;
@@ -230,6 +234,8 @@ export function estimateStabilityClass({ netRadiationIndex, wsd10m }) {
  * @returns {{stability: StabilityClass, netRadiationIndex: number, solarElevation: number, isNight: boolean}}
  */
 export function stabilityFromForecast({ sky, wsd10m, lat, lon, dateUtc, scenario = "기본" }) {
+  if (!(dateUtc instanceof Date) || Number.isNaN(dateUtc.getTime())) throw new Error(`시각이 올바르지 않아요: ${dateUtc}`);
+  if (!["맑음", "구름많음", "흐림"].includes(sky)) throw new Error(`하늘상태는 맑음·구름많음·흐림: ${sky}`);
   const isNight = isTurnerNight(lat, lon, dateUtc);
   const netRadiationIndex = estimateNetRadiationIndex({ sky, lat, lon, dateUtc, scenario, isDaytime: !isNight });
   return {
@@ -244,19 +250,21 @@ export function stabilityFromForecast({ sky, wsd10m, lat, lon, dateUtc, scenario
 // 농도 환산 기준 — 가정값 문서 "농도 환산과 기준" 표
 // ---------------------------------------------------------------------------
 const NO2_HOURLY_STANDARD_PPM = 0.1; // 환경정책기본법 시행령 별표 1
+const LEVEL_PPM = { 강: 0.05, 중: 0.01, 약: 0.002 }; // 위 기준의 50%·10%·2% (CLAUDE.md 6번)
 
-/** ppm = mg/m³ × 24.45 / 46.0055 (25℃, 1기압 표준 환산식) */
+/** ppm = mg/m³ × 24.45 / 46.0055 (25℃, 1기압 표준 환산식 — 실제 기온·기압이 아닌 표준 조건 환산값) */
 function mgPerM3ToPpm(mgPerM3) {
   return (mgPerM3 * 24.45) / 46.0055;
 }
 
 /** CLAUDE.md 6번: NO2 1시간 기준(0.10ppm) 대비 강 50%↑ · 중 10~50% · 약 2~10% */
 export function classifyExhaustLevel(ppm) {
-  // 나눗셈 부동소수점 오차(예: 0.01/0.1 = 0.0999…)로 경계값이 한 단계 아래로 떨어지지 않게 반올림해요.
-  const ratio = Math.round((ppm / NO2_HOURLY_STANDARD_PPM) * 1e9) / 1e9;
-  if (ratio >= 0.5) return "강";
-  if (ratio >= 0.1) return "중";
-  if (ratio >= 0.02) return "약";
+  // 나눗셈(0.01/0.1 = 0.0999…) 대신 ppm 경계값을 직접 비교해요(부동소수점 오차로 단계가 바뀌지 않게).
+  // 경계: 0.10ppm의 50% = 0.05, 10% = 0.01, 2% = 0.002
+  if (!Number.isFinite(ppm) || ppm < 0) return null;
+  if (ppm >= LEVEL_PPM.강) return "강";
+  if (ppm >= LEVEL_PPM.중) return "중";
+  if (ppm >= LEVEL_PPM.약) return "약";
   return null;
 }
 
@@ -276,8 +284,23 @@ export function classifyExhaustLevel(ppm) {
  * @param {number} p.wsd10m  기상청 10m 풍속(m/s)
  * @param {number} p.windVecFromDeg  기상청 VEC(바람이 불어오는 방향, 0=북)
  * @param {"확인"|"시연용가정"} [p.정보출처]  발전차 사양 출처. "시연용가정"이면 flags에 표시
- * @returns {{value: number, flags: string[], scenario: string}}
+ * @returns {{value: number|null, flags: string[], scenario: string, reason?: string}}  value가 null이면 계산 불가(flags에 "계산불가", reason에 이유) — 0ppm과 구분해요
  */
+/**
+ * 확산 계산 입력이 물리적으로 말이 되는지 확인해요. 문제가 있으면 이유(문자열), 없으면 null.
+ */
+export function validatePlumeInput({ sourceLat, sourceLon, receiverLat, receiverLon, enginePowerKW, loadFactor, stability, wsd10m, windVecFromDeg }) {
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  for (const [k, v] of Object.entries({ sourceLat, receiverLat })) if (!finite(v) || v < -90 || v > 90) return `${k} 범위 밖: ${v}`;
+  for (const [k, v] of Object.entries({ sourceLon, receiverLon })) if (!finite(v) || v < -180 || v > 180) return `${k} 범위 밖: ${v}`;
+  if (!finite(enginePowerKW) || enginePowerKW <= 0) return `엔진 출력은 0보다 커야 해요: ${enginePowerKW}`;
+  if (!finite(loadFactor) || loadFactor <= 0 || loadFactor > 1) return `부하율은 0 초과 1 이하: ${loadFactor}`;
+  if (!finite(wsd10m) || wsd10m < 0) return `풍속은 0 이상: ${wsd10m}`;
+  if (!finite(windVecFromDeg) || windVecFromDeg < 0 || windVecFromDeg > 360) return `풍향은 0~360: ${windVecFromDeg}`;
+  if (!["A", "B", "C", "D", "E", "F"].includes(stability)) return `안정도는 A~F: ${stability}`;
+  return null;
+}
+
 export function calcExhaustGaussianPlume({
   sourceLat,
   sourceLon,
@@ -294,6 +317,10 @@ export function calcExhaustGaussianPlume({
   const flags = [];
   if (정보출처 === "시연용가정") flags.push("시연용가정");
 
+  // 입력 검증: 잘못된 입력이 0ppm(=영향 없음)으로 둔갑하지 않게 value를 null로 돌려줘요.
+  const bad = validatePlumeInput({ sourceLat, sourceLon, receiverLat, receiverLon, enginePowerKW, loadFactor, stability, wsd10m, windVecFromDeg });
+  if (bad) return { value: null, flags: [...flags, "계산불가"], scenario, reason: bad };
+
   // 약풍: 10m 풍속 1m/s 미만이면 지도에 그리지 않아요(가정값 문서 "확산" 절).
   if (wsd10m < 1.0) {
     return { value: 0, flags: [...flags, "약풍미표시"], scenario };
@@ -306,11 +333,16 @@ export function calcExhaustGaussianPlume({
   const x = distance * Math.cos(theta); // 풍하 거리
   const y = distance * Math.sin(theta); // 풍축에서 옆으로 벗어난 거리
 
+  if (distance < 1) {
+    // 음원과 같은 자리: 식이 정의되지 않아요(ISC3도 1m 이내 수용점은 계산하지 않음). 0이 아니라 계산 불가예요.
+    return { value: null, flags: [...flags, "계산불가"], scenario, reason: "음원 위치" };
+  }
   if (x <= 0) {
     // 수음점이 풍상측(바람이 불어오는 쪽)이라 플룸이 거기로 안 가요.
     return { value: 0, flags, scenario };
   }
-  if (distance < 100) flags.push("근거리불확실"); // ISC3 지침 p.1-16: 100m 미만 수용점은 의심스러울 수 있음
+  // ISC3 지침 p.1-16: 100m 미만 수용점은 의심스러울 수 있음. 확산폭이 풍하 거리 x로 정해지므로 x 기준으로 봐요.
+  if (x < 100) flags.push("근거리불확실");
 
   const sigmaY = DISPERSION[stability].sigmaY(x);
   const sigmaZ = DISPERSION[stability].sigmaZ(x);
