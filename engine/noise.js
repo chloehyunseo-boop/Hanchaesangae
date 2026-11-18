@@ -83,6 +83,45 @@ export function calcAatm(distanceM, freqHz, tempC, rhPercent, pressureKPa = P_RE
   return atmosphericAbsorptionDbPerM(freqHz, tempC, rhPercent, pressureKPa) * distanceM;
 }
 
+// ---------------------------------------------------------------------------
+// 2차: 무대 지향성(Dc) + 바람 보정 + 실내 공연장 외벽(LW 환산)
+// ---------------------------------------------------------------------------
+
+/**
+ * 무대 지향성 보정(Dc, dB). 로드맵·올팍_좌표.md 결정대로 항상 0이에요 — 무대 방향(스피커가
+ * 어디를 보는지)은 계산에 안 넣어요. 무대 뒤·옆이 실제보다 시끄럽게 나오는 쪽(안전측 가정).
+ * @returns {0}
+ */
+export function stageDirectivityDb() {
+  return 0;
+}
+
+/**
+ * 바람 보정 — CLAUDE.md 공통 조건의 "풍향 불확실성 부채꼴"을 그대로 적용해요. 부채꼴
+ * 밖이면 이 음원은 그 수음점에 안 들린다고 보고 계산에서 빼요(지어낸 K4 보정 없이,
+ * 이미 합의된 부채꼴 규칙만 씀).
+ * @param {ReturnType<typeof sourceReceiverGeometry>} geometry
+ * @returns {{ include: boolean, flags: string[] }}
+ */
+export function windGateFor(geometry) {
+  if (!geometry.withinFan) {
+    return { include: false, flags: ["풍향부채꼴밖"] };
+  }
+  return { include: true, flags: [] };
+}
+
+/**
+ * 실내 공연장의 실내 음량(Lp,실내)을 외벽을 거쳐 나가는 음원 파워레벨(LW)로 바꿔요.
+ * CLAUDE.md 6번에 이미 정해진 식이에요: LW = Lp,실내 − R + 10·log10(S) − 6.
+ * @param {number} lpIndoorDb 실내 음압레벨(dB)
+ * @param {number} transmissionLossDb 외벽 투과손실(R, dB) — data/assumptions.json의 소음_가정값.외벽_차음량
+ * @param {number} wallAreaM2 외벽 면적(S, m²)
+ * @returns {number} LW(dB)
+ */
+export function indoorFacadeSourcePowerLevel(lpIndoorDb, transmissionLossDb, wallAreaM2) {
+  return lpIndoorDb - transmissionLossDb + 10 * Math.log10(wallAreaM2) - 6;
+}
+
 /**
  * ISO 9613-2 상한 시나리오 (Lp = LW + Dc − A, A = Adiv+Aatm+Aground+Abar).
  * @throws {Error} Aground(지면 효과) 원문 수식을 아직 확인 못해서 전체 합산은 미구현이에요.
