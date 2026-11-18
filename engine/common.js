@@ -10,11 +10,17 @@
 export const CALC_GRID = {
   cellSizeM: 25,       // 계산 격자 한 칸 크기 (표시용. 기상 해상도 아님)
   crs: "EPSG:5186",    // 투영좌표계. 지도에 그릴 때만 위경도(EPSG:4326)로 변환
-  // bounds: 공원 "경계 폴리곤" + 1km로 채워요.
-  // 11/17 기준 data/site.geojson엔 공연장·무대·주거지 "지점" 좌표만 있고, 공원 외곽
-  // 경계선(폴리곤) 자체는 아직 없어요 — 지점들의 바운딩박스로 대신하면 공원 경계보다
-  // 작게 잡힐 수 있어서(산책로·녹지가 지점 바깥에도 있음), 경계 폴리곤이 생길 때까지 비워 둬요.
-  bounds: null,
+  // bounds: 11/19, data/site.geojson의 20개 지점(공연장·무대·주거지) 바운딩박스 + 1km.
+  // ⚠️ 공원의 진짜 외곽 경계선(폴리곤)이 아니라 "아는 지점들의 바운딩박스"예요 — 공원에는
+  // 이 지점들 바깥에도 산책로·녹지가 있어서, 실제 공원보다 좁게 잡혔을 수 있어요. 좌표는
+  // 아직 위경도(EPSG:4326)예요 — 5186 투영 변환은 M2 지도 연결 때 해요(haversineDistanceM과
+  // 같은 이유, 3.5절 참고).
+  bounds: {
+    minLat: 37.501230,
+    maxLat: 37.535646,
+    minLon: 127.097627,
+    maxLon: 127.141842,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -114,7 +120,7 @@ export function windComponentTowardReceiver(vecFromDeg, sourceToReceiverBearingD
 // 3.5 거리·방위각 — 11/17 임시
 // ---------------------------------------------------------------------------
 // SourceSpec.x/y는 원래 EPSG:5186(미터) 기준인데, 지금 가진 음원 좌표
-// (data/olpark_sites.geojson)는 아직 위경도(EPSG:4326)예요. 5186 투영 변환은
+// (data/site.geojson)는 아직 위경도(EPSG:4326)예요. 5186 투영 변환은
 // M2 "지도 연결"에서 하기로 하고, 지금은 공원처럼 좁은 범위(수 km 이내)에서
 // 오차가 1% 미만인 하버사인(haversine) 공식으로 거리·방위각을 구해요.
 // 공식 자체는 측지학 공개 표준이고, 새로 지어낸 계수는 없어요.
@@ -184,8 +190,8 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
 
 /**
  * kind가 "generator"인 SourceSpec은 발전차 한 대당 하나씩 아래 필드를 더 가져요.
- * 실제 값(대수, 출력, tier4 여부 등)의 근거는 docs/발전차_배출가스_가정값과_근거.md를 따라요
- * (11/16 기준 그 문서가 아직 없어서, 여기서는 구조만 정해요 — 숫자는 넣지 않음).
+ * 실제 값(대수, 출력, tier4 여부 등)의 근거는 docs/발전차_배출가스_가정값과_근거.md와
+ * data/assumptions.json의 "배출가스" 항목을 따라요.
  * @typedef {Object} GeneratorSourceSpec
  * @property {"generator"} kind
  * @property {number} 엔진출력_kW
@@ -205,7 +211,8 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
  * @property {number} y
  * @property {string} hour  ISO 시각 (1시간 단위)
  * @property {"noise"|"exhaust"} layer
- * @property {number} value  소음은 dB(A), 배출가스는 NO2 ppm (로드맵 2번)
+ * @property {number|null} value  소음은 dB(A), 배출가스는 NO2 ppm (로드맵 2번). 계산 자체를
+ *   안 한 칸(예: 풍상측이라 플룸이 안 닿음)은 null — 0과 다른 의미라 지도에서 구분해요.
  * @property {"강"|"중"|"약"|null} level  로드맵 2번 3단계 기준으로 분류. 기준 미만이면 null
  * @property {string[]} flags  이 칸의 값에 적용된 주의사항. 예: "근거리불확실"(발전차 100m 이내),
  *   "약풍미표시"(풍속 과소), "사양미확인"(발전차 사양 정보출처가 "시연용가정"),
@@ -213,3 +220,29 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
  * @property {string} scenario  이 값이 어느 계산 시나리오로 나왔는지(로드맵 2번).
  *   예: "ISO9613-2_상한", "CONCAWE_전체", "계약기준역산", "문헌기반가정"
  */
+
+// ---------------------------------------------------------------------------
+// 7. 지도 표시 규칙 — 11/19 초안 (M3 지도 연결에서 index.html/agency.html이 그대로 써요)
+// ---------------------------------------------------------------------------
+/**
+ * OutputCell 하나를 지도에서 어떻게 표시할지 정해요. 값 자체(숫자·단계)를 바꾸지 않고,
+ * "보여주는 방식"만 결정해요 — 계산은 noise.js/plume.js가, 표시 규칙은 여기 한 곳에만 둬요.
+ * @param {import("./common.js").OutputCell} cell
+ * @returns {{ mode: "blank"|"hatch"|"value", hideValue: boolean, hideLevel: boolean }}
+ *   mode "blank": value가 null → 빈칸(아무 것도 안 그림)
+ *   mode "hatch": flags에 "근거리불확실"이 있음 → 숫자·단계 안 보여주고 회색 빗금만
+ *   mode "value": 그 외 → 숫자·단계 그대로 보여줌
+ */
+export function mapDisplayFor(cell) {
+  if (cell.value === null) {
+    return { mode: "blank", hideValue: true, hideLevel: true };
+  }
+  if (cell.flags?.includes("근거리불확실")) {
+    return { mode: "hatch", hideValue: true, hideLevel: true };
+  }
+  return { mode: "value", hideValue: false, hideLevel: false };
+}
+
+/** 배출가스 레이어에 항상 같이 보여줄 문구. 지도 코드가 레이어를 켤 때 이 문구를 그대로 써요. */
+export const EXHAUST_LAYER_DISCLAIMER =
+  "비인증 엔진·지면 배출을 가정한 스크리닝 결과이며 실제 농도가 아닙니다";

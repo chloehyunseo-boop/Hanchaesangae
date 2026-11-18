@@ -23,9 +23,12 @@ jobs:
         with:
           node-version: "20"
 
+      # TZ: Asia/Seoul이 없으면 GitHub 서버 기본 시간대(UTC) 때문에 weather.js의
+      # new Date().getHours() 등이 9시간 늦게 잡혀서 발표 시각(baseTime) 계산이 틀려요(11/18 발견).
       - name: 기상청 예보 갱신
         env:
           KMA_SERVICE_KEY: ${{ secrets.KMA_SERVICE_KEY }}
+          TZ: Asia/Seoul
         run: node scripts/update-weather.mjs
 
       - name: 바뀐 데이터만 커밋
