@@ -68,7 +68,7 @@ for (const [kw, st, ws, x, exp] of cases) {
 // 6) 표시 꼬리표
 {
   const weak = run(500, "D", 0.8, 270, dest(90, 300));
-  check("약풍 1m/s 미만 미표시", weak.value === 0 && weak.flags.includes("약풍미표시"), weak.flags.join(","));
+  check("약풍 1m/s 미만 미표시(null)", weak.value === null && weak.flags.includes("약풍미표시"), `value=${weak.value}, ${weak.flags.join(",")}`);
   const nearF = run(500, "D", 3, 270, dest(90, 60));
   check("100m 이내 근거리불확실", nearF.flags.includes("근거리불확실"), nearF.flags.join(","));
   const demo = run(500, "D", 3, 270, dest(90, 300), { 정보출처: "시연용가정" });

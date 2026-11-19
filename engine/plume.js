@@ -5,7 +5,7 @@
 // 로드맵 2번 "배출가스" 참고. 11/17 1차 작성(M2): 확산·배출량 + 안정도 자동판정
 // (NOAA 태양 위치, Turner 표 6-4~6-6, 기본/비교 시나리오)까지 들어 있어요.
 
-import { haversineDistanceM, bearingDeg, windComponentTowardReceiver } from "./common.js";
+import { haversineDistanceM, bearingDeg, windComponentTowardReceiver, WIND_FAN_HALF_WIDTH_DEG } from "./common.js";
 
 // ---------------------------------------------------------------------------
 // 배출계수 (AP-42, 평균값) — 가정값 문서 "배출량" 표
@@ -322,8 +322,9 @@ export function calcExhaustGaussianPlume({
   if (bad) return { value: null, flags: [...flags, "계산불가"], scenario, reason: bad };
 
   // 약풍: 10m 풍속 1m/s 미만이면 지도에 그리지 않아요(가정값 문서 "확산" 절).
+  // 계산을 안 한 것이라 0(영향 없음)이 아니라 null이에요(common.js OutputCell 규칙).
   if (wsd10m < 1.0) {
-    return { value: 0, flags: [...flags, "약풍미표시"], scenario };
+    return { value: null, flags: [...flags, "약풍미표시"], scenario, reason: "10m 풍속 1m/s 미만" };
   }
 
   const distance = haversineDistanceM(sourceLat, sourceLon, receiverLat, receiverLon);
@@ -354,4 +355,63 @@ export function calcExhaustGaussianPlume({
   const ppm = mgPerM3ToPpm(concGPerM3 * 1000);
 
   return { value: ppm, flags, scenario };
+}
+
+// ---------------------------------------------------------------------------
+// 한 수음점의 최종값 — 발전차 여러 대 합산 + 풍향 불확실성 부채꼴
+// ---------------------------------------------------------------------------
+/**
+ * 한 수음점에 대해 발전차 여러 대의 NO2 기여를 더하고, 풍향 예보 오차를 고려해
+ * 예보 풍향 ±fanHalfWidthDeg 안에서 합계가 가장 큰 값을 돌려줘요.
+ * - 여러 대: 대수를 곱하지 않고 한 대씩 계산해 더해요(가정값 문서 '배출량').
+ * - 부채꼴: 같은 시각엔 모든 발전차에 같은 바람이 분다고 보고, 방향을 함께 돌려 가며 합계를 구해요.
+ *   폭은 common.js WIND_FAN_HALF_WIDTH_DEG(임시 22.5°, 11/27 예보-AWS 비교로 교체 예정). 0이면 예보 방향만.
+ * @param {Object} p
+ * @param {{lat:number, lon:number, 엔진출력_kW:number, loadFactor?:number, 정보출처?:"확인"|"시연용가정"}[]} p.generators
+ * @param {number} p.receiverLat
+ * @param {number} p.receiverLon
+ * @param {StabilityClass} p.stability
+ * @param {number} p.wsd10m
+ * @param {number} p.windVecFromDeg
+ * @param {number} [p.fanHalfWidthDeg]
+ * @param {number} [p.fanStepDeg]
+ * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null}}
+ */
+export function calcExhaustAtReceiver({
+  generators, receiverLat, receiverLon, stability, wsd10m, windVecFromDeg,
+  fanHalfWidthDeg = WIND_FAN_HALF_WIDTH_DEG, fanStepDeg = 2.5,
+}) {
+  const scenario = "가우시안플룸_지면배출_ISC3도시형확산계수_풍향부채꼴최대";
+  if (!Array.isArray(generators) || generators.length === 0) {
+    return { value: null, flags: ["계산불가"], scenario, reason: "발전차 없음", centerValue: null, maxAtOffsetDeg: null };
+  }
+  const offsets = [];
+  const n = fanHalfWidthDeg > 0 ? Math.round(fanHalfWidthDeg / fanStepDeg) : 0;
+  for (let i = -n; i <= n; i++) offsets.push(i * (n ? fanHalfWidthDeg / n : 0));
+
+  let best = null;
+  let center = null;
+  for (const off of offsets) {
+    const vec = (((windVecFromDeg + off) % 360) + 360) % 360;
+    let total = 0;
+    const flags = new Set();
+    for (const g of generators) {
+      const r = calcExhaustGaussianPlume({
+        sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon,
+        enginePowerKW: g.엔진출력_kW, loadFactor: g.loadFactor ?? 1.0,
+        stability, wsd10m, windVecFromDeg: vec, 정보출처: g.정보출처,
+      });
+      // 한 대라도 계산 불가·약풍이면 합계를 낼 수 없어요 → 그대로 null로 돌려줘요.
+      if (r.value === null) {
+        return { value: null, flags: r.flags, scenario, reason: r.reason, centerValue: null, maxAtOffsetDeg: null };
+      }
+      total += r.value;
+      r.flags.forEach((f) => flags.add(f));
+    }
+    if (off === 0) center = total;
+    if (best === null || total > best.total) best = { total, flags, off };
+  }
+  const flags = [...best.flags];
+  if (n > 0) flags.push("풍향부채꼴최대");
+  return { value: best.total, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off };
 }
