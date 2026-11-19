@@ -366,15 +366,21 @@ export function calcExhaustGaussianPlume({
  * - 여러 대: 대수를 곱하지 않고 한 대씩 계산해 더해요(가정값 문서 '배출량').
  * - 부채꼴: 같은 시각엔 모든 발전차에 같은 바람이 분다고 보고, 방향을 함께 돌려 가며 합계를 구해요.
  *   폭은 common.js WIND_FAN_HALF_WIDTH_DEG(임시 22.5°, 11/27 예보-AWS 비교로 교체 예정). 0이면 예보 방향만.
+ *   간격은 fanStepDeg 그대로 쓰고, 마지막에 ±반폭 끝 방향을 꼭 넣어요(이산 탐색이라 연속 구간의 정확한 최대는 아님).
+ * - 결과 해석: value는 '예보 풍향 오차 범위(±반폭) 안의 최대 추정 농도'예요. 실제 풍향이 그 방향이었다는 뜻이 아니에요.
+ * - 전제조건: generators에는 그 시각에 가동 중이고 가동 시간 출처가 '미확인'이 아닌 발전차만 넣어요
+ *   (시간 필터는 호출하는 쪽 — combine.js — 이 해요. common.js SourceSpec 규칙).
+ * - 출력종류가 "엔진"이 아니면(전기·미확인·빈칸) 계산은 하되 flags에 '엔진출력미확인'을 붙여요
+ *   (배출계수는 엔진 기계 출력 기준. 가정값 문서 '배출량' 표).
  * @param {Object} p
- * @param {{lat:number, lon:number, 엔진출력_kW:number, loadFactor?:number, 정보출처?:"확인"|"시연용가정"}[]} p.generators
+ * @param {{lat:number, lon:number, 엔진출력_kW:number, 출력종류?:"엔진"|"전기"|"미확인", loadFactor?:number, 정보출처?:"확인"|"시연용가정"}[]} p.generators
  * @param {number} p.receiverLat
  * @param {number} p.receiverLon
  * @param {StabilityClass} p.stability
  * @param {number} p.wsd10m
  * @param {number} p.windVecFromDeg
- * @param {number} [p.fanHalfWidthDeg]
- * @param {number} [p.fanStepDeg]
+ * @param {number} [p.fanHalfWidthDeg]  0 이상 180 이하
+ * @param {number} [p.fanStepDeg]  0 초과
  * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null}}
  */
 export function calcExhaustAtReceiver({
@@ -382,36 +388,68 @@ export function calcExhaustAtReceiver({
   fanHalfWidthDeg = WIND_FAN_HALF_WIDTH_DEG, fanStepDeg = 2.5,
 }) {
   const scenario = "가우시안플룸_지면배출_ISC3도시형확산계수_풍향부채꼴최대";
-  if (!Array.isArray(generators) || generators.length === 0) {
-    return { value: null, flags: ["계산불가"], scenario, reason: "발전차 없음", centerValue: null, maxAtOffsetDeg: null };
+  const fail = (reason, flags = []) => ({
+    value: null, flags: [...new Set([...flags, "계산불가"])], scenario, reason, centerValue: null, maxAtOffsetDeg: null,
+  });
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+
+  // 1) 공통 입력을 부채꼴로 돌리기 '전에' 검증해요(예: 361°가 1°로 바뀌어 통과하는 것 방지).
+  if (!finite(fanHalfWidthDeg) || fanHalfWidthDeg < 0 || fanHalfWidthDeg > 180) return fail(`부채꼴 반폭은 0~180°: ${fanHalfWidthDeg}`);
+  if (!finite(fanStepDeg) || fanStepDeg <= 0) return fail(`부채꼴 간격은 0보다 커야 해요: ${fanStepDeg}`);
+  if (!Array.isArray(generators) || generators.length === 0) return fail("발전차 없음");
+  for (let i = 0; i < generators.length; i++) {
+    const g = generators[i];
+    if (!g || typeof g !== "object") return fail(`발전차 ${i + 1}번 정보가 비어 있어요`);
+    const bad = validatePlumeInput({
+      sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon, enginePowerKW: g.엔진출력_kW,
+      loadFactor: g.loadFactor ?? 1.0, stability, wsd10m, windVecFromDeg,
+    });
+    if (bad) return fail(`발전차 ${i + 1}번: ${bad}`);
   }
+
+  // 2) 발전차 정보에서 오는 꼬리표는 결과가 null이어도 남겨요.
+  const baseFlags = new Set();
+  for (const g of generators) {
+    if (g.정보출처 === "시연용가정") baseFlags.add("시연용가정");
+    if (g.출력종류 !== "엔진") baseFlags.add("엔진출력미확인");
+  }
+
+  // 3) 오프셋: −반폭부터 fanStepDeg 간격, 끝(+반폭)은 꼭 포함
   const offsets = [];
-  const n = fanHalfWidthDeg > 0 ? Math.round(fanHalfWidthDeg / fanStepDeg) : 0;
-  for (let i = -n; i <= n; i++) offsets.push(i * (n ? fanHalfWidthDeg / n : 0));
+  if (fanHalfWidthDeg === 0) offsets.push(0);
+  else {
+    for (let o = -fanHalfWidthDeg; o < fanHalfWidthDeg - 1e-9; o += fanStepDeg) offsets.push(Math.round(o * 1e9) / 1e9);
+    offsets.push(fanHalfWidthDeg);
+    if (!offsets.some((o) => Math.abs(o) < 1e-9)) offsets.push(0); // 예보 방향(중심)은 항상 계산
+    offsets.sort((a, b) => a - b);
+  }
 
   let best = null;
   let center = null;
   for (const off of offsets) {
     const vec = (((windVecFromDeg + off) % 360) + 360) % 360;
     let total = 0;
-    const flags = new Set();
+    const flags = new Set(baseFlags);
     for (const g of generators) {
       const r = calcExhaustGaussianPlume({
         sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon,
         enginePowerKW: g.엔진출력_kW, loadFactor: g.loadFactor ?? 1.0,
         stability, wsd10m, windVecFromDeg: vec, 정보출처: g.정보출처,
       });
-      // 한 대라도 계산 불가·약풍이면 합계를 낼 수 없어요 → 그대로 null로 돌려줘요.
+      // 약풍·음원 위치 등으로 한 대라도 null이면 합계를 낼 수 없어요. 그때까지의 꼬리표도 함께 돌려줘요.
       if (r.value === null) {
-        return { value: null, flags: r.flags, scenario, reason: r.reason, centerValue: null, maxAtOffsetDeg: null };
+        const keep = [...flags, ...r.flags];
+        return r.flags.includes("약풍미표시")
+          ? { value: null, flags: [...new Set(keep)], scenario, reason: r.reason, centerValue: null, maxAtOffsetDeg: null }
+          : fail(r.reason, keep);
       }
       total += r.value;
       r.flags.forEach((f) => flags.add(f));
     }
-    if (off === 0) center = total;
+    if (Math.abs(off) < 1e-9) center = total;
     if (best === null || total > best.total) best = { total, flags, off };
   }
   const flags = [...best.flags];
-  if (n > 0) flags.push("풍향부채꼴최대");
+  if (fanHalfWidthDeg > 0) flags.push("풍향부채꼴최대");
   return { value: best.total, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off };
 }

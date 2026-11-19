@@ -67,3 +67,4 @@ check("일몰 61분 전은 낮", !isTurnerNight(...DOME, new Date(ss.getTime() -
 check("일몰 59분 전은 밤", isTurnerNight(...DOME, new Date(ss.getTime() - 59 * 60000)), "");
 
 console.log(fails ? `\n기대와 다른 항목 ${fails}개 — 위 ❌ 확인` : "\n모든 항목이 기대값과 같아요");
+if (fails) process.exitCode = 1; // 자동화 환경에서 실패를 실패로 알리기

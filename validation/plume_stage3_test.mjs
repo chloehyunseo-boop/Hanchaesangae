@@ -62,4 +62,45 @@ const single = (src, rec, vec, st = "D", ws = 3) =>
   const r = calcExhaustAtReceiver({ generators: [gen(DOME)], receiverLat: rec.lat, receiverLon: rec.lon, stability: "D", wsd10m: 3, windVecFromDeg: 270 });
   check("풍상측 0", r.value === 0, `${r.value}`);
 }
+// 7) 외부 검토(11/19) 반영
+{
+  const rec = dest(DOME, 90, 300);
+  const base = { generators: [gen(DOME)], receiverLat: rec.lat, receiverLon: rec.lon, stability: "D", wsd10m: 3 };
+  const bad = [
+    ["풍향 361°", { windVecFromDeg: 361 }], ["반폭 −22.5°", { windVecFromDeg: 270, fanHalfWidthDeg: -22.5 }],
+    ["반폭 NaN", { windVecFromDeg: 270, fanHalfWidthDeg: NaN }], ["간격 0°", { windVecFromDeg: 270, fanHalfWidthDeg: 1, fanStepDeg: 0 }],
+    ["발전차 배열에 null", { windVecFromDeg: 270, generators: [null] }], ["발전차 좌표 빠짐", { windVecFromDeg: 270, generators: [{ 엔진출력_kW: 500 }] }],
+  ];
+  for (const [name, o] of bad) {
+    const r = calcExhaustAtReceiver({ ...base, ...o });
+    check(`잘못된 입력: ${name}`, r.value === null && r.flags.includes("계산불가"), r.reason);
+  }
+  // 반폭 1°·간격 2.5°: 중심만이 아니라 ±1° 끝도 계산해야 함 → 1° 돌린 값이 중심보다 크면 그걸 골라야 함
+  const rec2 = dest(DOME, 91, 400);
+  const r1 = calcExhaustAtReceiver({ ...base, receiverLat: rec2.lat, receiverLon: rec2.lon, windVecFromDeg: 270, fanHalfWidthDeg: 1, fanStepDeg: 2.5 });
+  check("반폭 1°도 끝 방향까지 탐색", r1.maxAtOffsetDeg === 1, `최대 오프셋 ${r1.maxAtOffsetDeg}°`);
+  // 반폭 10°·간격 3°: 요청한 간격 유지(−10, −7, −4, −1, 0, 2, 5, 8, 10)
+  const r3 = calcExhaustAtReceiver({ ...base, receiverLat: dest(DOME, 98, 400).lat, receiverLon: dest(DOME, 98, 400).lon, windVecFromDeg: 270, fanHalfWidthDeg: 10, fanStepDeg: 3 });
+  check("간격 3° 유지", r3.maxAtOffsetDeg === 8, `최대 오프셋 ${r3.maxAtOffsetDeg}° (8°에서 최대여야 함)`);
+  // 꼬리표 누적: 시연용가정 발전차 + 약풍 → null이어도 시연용가정이 남아야 함
+  const w = calcExhaustAtReceiver({ ...base, windVecFromDeg: 270, wsd10m: 0.5, generators: [{ ...gen(DOME), 정보출처: "시연용가정" }] });
+  check("null이어도 꼬리표 유지", w.value === null && w.flags.includes("시연용가정") && w.flags.includes("약풍미표시"), w.flags.join(","));
+  // 출력종류
+  const e = calcExhaustAtReceiver({ ...base, windVecFromDeg: 270, generators: [{ ...gen(DOME), 출력종류: "엔진" }] });
+  const k = calcExhaustAtReceiver({ ...base, windVecFromDeg: 270, generators: [{ ...gen(DOME), 출력종류: "전기" }] });
+  check("출력종류 엔진이면 꼬리표 없음, 전기면 '엔진출력미확인'", !e.flags.includes("엔진출력미확인") && k.flags.includes("엔진출력미확인"), `엔진: ${e.flags.join(",")} / 전기: ${k.flags.join(",")}`);
+}
+// 8) 두 대 + 부채꼴: 합계의 최대 방향을 고르는지 (대별 최대의 합이 아님)
+{
+  const g2 = dest(DOME, 0, 150); // 북쪽 150m
+  const rec = dest(DOME, 100, 400);
+  const gens = [gen(DOME), gen(g2)];
+  const r = calcExhaustAtReceiver({ generators: gens, receiverLat: rec.lat, receiverLon: rec.lon, stability: "F", wsd10m: 2, windVecFromDeg: 270 });
+  let bestSum = -1, bestOff = null, sumOfMax = 0;
+  const offs = []; for (let o = -22.5; o <= 22.5 + 1e-9; o += 2.5) offs.push(o);
+  for (const o of offs) { const s = single(DOME, rec, 270 + o, "F", 2) + single(g2, rec, 270 + o, "F", 2); if (s > bestSum) { bestSum = s; bestOff = o; } }
+  sumOfMax = Math.max(...offs.map((o) => single(DOME, rec, 270 + o, "F", 2))) + Math.max(...offs.map((o) => single(g2, rec, 270 + o, "F", 2)));
+  check("두 대 + 부채꼴 = 같은 방향 합계의 최대", near(r.value, bestSum, 1e-9) && r.maxAtOffsetDeg === bestOff, `${r.value.toFixed(5)} (오프셋 ${r.maxAtOffsetDeg}°) · 대별 최대의 합이었다면 ${sumOfMax.toFixed(5)}`);
+}
 console.log(fails ? `\n기대와 다른 항목 ${fails}개 — 위 ❌ 확인` : "\n모든 항목이 기대값과 같아요");
+if (fails) process.exitCode = 1; // 자동화 환경에서 실패를 실패로 알리기

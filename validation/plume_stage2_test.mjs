@@ -97,3 +97,4 @@ check("단계 경계", classifyExhaustLevel(0.05) === "강" && classifyExhaustLe
 check("경계 바로 아래는 아래 단계", classifyExhaustLevel(0.04999999999) === "중" && classifyExhaustLevel(0.00999999999) === "약" && classifyExhaustLevel(0.00199999999) === null, "0.04999999999 중 / 0.00999999999 약 / 0.00199999999 미표시");
 
 console.log(fails ? `\n기대와 다른 항목 ${fails}개 — 위 ❌ 확인` : "\n모든 항목이 기대값과 같아요");
+if (fails) process.exitCode = 1; // 자동화 환경에서 실패를 실패로 알리기
