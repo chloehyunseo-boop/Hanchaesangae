@@ -102,5 +102,17 @@ const single = (src, rec, vec, st = "D", ws = 3) =>
   sumOfMax = Math.max(...offs.map((o) => single(DOME, rec, 270 + o, "F", 2))) + Math.max(...offs.map((o) => single(g2, rec, 270 + o, "F", 2)));
   check("두 대 + 부채꼴 = 같은 방향 합계의 최대", near(r.value, bestSum, 1e-9) && r.maxAtOffsetDeg === bestOff, `${r.value.toFixed(5)} (오프셋 ${r.maxAtOffsetDeg}°) · 대별 최대의 합이었다면 ${sumOfMax.toFixed(5)}`);
 }
+// 9) 외부 검토(11/19 2차) 반영
+{
+  const rec = dest(DOME, 90, 300);
+  const base = { generators: [gen(DOME)], receiverLat: rec.lat, receiverLon: rec.lon, stability: "D", wsd10m: 3, windVecFromDeg: 270 };
+  const t0 = Date.now();
+  const tiny = calcExhaustAtReceiver({ ...base, fanHalfWidthDeg: 1, fanStepDeg: 1e-20 });
+  check("아주 작은 간격(1e-20°)은 바로 계산불가", tiny.value === null && Date.now() - t0 < 1000, `${tiny.reason} (${Date.now() - t0}ms)`);
+  const lf = calcExhaustAtReceiver({ ...base, generators: [{ ...gen(DOME), loadFactor: null }] });
+  check("부하율 null은 계산불가", lf.value === null && lf.flags.includes("계산불가"), lf.reason);
+  const keep = calcExhaustAtReceiver({ ...base, generators: [{ ...gen(DOME), 정보출처: "시연용가정" }, { lat: NaN, lon: 127, 엔진출력_kW: 500 }] });
+  check("검증 실패여도 다른 발전차 꼬리표 유지", keep.value === null && keep.flags.includes("시연용가정") && keep.flags.includes("계산불가"), `${keep.flags.join(",")} / ${keep.reason}`);
+}
 console.log(fails ? `\n기대와 다른 항목 ${fails}개 — 위 ❌ 확인` : "\n모든 항목이 기대값과 같아요");
 if (fails) process.exitCode = 1; // 자동화 환경에서 실패를 실패로 알리기

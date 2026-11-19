@@ -392,26 +392,35 @@ export function calcExhaustAtReceiver({
     value: null, flags: [...new Set([...flags, "계산불가"])], scenario, reason, centerValue: null, maxAtOffsetDeg: null,
   });
   const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  // 부하율을 안 넣었을 때(undefined)만 기본 100%. null은 '잘못된 입력'으로 검증에서 걸러요.
+  const loadOf = (g) => (g.loadFactor === undefined ? 1.0 : g.loadFactor);
 
   // 1) 공통 입력을 부채꼴로 돌리기 '전에' 검증해요(예: 361°가 1°로 바뀌어 통과하는 것 방지).
   if (!finite(fanHalfWidthDeg) || fanHalfWidthDeg < 0 || fanHalfWidthDeg > 180) return fail(`부채꼴 반폭은 0~180°: ${fanHalfWidthDeg}`);
   if (!finite(fanStepDeg) || fanStepDeg <= 0) return fail(`부채꼴 간격은 0보다 커야 해요: ${fanStepDeg}`);
-  if (!Array.isArray(generators) || generators.length === 0) return fail("발전차 없음");
-  for (let i = 0; i < generators.length; i++) {
-    const g = generators[i];
-    if (!g || typeof g !== "object") return fail(`발전차 ${i + 1}번 정보가 비어 있어요`);
-    const bad = validatePlumeInput({
-      sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon, enginePowerKW: g.엔진출력_kW,
-      loadFactor: g.loadFactor ?? 1.0, stability, wsd10m, windVecFromDeg,
-    });
-    if (bad) return fail(`발전차 ${i + 1}번: ${bad}`);
+  // 간격이 너무 작으면(예: 1e-20) 반복이 끝나지 않거나 지나치게 길어져요. 방향 수 상한을 둬요.
+  const MAX_FAN_DIRECTIONS = 1000;
+  if (fanHalfWidthDeg > 0 && (2 * fanHalfWidthDeg) / fanStepDeg + 3 > MAX_FAN_DIRECTIONS) {
+    return fail(`부채꼴 방향 수가 너무 많아요(반폭 ${fanHalfWidthDeg}°, 간격 ${fanStepDeg}° → 상한 ${MAX_FAN_DIRECTIONS}개)`);
   }
+  if (!Array.isArray(generators) || generators.length === 0) return fail("발전차 없음");
 
-  // 2) 발전차 정보에서 오는 꼬리표는 결과가 null이어도 남겨요.
+  // 발전차 정보에서 오는 꼬리표는 검증에 실패해도 남겨요(읽을 수 있는 원소만 안전하게 읽어요).
   const baseFlags = new Set();
   for (const g of generators) {
+    if (!g || typeof g !== "object") continue;
     if (g.정보출처 === "시연용가정") baseFlags.add("시연용가정");
     if (g.출력종류 !== "엔진") baseFlags.add("엔진출력미확인");
+  }
+  const failKeep = (reason) => fail(reason, [...baseFlags]);
+  for (let i = 0; i < generators.length; i++) {
+    const g = generators[i];
+    if (!g || typeof g !== "object") return failKeep(`발전차 ${i + 1}번 정보가 비어 있어요`);
+    const bad = validatePlumeInput({
+      sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon, enginePowerKW: g.엔진출력_kW,
+      loadFactor: loadOf(g), stability, wsd10m, windVecFromDeg,
+    });
+    if (bad) return failKeep(`발전차 ${i + 1}번: ${bad}`);
   }
 
   // 3) 오프셋: −반폭부터 fanStepDeg 간격, 끝(+반폭)은 꼭 포함
@@ -433,7 +442,7 @@ export function calcExhaustAtReceiver({
     for (const g of generators) {
       const r = calcExhaustGaussianPlume({
         sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon,
-        enginePowerKW: g.엔진출력_kW, loadFactor: g.loadFactor ?? 1.0,
+        enginePowerKW: g.엔진출력_kW, loadFactor: loadOf(g),
         stability, wsd10m, windVecFromDeg: vec, 정보출처: g.정보출처,
       });
       // 약풍·음원 위치 등으로 한 대라도 null이면 합계를 낼 수 없어요. 그때까지의 꼬리표도 함께 돌려줘요.
