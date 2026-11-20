@@ -26,19 +26,24 @@ const P26 = [
   [1, 14, 35, 3.6e-1],
   [3, 27, 93, 7.0e-2],
   [6, 37, 175, 2.7e-2],
+  // 10 km: NEPIS 텍스트 변환본엔 "1.4 x 10-3"으로 나오지만, 원문 쪽 이미지(55쪽, 표 7-9)에는 1.4 x 10⁻²로
+  // 인쇄돼 있어요(2026-11-20 직접 확인). 텍스트 변환(OCR) 오류였어요.
+  [10, 47, 275, 1.4e-2],
 ];
+// 교재 답은 1970년 손계산을 유효숫자 2~3자리로 적은 값이에요.
+// 기준: 엔진 값이 교재가 적은 마지막 자릿수의 ±1 안에 들면 같은 값으로 봐요
+// (예: 교재 1.4×10⁻²면 1.3~1.5×10⁻², 교재 13.9면 13.8~14.0).
+const lastDigitUnit = (v) => {
+  const [mant, exp] = v.toExponential().split("e");
+  const decimals = (mant.split(".")[1] || "").length;
+  const sig = Math.max(decimals, 1); // 교재는 최소 유효숫자 2자리로 적음(7.0×10⁻², 2.5). JS에선 7.0이 7로 줄어서 1자리 보정
+  return 10 ** (Number(exp) - sig);
+};
 for (const [x, sz, sy, book] of P26) {
   const c = gaussianGroundLevelConc({ qGPerS: 1100, u: 2, sigmaY: sy, sigmaZ: sz });
+  const unit = lastDigitUnit(book);
   const rel = Math.abs(c - book) / book;
-  // 교재 답은 유효숫자 2~3자리로 반올림돼 있어서 3% 안이면 같은 값으로 봐요.
-  ok(rel < 0.03, `x=${x}km: 엔진 ${c.toPrecision(3)} / 교재 ${book} (차이 ${(rel * 100).toFixed(1)}%)`);
-}
-{
-  // 10 km 줄: 원문 텍스트는 "1.4 x 10-3"인데, 식으로는 1.35e-2가 나와요.
-  // 교재 본문의 "6.5 km에서 2.5e-2 아래로 떨어진다"와 맞는 쪽은 1.4e-2라 인쇄·OCR 지수 오류로 보여요.
-  // 원문 쪽 화면을 아직 직접 못 봐서 통과/실패로 세지 않고 기록만 해요.
-  const c = gaussianGroundLevelConc({ qGPerS: 1100, u: 2, sigmaY: 275, sigmaZ: 47 });
-  note(`x=10km: 엔진 ${c.toPrecision(3)} / 교재 텍스트 1.4e-3 (지수 표기 확인 필요, 판정 제외)`);
+  ok(Math.abs(c - book) <= unit * 1.0000001, `x=${x}km: 엔진 ${c.toPrecision(3)} / 교재 ${book} (차이 ${(rel * 100).toFixed(1)}%, 허용 ±${unit.toPrecision(1)})`);
 }
 {
   // 옆으로 벗어난 지점: 교재 식 (3.1)·(3.4)의 exp(−y²/2σy²) 항. σy만큼 벗어나면 중심의 e^−0.5배.
