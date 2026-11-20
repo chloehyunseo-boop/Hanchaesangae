@@ -301,6 +301,17 @@ export function validatePlumeInput({ sourceLat, sourceLon, receiverLat, receiver
   return null;
 }
 
+/**
+ * 지면 배출(H=0)·지면 수용점(z=0) 가우시안 플룸 농도 (g/m³).
+ * Turner(1970) 워크북 식 (3.4)에 옆 방향 항을 곱한 형태: χ = Q/(π σy σz u) · exp(−y²/2σy²).
+ * 확산폭(σ)을 밖에서 받게 따로 떼어 둔 이유: 교재 예제의 σ를 그대로 넣어 식 자체를 검증하려고요
+ * (validation/plume_turner_test.mjs).
+ * @param {{qGPerS:number, u:number, sigmaY:number, sigmaZ:number, y?:number}} p
+ */
+export function gaussianGroundLevelConc({ qGPerS, u, sigmaY, sigmaZ, y = 0 }) {
+  return (qGPerS / (Math.PI * u * sigmaY * sigmaZ)) * Math.exp(-(y ** 2) / (2 * sigmaY ** 2));
+}
+
 export function calcExhaustGaussianPlume({
   sourceLat,
   sourceLon,
@@ -350,8 +361,7 @@ export function calcExhaustGaussianPlume({
   const u = advectionWindSpeed(wsd10m, stability);
 
   const qNo2GPerS = no2EmissionRateGPerS(enginePowerKW, loadFactor);
-  const concGPerM3 =
-    (qNo2GPerS / (Math.PI * u * sigmaY * sigmaZ)) * Math.exp(-(y ** 2) / (2 * sigmaY ** 2));
+  const concGPerM3 = gaussianGroundLevelConc({ qGPerS: qNo2GPerS, u, sigmaY, sigmaZ, y });
   const ppm = mgPerM3ToPpm(concGPerM3 * 1000);
 
   return { value: ppm, flags, scenario };
