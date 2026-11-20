@@ -1,6 +1,6 @@
 {
   "_설명": "GitHub Actions가 매시 50분에 갱신해요. 값이 없는 시각은 비워 둬요(임의로 채우지 않음).",
-  "저장시각": "2026-11-20T05:46:07.640Z",
+  "저장시각": "2026-11-20T06:44:33.872Z",
   "예보": [
     {
       "baseDate": "20261120",
@@ -558,7 +558,7 @@
       "fcstTime": "2000",
       "category": "UUU",
       "value": "0.7",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -566,8 +566,8 @@
       "fcstDate": "20261120",
       "fcstTime": "2000",
       "category": "VVV",
-      "value": "-1.1",
-      "source": "vilage"
+      "value": "-1",
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -575,8 +575,8 @@
       "fcstDate": "20261120",
       "fcstTime": "2000",
       "category": "VEC",
-      "value": "326",
-      "source": "vilage"
+      "value": "328",
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -584,8 +584,8 @@
       "fcstDate": "20261120",
       "fcstTime": "2000",
       "category": "WSD",
-      "value": "1.4",
-      "source": "vilage"
+      "value": "1",
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -594,7 +594,7 @@
       "fcstTime": "2000",
       "category": "SKY",
       "value": "1",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -603,7 +603,7 @@
       "fcstTime": "2000",
       "category": "PTY",
       "value": "0",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -612,7 +612,7 @@
       "fcstTime": "2000",
       "category": "POP",
       "value": "0",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -639,7 +639,7 @@
       "fcstTime": "2000",
       "category": "REH",
       "value": "50",
-      "source": "vilage"
+      "source": "ultra"
     },
     {
       "baseDate": "20261120",
@@ -7233,6 +7233,15 @@
       "baseDate": "20261120",
       "baseTime": "1400",
       "fcstDate": "20261120",
+      "fcstTime": "2000",
+      "category": "LGT",
+      "value": "0",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261120",
+      "baseTime": "1400",
+      "fcstDate": "20261120",
       "fcstTime": "1500",
       "category": "RN1",
       "value": "강수없음",
@@ -7270,6 +7279,15 @@
       "baseTime": "1400",
       "fcstDate": "20261120",
       "fcstTime": "1900",
+      "category": "RN1",
+      "value": "강수없음",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261120",
+      "baseTime": "1400",
+      "fcstDate": "20261120",
+      "fcstTime": "2000",
       "category": "RN1",
       "value": "강수없음",
       "source": "ultra"
@@ -7315,6 +7333,15 @@
       "baseTime": "1400",
       "fcstDate": "20261120",
       "fcstTime": "1900",
+      "category": "T1H",
+      "value": "-1",
+      "source": "ultra"
+    },
+    {
+      "baseDate": "20261120",
+      "baseTime": "1400",
+      "fcstDate": "20261120",
+      "fcstTime": "2000",
       "category": "T1H",
       "value": "-1",
       "source": "ultra"
