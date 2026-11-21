@@ -1,11 +1,12 @@
 // engine/noise.js — 소음 엔진 (친구 라인)
 // ISO 9613-2 상한 시나리오 + CONCAWE 시간별 추정. 로드맵 2번 "소음" 참고.
-// 11/17 기준: 두 시나리오 다 실제 감쇠항 수식을 아직 원문에서 확인 못했어요
-// (ISO 9613-2는 이번 세션에서 원문 대조 안 함, CONCAWE K1~K7은 원문이 스캔본이라
-// 사용자가 PDF를 직접 열어 확인해야 해요 — data/assumptions.json의 CONCAWE_원문 참고).
-// CLAUDE.md 규칙 2(확인 안 된 수식을 지어내지 않음) · 5(공개 표준만) 때문에, 지금은
-// 음원·수음점 기하(거리·방위각)와 출력 모양만 자리를 잡아요. 실제 감쇠항은 원문 확인 후
-// calcNoiseIso9613Upper / calcNoiseConcaweHourly 안에 채워요.
+// 11/21 결정: ISO 9613-2 상한 시나리오는 거리 감쇠(Adiv)+공기 흡수(Aatm)+무대 지향성(Dc)+
+// 바람 부채꼴로 동결해요. 지면 효과(Aground)·차폐(Abar)는 원문(ISO 9613-2 7.3절, 유료)을
+// 못 구해서 안 넣었고, 이름 그대로 "상한"(더 보수적인 높은 값) 추정이라 그래도 괜찮다고
+// 봤어요(지면 효과는 보통 소리를 깎아주는 방향 — CALC_GRID.bounds와 비슷하게, 나중에
+// 원문을 구하면 그 항만 추가하면 돼요). CONCAWE K1~K7은 여전히 막혀있어요 — 원문이
+// 스캔본이라 사용자가 PDF를 직접 열어 확인해야 해요(data/assumptions.json의 CONCAWE_원문).
+// CLAUDE.md 규칙 2(확인 안 된 수식을 지어내지 않음) · 5(공개 표준만) 반영.
 
 import { haversineDistanceM, bearingDeg, windComponentTowardReceiver } from "./common.js";
 
@@ -123,15 +124,33 @@ export function indoorFacadeSourcePowerLevel(lpIndoorDb, transmissionLossDb, wal
 }
 
 /**
- * ISO 9613-2 상한 시나리오 (Lp = LW + Dc − A, A = Adiv+Aatm+Aground+Abar).
- * @throws {Error} Aground(지면 효과) 원문 수식을 아직 확인 못해서 전체 합산은 미구현이에요.
- *   거리 감쇠·공기 흡수만 쓰려면 calcAdiv()/calcAatm()을 따로 부르세요.
+ * ISO 9613-2 상한 시나리오: Lp = LW + Dc − Adiv − Aatm.
+ * 11/21 결정(사용자·하린 확인): Aground(지면 효과)·Abar(차폐) 원문은 여전히 못 구했지만
+ * (유료 표준, noise.js 상단 주석 참고), 이 시나리오 이름 자체가 "상한"이고 지면 효과는
+ * 보통 소리를 깎아주는 쪽이라 빼면 더 보수적(높은) 값이 나와요 — 그래서 지금은 이 둘을
+ * 빼고 "거리 감쇠+공기 흡수+무대 지향성+바람 부채꼴"만으로 상한을 추정해요. 나중에 원문을
+ * 구하면 Aground 항만 추가하면 돼요(구조는 안 바뀜).
+ * @param {{ sourceLat: number, sourceLon: number, receiverLat: number, receiverLon: number,
+ *   windVecFromDeg: number, lwDb: number, freqHz?: number, tempC: number, rhPercent: number }} p
+ *   lwDb: 음원 파워레벨(dB) — 실외 무대는 아직 확정 안 됨(로드맵 2번 '음원 세기'),
+ *   실내는 indoorFacadeSourcePowerLevel()로 구해서 넣어요.
+ * @returns {{ value: number|null, flags: string[], scenario: string }}
  */
-export function calcNoiseIso9613Upper(/* { sourceLat, sourceLon, receiverLat, receiverLon, LW, windVecFromDeg, ... } */) {
-  throw new Error(
-    "미구현 — Aground(지면 효과, ISO 9613-2 7.3절) 수식을 아직 확인 못했어요(원문 유료). " +
-      "Adiv·Aatm은 calcAdiv()/calcAatm()으로 따로 쓸 수 있어요. 원문 확인 후 여기에 채워요(CLAUDE.md 규칙 2·5)."
-  );
+export function calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, freqHz = 1000, tempC, rhPercent }) {
+  const scenario = "ISO9613-2_상한추정_지면효과미적용";
+  const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
+  const gate = windGateFor(geometry);
+  const flags = [...gate.flags, "지면효과미적용"];
+  if (!gate.include) {
+    return { value: null, flags, scenario };
+  }
+  if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) {
+    return { value: null, flags: [...flags, "음원세기미확인"], scenario };
+  }
+  const adiv = calcAdiv(geometry.distanceM);
+  const aatm = calcAatm(geometry.distanceM, freqHz, tempC, rhPercent);
+  const dc = stageDirectivityDb();
+  return { value: lwDb + dc - adiv - aatm, flags, scenario };
 }
 
 /**

@@ -3,8 +3,9 @@
 // engine/common.js의 OutputCell[] 모양으로 합쳐요. 계산 자체는 두 엔진이 하고,
 // 여기는 "격자 만들기 + 둘을 같은 모양으로 합치기"만 해요(로드맵 M2 11/19).
 //
-// ⚠️ 소음은 아직 미완성이에요 — ISO 9613-2의 Aground(지면 효과)를 못 구해서
-// (noise.js 참고), 숫자(dB)까지는 못 내고 value:null + 플래그로만 표시해요.
+// 소음은 11/21 결정대로 ISO 9613-2 "상한" 시나리오(거리 감쇠+공기 흡수+무대 지향성+바람
+// 부채꼴, 지면 효과 제외 — noise.js 상단 주석 참고)로 dB를 내요. 다만 음원 세기(LW)가
+// 아직 확정 안 된 무대는 source.lwDb/source.indoor를 안 넣으면 value:null로 빠져요.
 // 배출가스는 plume.js의 calcExhaustAtReceiver()로 실제 ppm 값을 내요 — 수음점마다
 // 그 시각에 가동 중인 발전차를 전부 모아 한 번만 불러요(합산·풍향 부채꼴·ARM2는
 // 그 함수 안에서 처리, 11/21 하린 지시).
@@ -13,7 +14,7 @@
 // OutputCell.x/y 주석도 11/21에 맞춰 고쳤어요).
 
 import { CALC_GRID, mapDisplayFor } from "./common.js";
-import { sourceReceiverGeometry, windGateFor, stageDirectivityDb, calcAdiv, calcAatm, classifyNoiseLevel } from "./noise.js";
+import { calcNoiseIso9613Upper, indoorFacadeSourcePowerLevel, classifyNoiseLevel } from "./noise.js";
 import { calcExhaustAtReceiver, classifyExhaustLevel } from "./plume.js";
 
 const DEG_PER_M_LAT = 1 / 111320;
@@ -92,36 +93,36 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
 }
 
 /**
- * 무대 음원 하나 × 수음점 하나의 소음 OutputCell을 만들어요.
- * 지금은 Aground가 없어서 최종 dB를 못 내요 — value는 null, 어느 항까지 계산했는지는
- * flags/scenario로 남겨요(Adiv·Aatm은 실제로 계산해서 넣어둬요, 나중에 Aground만 더하면 됨).
+ * 무대 음원 하나 × 수음점 하나의 소음 OutputCell을 만들어요(ISO 9613-2 상한 추정).
+ * 실내 공연장은 source.indoor={lpIndoorDb, R, S}를 주면 indoorFacadeSourcePowerLevel로
+ * LW를 구해요. 실외 무대나 아직 LW를 모르는 음원은 source.lwDb를 직접 주거나, 둘 다
+ * 없으면 value:null("음원세기미확인")로 빠져요 — 지어낸 숫자를 넣지 않아요.
  * @returns {import("./common.js").OutputCell}
  */
 export function computeNoiseCell({ source, receiver, weather, hour, freqHz = 1000 }) {
-  const geometry = sourceReceiverGeometry({
+  const lwDb = source.indoor
+    ? indoorFacadeSourcePowerLevel(source.indoor.lpIndoorDb, source.indoor.R, source.indoor.S)
+    : source.lwDb;
+  const result = calcNoiseIso9613Upper({
     sourceLat: source.lat,
     sourceLon: source.lon,
     receiverLat: receiver.lat,
     receiverLon: receiver.lon,
     windVecFromDeg: weather.windVecFromDeg,
+    lwDb,
+    freqHz,
+    tempC: weather.tempC,
+    rhPercent: weather.rhPercent,
   });
-  const gate = windGateFor(geometry);
-  const flags = [...gate.flags, "ISO9613_지면효과미적용"];
-  if (!gate.include) {
-    return { x: receiver.lon, y: receiver.lat, hour, layer: "noise", value: null, level: null, flags, scenario: "ISO9613-2_상한_부분구현" };
-  }
-  const adiv = calcAdiv(geometry.distanceM);
-  const aatm = calcAatm(geometry.distanceM, freqHz, weather.tempC, weather.rhPercent);
-  const dc = stageDirectivityDb();
   return {
     x: receiver.lon,
     y: receiver.lat,
     hour,
     layer: "noise",
-    value: null, // LW 없이는 최종 dB를 못 냄 — Adiv/Aatm은 계산해서 flags에 참고용으로 남김
-    level: null,
-    flags: [...flags, `Adiv=${adiv.toFixed(1)}dB`, `Aatm=${aatm.toFixed(2)}dB`, `Dc=${dc}dB`],
-    scenario: "ISO9613-2_상한_부분구현",
+    value: result.value,
+    level: classifyNoiseLevel(result.value),
+    flags: result.flags,
+    scenario: result.scenario,
   };
 }
 
