@@ -182,8 +182,8 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
  * 종류별로 더 필요한 값은 각자 확장해서 써요(이 모양을 덮어쓰지 않음).
  * @typedef {Object} SourceSpec
  * @property {"stage"|"generator"} kind
- * @property {number} x  EPSG:5186 미터 좌표
- * @property {number} y
+ * @property {number} x  경도(lon, EPSG:4326, 도) — OutputCell과 같은 이유로 지금은 위경도
+ * @property {number} y  위도(lat, EPSG:4326, 도)
  * @property {{start: string|null, end: string|null, 출처: "공단API명시"|"런타임추정"|"수동입력"|"미확인"}} time
  *   time.출처가 "미확인"이면 이 음원은 계산에 넣지 않아요(로드맵 2번 공통 조건).
  */
@@ -207,8 +207,9 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
  * 소음 엔진(noise.js)과 배출가스 엔진(plume.js)이 25m 계산 격자 한 칸·한 시각에 대해
  * 돌려주는 값의 모양이에요. 둘 다 같은 모양을 써서, 지도 쪽 코드가 레이어만 바꿔 그리게 해요.
  * @typedef {Object} OutputCell
- * @property {number} x  EPSG:5186 미터 좌표 (격자 칸 중심)
- * @property {number} y
+ * @property {number} x  경도(lon, EPSG:4326, 도) — 원래는 EPSG:5186 미터(격자 칸 중심)가
+ *   맞지만, 5186 투영 변환이 아직 없어서(3.5절) engine/combine.js가 지금은 위경도를 그대로 넣어요.
+ * @property {number} y  위도(lat, EPSG:4326, 도)
  * @property {string} hour  ISO 시각 (1시간 단위)
  * @property {"noise"|"exhaust"} layer
  * @property {number|null} value  소음은 dB(A), 배출가스는 NO2 ppm (로드맵 2번). 계산 자체를
