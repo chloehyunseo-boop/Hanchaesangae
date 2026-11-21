@@ -73,8 +73,9 @@ const rec300 = east(300);
 const base = { receiverLat: rec300.lat, receiverLon: rec300.lon, stability: "F", wsd10m: 2, windVecFromDeg: 270, fanHalfWidthDeg: 0, 대기온도_C: 10 };
 {
   const open = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false })] });
-  check("개방된 곳: 부하율 0.43 + 배기구 3m + 상승 + ARM2", near(open.value, 0.036495620955338835, 1e-9),
-    `${open.value.toFixed(5)} ppm (기대 0.03650), 비율 ${open.no2NoxRatio}`);
+  // 11/21 코드 검토 2차: 부력에 의한 확산(BID, ISC3 식 1-48·1-49) 추가 → σ_e = √(σ² + (Δh/3.5)²). 이전 기대값 0.03650.
+  check("개방된 곳: 부하율 0.43 + 배기구 3m + 상승 + BID + ARM2", near(open.value, 0.040616824746728994, 1e-9),
+    `${open.value.toFixed(5)} ppm (기대 0.04062), 비율 ${open.no2NoxRatio}`);
   check("개방된 곳 꼬리표", open.flags.includes("연기상승적용") && open.flags.includes("배기사양가정") && open.flags.includes("부하율EPA기본값") && open.flags.includes("ARM2"), open.flags.join(","));
 
   const bld = calcExhaustAtReceiver({ ...base, generators: [one()] }); // 건물옆 기본값(undefined) → 상승 제외
@@ -121,6 +122,18 @@ const base = { receiverLat: rec300.lat, receiverLon: rec300.lon, stability: "F",
   const withD = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false, 배기구지름_m: 0.2 })] });
   const noDdef = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false })] });
   check("기본 배기 + 지름 0.2m → 상승 적용, 지름 없을 때와 같은 값", withD.flags.includes("연기상승적용") && near(withD.value, noDdef.value));
+}
+// 6-1-2) 배기구 끝 하강(ISC3 식 1-7) — 지름 0.8m, D 10m 6m/s: v_s 2.87 < 1.5·u_s 6.66 → h_s' 1.636m
+{
+  const dw = calcExhaustAtReceiver({ ...base, stability: "D", wsd10m: 6, generators: [one({ 배기구지름_m: 0.8 })] });
+  check("배기구 끝 하강 독립 손계산", near(dw.value, 0.016406693406489824, 1e-9) && dw.flags.includes("배기구끝하강"), `${dw.value.toFixed(5)} ppm (기대 0.01641)`);
+  const fast = calcExhaustAtReceiver({ ...base, stability: "D", wsd10m: 6, generators: [one({ 배기구지름_m: 0.2 })] });
+  check("배출 속도가 충분하면(지름 0.2m) 하강 없음", !fast.flags.includes("배기구끝하강"));
+}
+// 6-1-3) 기온 null도 '기온 없음'으로(코드 검토 2차 P2)
+{
+  const n = calcExhaustAtReceiver({ ...base, 대기온도_C: null, generators: [one({ 건물옆: false })] });
+  check("대기온도 null → 계산은 하고 상승만 제외", n.value !== null && n.flags.includes("기온없음_연기상승제외"), n.flags.join(","));
 }
 // 6-2) 안정도 좌표 검증(코드 검토 P2)
 {

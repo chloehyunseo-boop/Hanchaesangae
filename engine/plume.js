@@ -275,21 +275,6 @@ export function classifyExhaustLevel(ppm) {
 // 메인 계산 — 가우시안 플룸 (지면 배출, 지면 수음점, plume rise 미적용)
 // ---------------------------------------------------------------------------
 /**
- * 발전차 한 대가 한 수음점에 주는 NO2 기여 농도(ppm)를 계산해요.
- * @param {Object} p
- * @param {number} p.sourceLat  발전차 위도
- * @param {number} p.sourceLon  발전차 경도
- * @param {number} p.receiverLat  수음점 위도
- * @param {number} p.receiverLon  수음점 경도
- * @param {number} p.enginePowerKW  발전차 엔진 출력
- * @param {number} [p.loadFactor]  부하율 (기본 1.0)
- * @param {import("./plume.js").StabilityClass} p.stability  안정도 등급(A~F) — stabilityFromForecast()로 구해서 넣어요
- * @param {number} p.wsd10m  기상청 10m 풍속(m/s)
- * @param {number} p.windVecFromDeg  기상청 VEC(바람이 불어오는 방향, 0=북)
- * @param {"확인"|"시연용가정"} [p.정보출처]  발전차 사양 출처. "시연용가정"이면 flags에 표시
- * @returns {{value: number|null, flags: string[], scenario: string, reason?: string}}  value가 null이면 계산 불가(flags에 "계산불가", reason에 이유) — 0ppm과 구분해요
- */
-/**
  * 확산 계산 입력이 물리적으로 말이 되는지 확인해요. 문제가 있으면 이유(문자열), 없으면 null.
  */
 export function validatePlumeInput({ sourceLat, sourceLon, receiverLat, receiverLon, enginePowerKW, loadFactor, stability, wsd10m, windVecFromDeg }) {
@@ -315,6 +300,21 @@ export function gaussianGroundLevelConc({ qGPerS, u, sigmaY, sigmaZ, y = 0 }) {
   return (qGPerS / (Math.PI * u * sigmaY * sigmaZ)) * Math.exp(-(y ** 2) / (2 * sigmaY ** 2));
 }
 
+/**
+ * 발전차 한 대가 한 수음점에 주는 NO2 기여 농도(ppm)를 계산해요.
+ * @param {Object} p
+ * @param {number} p.sourceLat  발전차 위도
+ * @param {number} p.sourceLon  발전차 경도
+ * @param {number} p.receiverLat  수음점 위도
+ * @param {number} p.receiverLon  수음점 경도
+ * @param {number} p.enginePowerKW  발전차 엔진 출력
+ * @param {number} [p.loadFactor]  부하율 (기본 1.0)
+ * @param {import("./plume.js").StabilityClass} p.stability  안정도 등급(A~F) — stabilityFromForecast()로 구해서 넣어요
+ * @param {number} p.wsd10m  기상청 10m 풍속(m/s)
+ * @param {number} p.windVecFromDeg  기상청 VEC(바람이 불어오는 방향, 0=북)
+ * @param {"확인"|"시연용가정"} [p.정보출처]  발전차 사양 출처. "시연용가정"이면 flags에 표시
+ * @returns {{value: number|null, flags: string[], scenario: string, reason?: string}}  value가 null이면 계산 불가(flags에 "계산불가", reason에 이유) — 0ppm과 구분해요
+ */
 export function calcExhaustGaussianPlume({
   sourceLat,
   sourceLon,
@@ -520,9 +520,25 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
       }
     }
   }
-  const he = hs + dh;
+  // 배기구 끝 하강(stack-tip downwash, ISC3 식 1-7, p.1-6): v_s < 1.5·u_s 이면 h_s' = h_s + 2·d_s·(v_s/u_s − 1.5).
+  // 배출 속도 v_s를 알려면 배기구 지름이 필요해서, 지름을 입력한 발전차에만 적용해요. 음수 높이는 0으로 막아요.
+  let hsEff = hs;
+  if (!legacy && g.배기구지름_m > 0) {
+    const vs = ((g.배기량_m3_per_min ?? DEFAULT_EXHAUST.배기량_m3_per_min) / 60) / ((Math.PI * g.배기구지름_m ** 2) / 4);
+    if (vs < 1.5 * us) {
+      hsEff = Math.max(0, hs + 2 * g.배기구지름_m * (vs / us - 1.5));
+      flags.push("배기구끝하강");
+    }
+  }
+  const he = hsEff + dh;
   const qNox = (noxEmissionFactorGPerKWh(g.엔진출력_kW) * g.엔진출력_kW * load) / 3600; // g/s
-  const sy = DISPERSION[stability].sigmaY(x), sz = DISPERSION[stability].sigmaZ(x);
+  let sy = DISPERSION[stability].sigmaY(x), sz = DISPERSION[stability].sigmaZ(x);
+  // 부력에 의한 확산(BID, ISC3 식 1-48·1-49, p.1-32): σ_e = √(σ² + (Δh/3.5)²). Δh는 그 거리의 상승(점진/최종)이에요.
+  // 연기 상승을 적용할 때만 들어가요(11/21 코드 검토 2차 P1). 상승이 0이면 σ가 그대로예요.
+  if (dh > 0) {
+    sy = Math.hypot(sy, dh / 3.5);
+    sz = Math.hypot(sz, dh / 3.5);
+  }
   const nox = gaussianGroundLevelConc({ qGPerS: qNox, u: us, sigmaY: sy, sigmaZ: sz, y }) * Math.exp(-0.5 * (he / sz) ** 2);
   return { nox, flags };
 }
@@ -568,6 +584,8 @@ export function calcExhaustAtReceiver({
   });
   const finite = (v) => typeof v === "number" && Number.isFinite(v);
   const legacy = 가정 === "기존입력가정";
+  // 기상청 기온이 빠지면 null로 올 수 있어요. null도 '기온 없음'으로 받아요(코드 검토 2차 P2 — 지도 전체가 계산불가가 되지 않게).
+  if (대기온도_C === null) 대기온도_C = undefined;
   // 부하율을 안 넣었을 때(undefined)만 기본값. null은 '잘못된 입력'으로 검증에서 걸러요.
   const loadOf = (g) => (g.loadFactor === undefined ? (legacy ? 1.0 : DEFAULT_LOAD_FACTOR_NONROAD) : g.loadFactor);
 
