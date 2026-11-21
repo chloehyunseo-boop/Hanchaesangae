@@ -1,6 +1,6 @@
 // validation/plume_stage4_test.mjs — 11/21 변경(시나리오 4종·ARM2·배기구 높이·연기 상승) 손계산 테스트
 // 실행: node validation/plume_stage4_test.mjs
-// 기대값은 엔진과 따로 파이썬으로 계산했어요(2026-11-21). 근거: docs/배출가스_현실화_변경안_검토용.md
+// 기대값은 엔진과 따로 파이썬으로 계산했어요(2026-11-21). 근거: docs/배출가스_기본추정_변경_적용본.md
 import {
   calcExhaustAtReceiver, buoyancyFlux, briggsBuoyantRise, windSpeedAtHeight, arm2Ratio,
   DEFAULT_EXHAUST, DEFAULT_LOAD_FACTOR_NONROAD,
