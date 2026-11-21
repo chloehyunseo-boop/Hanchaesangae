@@ -202,18 +202,25 @@ export function logSumDb(levelsDb) {
 
 /**
  * ISO 9613-2 상한 시나리오를 옥타브 8밴드로 나눠 계산한 뒤 A가중 합산해요(로드맵 설계 그대로).
- * spectrumRatiosDb(밴드별 "전체 LW 대비 상대 dB")가 없으면 — 11/14부터 못 찾은 "음량 스펙트럼
- * 모양"이 아직 없다는 뜻이라, 지어내지 않고 calcNoiseIso9613Upper()의 단일 대표주파수(1kHz)
- * 근사로 내려가요(CLAUDE.md 규칙 2).
+ * 로드맵 §2는 "음원은 반드시 옥타브 밴드 스펙트럼으로 입력, dB(A) 단일값 금지"라고 못
+ * 박아서(11/21 재확인), spectrumRatiosDb(밴드별 "전체 LW 대비 상대 dB")가 없으면
+ * CONCAWE와 똑같이 계산하지 않아요(value:null) — 전에는 여기서 단일주파수 근사로
+ * 조용히 내려갔는데, 그건 이 규칙을 제가 스스로 어긴 거였어요(11/21 바로잡음).
+ * 그 근사가 그래도 필요하면(예: 개발 중 임시 확인용) allowApprox:true로 명시적으로 요청하세요
+ * — 그러면 calcNoiseIso9613Upper()의 1kHz 근사로 내려가고 "비공식근사_명시요청"이 붙어요.
  * @param {{ sourceLat: number, sourceLon: number, receiverLat: number, receiverLon: number,
  *   windVecFromDeg: number, lwDb: number, tempC: number, rhPercent: number,
- *   spectrumRatiosDb?: Partial<Record<63|125|250|500|1000|2000|4000|8000, number>> }} p
+ *   spectrumRatiosDb?: Partial<Record<63|125|250|500|1000|2000|4000|8000, number>>,
+ *   allowApprox?: boolean }} p
  * @returns {{ value: number|null, flags: string[], scenario: string }}
  */
-export function calcNoiseIso9613UpperOctave({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent, spectrumRatiosDb }) {
+export function calcNoiseIso9613UpperOctave({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent, spectrumRatiosDb, allowApprox = false }) {
   if (!spectrumRatiosDb) {
-    const fallback = calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent });
-    return { ...fallback, flags: [...fallback.flags, "옥타브분해미적용_스펙트럼모양미확인"] };
+    if (allowApprox) {
+      const fallback = calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent });
+      return { ...fallback, flags: [...fallback.flags, "비공식근사_명시요청", "옥타브분해미적용_스펙트럼모양미확인"] };
+    }
+    return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario: "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드" };
   }
   const scenario = "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드";
   const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });

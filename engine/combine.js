@@ -124,6 +124,7 @@ export function computeNoiseCell({ source, receiver, weather, hour }) {
     tempC: weather.tempC,
     rhPercent: weather.rhPercent,
     spectrumRatiosDb: source.spectrumRatiosDb,
+    allowApprox: source.allowApprox === true, // 기본 false — 스펙트럼 없으면 계산 안 함(로드맵 §2 규칙)
   });
   let value = result.value;
   const flags = [...timeFlags, ...result.flags];

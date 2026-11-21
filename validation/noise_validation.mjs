@@ -44,15 +44,15 @@ function check(name, condition, detail) {
   const source = { lat: 37.5203, lon: 127.1268 };
   const receiver = { lat: 37.5203 - 0.005, lon: 127.1268 + 0.004 }; // 풍향 부채꼴 안
   const hour = "2026-11-21T19:00:00+09:00";
-  const low = computeNoiseCell({ source: { ...source, lwDb: 100 }, receiver, weather, hour });
-  const high = computeNoiseCell({ source: { ...source, lwDb: 110 }, receiver, weather, hour });
+  const low = computeNoiseCell({ source: { ...source, lwDb: 100, allowApprox: true }, receiver, weather, hour });
+  const high = computeNoiseCell({ source: { ...source, lwDb: 110, allowApprox: true }, receiver, weather, hour });
   check("LW +10dB → 결과도 +10dB", Math.abs(high.value - low.value - 10) < 1e-9, `${low.value.toFixed(2)} → ${high.value.toFixed(2)}`);
 }
 
 // 4) 물리 상식: 거리가 멀수록(같은 풍향선 상) 항상 더 작아져야 함(단조 감소)
 {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
-  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110 };
+  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true };
   const hour = "2026-11-21T19:00:00+09:00";
   const near = computeNoiseCell({ source, receiver: { lat: 37.5203 - 0.003, lon: 127.1268 + 0.0024 }, weather, hour });
   const mid = computeNoiseCell({ source, receiver: { lat: 37.5203 - 0.006, lon: 127.1268 + 0.0048 }, weather, hour });
@@ -63,10 +63,10 @@ function check(name, condition, detail) {
 // 5) 풍향 부채꼴 밖이면 계산 안 함(value:null) — "계산 안 함" vs "0" 구분 확인
 {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
-  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110 };
+  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true };
   // 바람 반대쪽(풍상측)
   const upwind = computeNoiseCell({ source, receiver: { lat: 37.5203 + 0.01, lon: 127.1268 - 0.008 }, weather, hour: "2026-11-21T19:00:00+09:00" });
-  check("풍향 부채꼴 밖 → value:null(0 아님)", upwind.value === null, JSON.stringify(upwind.flags));
+  check("풍향 부채꼴 밖 → value:null(0 아님)", upwind.value === null && upwind.flags.includes("풍향부채꼴밖"), JSON.stringify(upwind.flags));
 }
 
 // 6) 실내 공연장 외벽 환산식(LW=Lp,실내−R+10log10(S)−6) 손계산 대조
@@ -120,7 +120,13 @@ function check(name, condition, detail) {
   check("옥타브 분해(1000Hz 집중) ≈ 단일주파수 근사", Math.abs(octave.value - flat.value) < 0.01, `${flat.value.toFixed(3)} vs ${octave.value.toFixed(3)}`);
 
   check("logSumDb: 같은 레벨 2개 합치면 +3.01dB", Math.abs(logSumDb([70, 70]) - 73.0103) < 1e-3);
-  check("spectrumRatiosDb 없으면 '옥타브분해미적용' 플래그", calcNoiseIso9613UpperOctave({ ...common, spectrumRatiosDb: undefined }).flags.includes("옥타브분해미적용_스펙트럼모양미확인"));
+
+  // 11/21(이어서): 스펙트럼 없으면 기본은 계산 안 함(로드맵 §2 "옥타브 필수" 규칙),
+  // allowApprox:true로 명시해야만 예전처럼 1kHz 근사로 내려감
+  const strict = calcNoiseIso9613UpperOctave({ ...common, spectrumRatiosDb: undefined });
+  check("스펙트럼 없음(기본) → value:null, '옥타브스펙트럼필수' 플래그", strict.value === null && strict.flags.includes("옥타브스펙트럼필수_모양미확인"));
+  const approx = calcNoiseIso9613UpperOctave({ ...common, spectrumRatiosDb: undefined, allowApprox: true });
+  check("스펙트럼 없음+allowApprox:true → 1kHz 근사로 계산됨", approx.value !== null && approx.flags.includes("비공식근사_명시요청"));
 }
 
 // 11) combine.js 통합: source.time으로 30분만 가동된 공연은 전체시간(60분) 대비 약 3dB 낮게 나와야 함
@@ -128,17 +134,17 @@ function check(name, condition, detail) {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
   const receiver = { lat: 37.5203 - 0.005, lon: 127.1268 + 0.004 };
   const full = computeNoiseCell({
-    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T19:00:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true, time: { start: "2026-11-21T19:00:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
     receiver, weather, hour: "2026-11-21T19:00:00+09:00",
   });
   const half = computeNoiseCell({
-    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T19:30:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true, time: { start: "2026-11-21T19:30:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
     receiver, weather, hour: "2026-11-21T19:00:00+09:00",
   });
   check("combine.js: 30분만 가동 → 전체 가동보다 약 3dB 낮음", Math.abs(full.value - half.value - 3.01) < 0.01, `${full.value.toFixed(2)} vs ${half.value.toFixed(2)}`);
 
   const notYet = computeNoiseCell({
-    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T20:00:00+09:00", end: "2026-11-21T21:00:00+09:00", 출처: "공단API명시" } },
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true, time: { start: "2026-11-21T20:00:00+09:00", end: "2026-11-21T21:00:00+09:00", 출처: "공단API명시" } },
     receiver, weather, hour: "2026-11-21T19:00:00+09:00",
   });
   check("combine.js: 아직 시작 전 공연 → value:null", notYet.value === null, JSON.stringify(notYet.flags));
