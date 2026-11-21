@@ -2,8 +2,8 @@
 // 실행: node validation/plume_stage4_test.mjs
 // 기대값은 엔진과 따로 파이썬으로 계산했어요(2026-11-21). 근거: docs/배출가스_기본추정_변경_적용본.md
 import {
-  calcExhaustAtReceiver, buoyancyFlux, briggsBuoyantRise, windSpeedAtHeight, arm2Ratio,
-  DEFAULT_EXHAUST, DEFAULT_LOAD_FACTOR_NONROAD,
+  calcExhaustAtReceiver, buoyancyFlux, briggsBuoyantRise, windSpeedAtHeight, arm2Ratio, isBuoyancyDominated,
+  stabilityFromForecast, DEFAULT_EXHAUST, DEFAULT_LOAD_FACTOR_NONROAD,
 } from "../engine/plume.js";
 
 let fails = 0;
@@ -43,11 +43,27 @@ check("높이 0이면 2m 기준(기존과 같음)", near(windSpeedAtHeight(3, "D
     const pass = (100 < a.xf ? a.dh <= a.final + 1e-12 : near(a.dh, a.final));
     check(`x_f 비교 ${st} ${u10}m/s`, pass, `x_f ${a.xf.toFixed(0)}m, x=100m에서 ${100 < a.xf ? "점진" : "최종"} 상승 ${a.dh.toFixed(1)}m`);
   }
+
+  // 점진 상승 값 자체도 독립 손계산과 대조(코드 검토 11/21: 부등식만으로는 식 오류를 못 잡음)
+  const e3 = briggsBuoyantRise({ Fb, us: windSpeedAtHeight(3, "E", 3), stability: "E", 대기온도_C: 10, x: 100 });
+  check("E 3m/s x=100m 점진 상승 값(식 1-22)", near(e3.dh, 23.234006260074985, 1e-10), `${e3.dh.toFixed(3)} m (기대 23.234)`);
 }
 
+// 3-1) 부력 지배 판정 (ISC3 식 1-10·1-11·1-18) — 코드 검토 P1
+{
+  const Dd = isBuoyancyDominated({ ...DEFAULT_EXHAUST, 배기구지름_m: 0.2, 대기온도_C: 10, stability: "D", Fb });
+  check("기본 배기·지름 0.2m·D → 부력 지배(ΔT 462K ≥ (ΔT)c 231.9K)", Dd === true);
+  const low = { 배기온도_C: 150, 배기량_m3_per_min: 86.7, 배기구지름_m: 0.1, 대기온도_C: 10 };
+  const Fb2 = buoyancyFlux(low);
+  check("150℃·지름 0.1m·D → 부력 지배 아님(ΔT 140K < 331.8K)", isBuoyancyDominated({ ...low, stability: "D", Fb: Fb2 }) === false);
+  check("150℃·지름 0.1m·F → 부력 지배((ΔT)c 53.1K)", isBuoyancyDominated({ ...low, stability: "F", Fb: Fb2 }) === true);
+  check("지름 없으면 판정 불가(null)", isBuoyancyDominated({ ...DEFAULT_EXHAUST, 대기온도_C: 10, stability: "D", Fb }) === null);
+}
+{
 // 4) ARM2 (다항식 + 0.5~0.9)
 for (const [x, y] of [[50, 0.9], [150, 0.797417681765625], [200, 0.668224128], [300, 0.5], [1000, 0.5]]) {
   check(`ARM2(${x} µg/m³)`, near(arm2Ratio(x), y, 1e-9), arm2Ratio(x).toFixed(4));
+}
 }
 
 // 5) 전체 손계산: 1대 500kW, F, 10m 2m/s, 동쪽 약 300m(엔진 거리 299.663m, 방위 89.999°), 기온 10℃
@@ -92,6 +108,27 @@ const base = { receiverLat: rec300.lat, receiverLon: rec300.lon, stability: "F",
   const b = calcExhaustAtReceiver({ ...base, 가정: "전량NO2", generators: [g2[1]] }).value;
   const noxSumPpm = a + b; // NOx(ppm, NO2 환산 계수)
   check("두 대: 합계 NOx에 ARM2 한 번", near(two.value, noxSumPpm * two.no2NoxRatio, 1e-9), `비율 ${two.no2NoxRatio}`);
+  // 대별 NOx까지 엔진과 따로 파이썬으로 계산한 값(같은 하버사인·방위각 식, 코드 검토 11/21)
+  check("두 대 전체 독립 손계산", near(two.value, 0.1673849685350485, 1e-9), `${two.value.toFixed(5)} ppm (기대 0.16738)`);
+}
+
+// 6-1) 부력 지배 판정이 전체 계산에 반영되는지
+{
+  const lowT = calcExhaustAtReceiver({ ...base, stability: "D", wsd10m: 4, generators: [one({ 건물옆: false, 배기온도_C: 150, 배기구지름_m: 0.1 })] });
+  check("개방된 곳이라도 부력 지배 아니면 상승 제외", lowT.flags.includes("부력지배아님_연기상승제외") && !lowT.flags.includes("연기상승적용"), lowT.flags.join(","));
+  const noD = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false, 배기온도_C: 400 })] });
+  check("사용자 배기 온도만 있고 지름 없으면 상승 제외", noD.flags.includes("지름없음_연기상승제외"), noD.flags.join(","));
+  const withD = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false, 배기구지름_m: 0.2 })] });
+  const noDdef = calcExhaustAtReceiver({ ...base, generators: [one({ 건물옆: false })] });
+  check("기본 배기 + 지름 0.2m → 상승 적용, 지름 없을 때와 같은 값", withD.flags.includes("연기상승적용") && near(withD.value, noDdef.value));
+}
+// 6-2) 안정도 좌표 검증(코드 검토 P2)
+{
+  const t = new Date("2026-11-21T19:00:00+09:00");
+  const throws = (f) => { try { f(); return false; } catch { return true; } };
+  check("위도 NaN → 오류", throws(() => stabilityFromForecast({ sky: "맑음", wsd10m: 2, lat: NaN, lon: 127, dateUtc: t })));
+  check("경도 200 → 오류", throws(() => stabilityFromForecast({ sky: "맑음", wsd10m: 2, lat: 37.5, lon: 200, dateUtc: t })));
+  check("위도 문자열 → 오류", throws(() => stabilityFromForecast({ sky: "맑음", wsd10m: 2, lat: "37.5", lon: 127, dateUtc: t })));
 }
 
 // 7) 입력 검증
@@ -102,6 +139,7 @@ check("배기 온도 이상 → 계산불가", bad({}, { 배기온도_C: 5000 })
 check("배기량 0 → 계산불가", bad({}, { 배기량_m3_per_min: 0 }).value === null);
 check("배기구 높이 음수 → 계산불가", bad({}, { 배기구높이_m: -1 }).value === null);
 check("건물옆 문자열 → 계산불가", bad({}, { 건물옆: "예" }).value === null);
+check("배기구 지름 0 → 계산불가", bad({}, { 배기구지름_m: 0 }).value === null);
 check("약풍 → null + 약풍미표시", (() => { const r = bad({ wsd10m: 0.5 }); return r.value === null && r.flags.includes("약풍미표시"); })());
 check("풍상측 → 0", bad({ windVecFromDeg: 90 }).value === 0);
 

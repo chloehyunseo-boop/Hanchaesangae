@@ -236,6 +236,9 @@ export function estimateStabilityClass({ netRadiationIndex, wsd10m }) {
 export function stabilityFromForecast({ sky, wsd10m, lat, lon, dateUtc, scenario = "기본" }) {
   if (!(dateUtc instanceof Date) || Number.isNaN(dateUtc.getTime())) throw new Error(`시각이 올바르지 않아요: ${dateUtc}`);
   if (!["맑음", "구름많음", "흐림"].includes(sky)) throw new Error(`하늘상태는 맑음·구름많음·흐림: ${sky}`);
+  // 좌표가 NaN이면 태양 고도가 NaN → 일사 등급이 기본값으로 떨어져 그럴듯한 안정도가 나와요. 미리 막아요(11/21 코드 검토).
+  if (typeof lat !== "number" || !Number.isFinite(lat) || lat < -90 || lat > 90) throw new Error(`위도 범위 밖: ${lat}`);
+  if (typeof lon !== "number" || !Number.isFinite(lon) || lon < -180 || lon > 180) throw new Error(`경도 범위 밖: ${lon}`);
   const isNight = isTurnerNight(lat, lon, dateUtc);
   const netRadiationIndex = estimateNetRadiationIndex({ sky, lat, lon, dateUtc, scenario, isDaytime: !isNight });
   return {
@@ -406,6 +409,27 @@ export function buoyancyFlux({ 배기온도_C, 배기량_m3_per_min, 대기온�
 }
 
 /**
+ * 부력 지배 여부 (ISC3 2권 1.1.4.3·1.1.4.7, 원문 p.1-8~1-11). ΔT ≥ (ΔT)_c 이면 부력 지배.
+ * - A~D: F_b<55 → (ΔT)_c = 0.0297·T_s·v_s^(1/3)/d_s^(2/3) (식 1-10), F_b≥55 → 0.00575·T_s·v_s^(2/3)/d_s^(1/3) (식 1-11)
+ * - E·F: (ΔT)_c = 0.019582·T_s·v_s·√s (식 1-18)
+ * v_s = 배기량/(π d_s²/4). 배기구 지름이 없으면 판정할 수 없어서 null을 돌려줘요.
+ * @returns {boolean|null}
+ */
+export function isBuoyancyDominated({ 배기온도_C, 배기량_m3_per_min, 배기구지름_m, 대기온도_C, stability, Fb }) {
+  if (!(배기구지름_m > 0)) return null;
+  const Ts = 배기온도_C + 273.15, Ta = 대기온도_C + 273.15, dT = Ts - Ta;
+  if (dT <= 0) return false;
+  const vs = (배기량_m3_per_min / 60) / ((Math.PI * 배기구지름_m ** 2) / 4);
+  let dTc;
+  if (stability === "E" || stability === "F") {
+    const s = (G * (stability === "E" ? 0.020 : 0.035)) / Ta;
+    dTc = 0.019582 * Ts * vs * Math.sqrt(s);
+  } else if (Fb < 55) dTc = (0.0297 * Ts * vs ** (1 / 3)) / 배기구지름_m ** (2 / 3);
+  else dTc = (0.00575 * Ts * vs ** (2 / 3)) / 배기구지름_m ** (1 / 3);
+  return dT >= dTc;
+}
+
+/**
  * Briggs 부력 연기 상승 Δh(m). ISC3 2권(HWIR99판) 1.1.4절.
  * - A~D 최종 상승: F_b<55 → 21.425·F_b^(3/4)/u_s (식 1-14), F_b≥55 → 38.71·F_b^(3/5)/u_s (식 1-15)
  *   최종 상승 거리 x_f: F_b<55 → 49·F_b^(5/8) (1-12), F_b≥55 → 119·F_b^(2/5) (1-13)
@@ -477,12 +501,23 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
     else if (g.건물옆 !== false) flags.push("건물옆_연기상승제외"); // 개방된 곳이라고 명시(false)한 발전차만 상승 적용
     else if (typeof 대기온도_C !== "number") flags.push("기온없음_연기상승제외");
     else {
-      const Fb = buoyancyFlux({
+      const ex = {
         배기온도_C: g.배기온도_C ?? DEFAULT_EXHAUST.배기온도_C,
-        배기량_m3_per_min: g.배기량_m3_per_min ?? DEFAULT_EXHAUST.배기량_m3_per_min, 대기온도_C,
-      });
-      dh = briggsBuoyantRise({ Fb, us, stability, 대기온도_C, x }).dh;
-      if (dh > 0) flags.push("연기상승적용");
+        배기량_m3_per_min: g.배기량_m3_per_min ?? DEFAULT_EXHAUST.배기량_m3_per_min,
+        배기구지름_m: g.배기구지름_m, 대기온도_C,
+      };
+      const Fb = buoyancyFlux(ex);
+      // 부력 상승 식(1-14·1-15·1-20·1-22)은 부력 지배일 때만 써요(11/21 코드 검토 P1). 운동량 상승은 구현하지 않아서,
+      // 부력 지배가 아니거나 판정할 수 없으면 상승을 빼요(보수적). 단, 온도·배기량을 모두 기본값으로 쓸 때는
+      // 지름 0.15~0.3m 범위에서 부력 지배임을 미리 확인했어요(교차 온도차 최대 340K < 실제 약 460K, 적용본 문서 2-③).
+      const usesDefaultExhaust = g.배기온도_C === undefined && g.배기량_m3_per_min === undefined;
+      const dom = isBuoyancyDominated({ ...ex, stability, Fb });
+      if (dom === false) flags.push("부력지배아님_연기상승제외");
+      else if (dom === null && !usesDefaultExhaust) flags.push("지름없음_연기상승제외");
+      else {
+        dh = briggsBuoyantRise({ Fb, us, stability, 대기온도_C, x }).dh;
+        if (dh > 0) flags.push("연기상승적용");
+      }
     }
   }
   const he = hs + dh;
@@ -510,7 +545,7 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
  *   개방된 곳 발전차만 건물옆:false로 넣어 상승을 적용해요.
  * @param {Object} p
  * @param {{lat:number, lon:number, 엔진출력_kW:number, 출력종류?:string, loadFactor?:number, 정보출처?:string,
- *   배기구높이_m?:number, 배기온도_C?:number, 배기량_m3_per_min?:number, 건물옆?:boolean}[]} p.generators
+ *   배기구높이_m?:number, 배기온도_C?:number, 배기량_m3_per_min?:number, 배기구지름_m?:number, 건물옆?:boolean}[]} p.generators
  * @param {number} p.receiverLat
  * @param {number} p.receiverLon
  * @param {StabilityClass} p.stability
@@ -568,6 +603,7 @@ export function calcExhaustAtReceiver({
       if (g.배기구높이_m !== undefined && (!finite(g.배기구높이_m) || g.배기구높이_m < 0 || g.배기구높이_m > 50)) return failKeep(`발전차 ${i + 1}번: 배기구 높이 0~50m: ${g.배기구높이_m}`);
       if (g.배기온도_C !== undefined && (!finite(g.배기온도_C) || g.배기온도_C < -50 || g.배기온도_C > 1000)) return failKeep(`발전차 ${i + 1}번: 배기 온도 −50~1000℃: ${g.배기온도_C}`);
       if (g.배기량_m3_per_min !== undefined && (!finite(g.배기량_m3_per_min) || g.배기량_m3_per_min <= 0)) return failKeep(`발전차 ${i + 1}번: 배기량은 0보다 커야 해요: ${g.배기량_m3_per_min}`);
+      if (g.배기구지름_m !== undefined && (!finite(g.배기구지름_m) || g.배기구지름_m <= 0 || g.배기구지름_m > 5)) return failKeep(`발전차 ${i + 1}번: 배기구 지름 0~5m: ${g.배기구지름_m}`);
       if (g.건물옆 !== undefined && typeof g.건물옆 !== "boolean") return failKeep(`발전차 ${i + 1}번: 건물옆은 true/false: ${g.건물옆}`);
     }
   }
