@@ -265,6 +265,17 @@ export function mapDisplayFor(cell) {
   return { mode: "value", hideValue: false, hideLevel: false };
 }
 
-/** 배출가스 레이어에 항상 같이 보여줄 문구. 지도 코드가 레이어를 켤 때 이 문구를 그대로 써요. */
-export const EXHAUST_LAYER_DISCLAIMER =
-  "비인증 엔진·지면 배출을 가정한 스크리닝 결과이며 실제 농도가 아닙니다";
+/**
+ * 배출가스 레이어에 항상 같이 보여줄 문구. 로드맵 §2 "발전차 배출가스" 끝부분에 명시된
+ * 문구 그대로예요(11/21 — 전에 제가 임의로 다른 문구를 썼던 걸 바로잡음).
+ */
+export const EXHAUST_LAYER_DISCLAIMER = "배경 농도 미포함, 대기환경기준 초과 판정이 아님";
+
+/**
+ * 소음 시민 화면에 음원 세기(LW) 출처별로 같이 보여줄 문구(로드맵 §2 "음원 세기").
+ * source의 LW가 어느 쪽으로 정해졌는지에 맞춰 골라 써요.
+ */
+export const NOISE_SOURCE_DISCLAIMER = {
+  계약기준역산: "공연 음량은 공단 계약 기준 최대치로 가정",
+  문헌기반가정: "공연 음량은 문헌 기반 가정값",
+};

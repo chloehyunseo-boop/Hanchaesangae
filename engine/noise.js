@@ -1,11 +1,11 @@
 // engine/noise.js — 소음 엔진 (친구 라인)
-// ISO 9613-2 상한 시나리오 + CONCAWE 시간별 추정. 로드맵 2번 "소음" 참고.
-// 11/21 결정: ISO 9613-2 상한 시나리오는 거리 감쇠(Adiv)+공기 흡수(Aatm)+무대 지향성(Dc)+
-// 바람 부채꼴로 동결해요. 지면 효과(Aground)·차폐(Abar)는 원문(ISO 9613-2 7.3절, 유료)을
-// 못 구해서 안 넣었고, 이름 그대로 "상한"(더 보수적인 높은 값) 추정이라 그래도 괜찮다고
-// 봤어요(지면 효과는 보통 소리를 깎아주는 방향 — CALC_GRID.bounds와 비슷하게, 나중에
-// 원문을 구하면 그 항만 추가하면 돼요). CONCAWE K1~K7은 여전히 막혀있어요 — 원문이
-// 스캔본이라 사용자가 PDF를 직접 열어 확인해야 해요(data/assumptions.json의 CONCAWE_원문).
+// ISO 9613-2 상한 시나리오(공단 비교용) + CONCAWE 전체 시간별 추정(시민·공단 메인 지도).
+// 로드맵 §2 "모델 설계"의 표(①=공단 화면 비교용, ②=시민·공단 지도) 참고 — 11/21에 두
+// 시나리오의 실제 쓰임이 바뀐 걸 뒤늦게 확인했어요(decisions.md 11/21 기록).
+// ① ISO 9613-2 상한: 거리 감쇠(Adiv)+공기 흡수(Aatm)+무대 지향성(Dc)+바람 부채꼴로 동결.
+// 지면 효과(Aground)·차폐(Abar)는 원문(ISO 9613-2 7.3절, 유료)을 못 구해서 안 넣었어요.
+// ② CONCAWE 전체(K1~K7): 하린이 원문(CONCAWE Report 4/81)을 1차+2차 독립 대조해 옮긴
+// data/concawe_4_81.json·docs/CONCAWE_원문정리.md를 그대로 따라 구현했어요(11/21).
 // CLAUDE.md 규칙 2(확인 안 된 수식을 지어내지 않음) · 5(공개 표준만) 반영.
 
 import { haversineDistanceM, bearingDeg, windComponentTowardReceiver, overlapMinutesInHour } from "./common.js";
@@ -275,13 +275,208 @@ export function applyVolumePreset(baseLwDb, preset = "기본") {
   return baseLwDb + VOLUME_PRESETS[preset];
 }
 
+// ---------------------------------------------------------------------------
+// CONCAWE 전체(K1~K7) — 11/21 구현. 숫자 출처: data/concawe_4_81.json(하린이
+// 1차+2차 독립 대조). 원문이 답하지 않는 부분(거리 밖, 25.7 인쇄오류, K5 γ 불일치,
+// 경계값, K6·K7 등)은 그 문서 16번 "검토자 추천안"을 그대로 따랐어요(친구 라인 결정).
+// ---------------------------------------------------------------------------
+
+/** 계산에 쓰는 CONCAWE 밴드(Hz). 원문 범위 그대로 7개(8kHz 제외 — 추천안 3번). */
+export const CONCAWE_BANDS_HZ = [63, 125, 250, 500, 1000, 2000, 4000];
+
+function evalPoly(coeffs, L) {
+  return coeffs.reduce((acc, c, i) => acc + c * L ** i, 0);
+}
+
+/** K1: 거리 감쇠(구면 확산). K1 = 10·log10(4π·d²). (data/concawe_4_81.json 참고 안 함 — 식이 원문에 직접 있음) */
+export function concaweK1(d) {
+  return 10 * Math.log10(4 * Math.PI * d ** 2);
+}
+
 /**
- * CONCAWE 전체(K1~K7) 시간별 추정 시나리오.
- * @throws {Error} CONCAWE 원문(K1~K7, 기상 범주표)을 아직 확인 못해서 미구현이에요.
+ * K2 표(온도 0~30℃·5도 간격, 습도 55~100%·5%간격)를 보간해서 읽어요. 범위 밖이면 null
+ * (호출하는 쪽이 ISO 9613-1 식으로 대체 — 추천안 1번).
  */
-export function calcNoiseConcaweHourly(/* { sourceLat, sourceLon, receiverLat, receiverLon, LW, windVecFromDeg, tmp, ... } */) {
-  throw new Error(
-    "미구현 — CONCAWE 원문(data/assumptions.json의 CONCAWE_원문.원문_PDF, 101쪽)의 K1~K7 수식과 " +
-      "기상 범주표를 아직 확인 못했어요. 원문 확인 후 여기에 채워요(CLAUDE.md 규칙 2·5)."
-  );
+function k2TableLookup(concaweData, freqHz, tempC, rhPercent) {
+  if (tempC < 0 || tempC > 30 || rhPercent < 55 || rhPercent > 100) return null;
+  const table = concaweData.K2_대기흡음_dB_per_km;
+  const row = String(table.옥타브_to_표행[String(freqHz)]);
+  const rhList = table.상대습도_퍼센트;
+
+  const t0 = Math.min(25, Math.floor(tempC / 5) * 5);
+  const t1 = t0 + 5;
+  const tf = (tempC - t0) / (t1 - t0);
+
+  let rIdx1 = rhList.findIndex((r) => r >= rhPercent);
+  if (rIdx1 <= 0) rIdx1 = 1;
+  const rIdx0 = rIdx1 - 1;
+  const r0 = rhList[rIdx0], r1 = rhList[rIdx1];
+  const rf = (rhPercent - r0) / (r1 - r0);
+
+  const readCell = (t, rIdx) => {
+    let v = table.표[String(t)][row][rIdx];
+    // 0℃·3200Hz(=4000Hz 밴드)·RH65% 원문 인쇄 오류 보정(25.7→35.7, 추천안 "간단히 정하면 되는 것").
+    if (t === 0 && row === "3200" && rhList[rIdx] === 65) v = 35.7;
+    return v;
+  };
+  const v00 = readCell(t0, rIdx0), v01 = readCell(t0, rIdx1);
+  const v10 = readCell(t1, rIdx0), v11 = readCell(t1, rIdx1);
+  const v0 = v00 + (v01 - v00) * rf;
+  const v1 = v10 + (v11 - v10) * rf;
+  return v0 + (v1 - v0) * tf;
+}
+
+/** K2: 공기 흡수(dB). 표 범위 밖이면 ISO 9613-1 식(atmosphericAbsorptionDbPerM)으로 대체해요. */
+export function concaweK2(concaweData, freqHz, tempC, rhPercent, d) {
+  const alphaTable = k2TableLookup(concaweData, freqHz, tempC, rhPercent); // dB/km
+  if (alphaTable !== null) return { k2: alphaTable * (d / 1000), flags: [] };
+  const alphaIso = atmosphericAbsorptionDbPerM(freqHz, tempC, rhPercent) * 1000; // dB/m → dB/km
+  return { k2: alphaIso * (d / 1000), flags: ["K2범위밖_ISO9613대체"] };
+}
+
+/**
+ * K3: 지면 효과. 딱딱한 면(콘크리트·물)은 항상 −3dB. 그 외(잔디 등)는 밴드별 3차식 —
+ * dSoftM은 "부드러운 면 위를 지나는 거리"만(일부만 부드러우면 그 구간 길이, 원문 p31 예).
+ */
+export function concaweK3(concaweData, freqHz, groundType, dSoftM) {
+  if (groundType === "hard") return -3;
+  const coeffs = concaweData.K3_지면효과_soft.계수[String(freqHz)];
+  return evalPoly(coeffs, Math.log10(dSoftM));
+}
+
+const AB_STABILITY = ["A", "B"], FG_STABILITY = ["F", "G"];
+
+/**
+ * 안정도(Pasquill A~G)와 벡터풍속(v, 음원→수음점 쪽 +)으로 기상 범주(1~6)를 정해요
+ * (원문 p26 표). 경계값(v=±0.5,±3.0)은 범주4(기상영향 0, 가장 덜 극단적인 쪽)에 가까운
+ * 쪽으로 넣었어요(추천안 7번). F·G에서 v>+3.0은 표에 없는 칸이라 범주6으로 봐요(추천안 8번).
+ * @param {string} stability
+ * @param {number} v
+ * @returns {number} 1~6
+ */
+export function concaweCategory(stability, v) {
+  if (AB_STABILITY.includes(stability)) {
+    if (v < -3.0) return 1;
+    if (v < -0.5) return 2;
+    if (v < 0.5) return 3;
+    if (v <= 3.0) return 4;
+    return 5;
+  }
+  if (FG_STABILITY.includes(stability)) {
+    if (v < -3.0) return 3;
+    if (v <= -0.5) return 4;
+    if (v <= 0.5) return 5;
+    return 6;
+  }
+  // C, D, E
+  if (v < -3.0) return 2;
+  if (v < -0.5) return 3;
+  if (v <= 0.5) return 4;
+  if (v <= 3.0) return 5;
+  return 6;
+}
+
+/** K4: 기상 보정. 범주4는 모든 밴드·거리에서 0. */
+export function concaweK4(concaweData, freqHz, category, d) {
+  if (category === 4) return 0;
+  const coeffs = concaweData.K4_기상보정.계수[String(freqHz)][String(category)];
+  return evalPoly(coeffs, Math.log10(d));
+}
+
+// K5 γ — 추천안 B(원문 p76 그림 9 그래프 판독값, docs/CONCAWE_원문정리.md 15번 G).
+// 원문 인쇄 식(1−0.478ψ+0.068ψ²−0.0029ψ³)은 이 그래프와 안 맞아요(원문 내부 불일치,
+// 같은 문서 14번) — 본문(p32)이 "γ는 그림 9에서 구한다"고 적어 그래프 쪽을 따랐어요.
+const GAMMA_GRAPH_PSI_DEG = [0, 1, 2, 3, 4, 5.2];
+const GAMMA_GRAPH_VALUES = [1.0, 0.70, 0.38, 0.17, 0.06, 0];
+
+function gammaFromGraph(psiDeg) {
+  if (psiDeg <= 0) return 1;
+  if (psiDeg >= 5.2) return 0;
+  for (let i = 0; i < GAMMA_GRAPH_PSI_DEG.length - 1; i++) {
+    const p0 = GAMMA_GRAPH_PSI_DEG[i], p1 = GAMMA_GRAPH_PSI_DEG[i + 1];
+    if (psiDeg >= p0 && psiDeg <= p1) {
+      const f = (psiDeg - p0) / (p1 - p0);
+      return GAMMA_GRAPH_VALUES[i] + (GAMMA_GRAPH_VALUES[i + 1] - GAMMA_GRAPH_VALUES[i]) * f;
+    }
+  }
+  return 0;
+}
+
+/**
+ * K5: 음원·수음점 높이 보정. hs≤2m이면 0(원문 그림 9). hr은 수음점 높이(기본 1.5m, 원문 검증 조건).
+ * (K3+K4)가 −3dB보다 크지 않으면(즉 ≤−3) 0이에요(원문 p32, "<"지만 경계에서 두 식이 같은 0이라 영향 없음).
+ */
+export function concaweK5(k3, k4, hs, hr, d) {
+  if (k3 + k4 <= -3) return 0;
+  if (hs <= 2) return 0;
+  const psiDeg = (Math.atan((hs + hr) / d) * 180) / Math.PI;
+  return (k3 + k4 + 3) * (gammaFromGraph(psiDeg) - 1);
+}
+
+/**
+ * 밴드 하나(음원 1개×수음점 1개)의 CONCAWE Lp를 계산해요. D(지향성)=0(원문 권장),
+ * K6(차폐)·K7(설비 내부 차폐)=0(추천안 10·11번 — "차폐 미반영(보수적)"·"원문: 예측 불가").
+ * d<100m은 계산 안 함(원문 p92 "100m 미만에는 쓰지 말 것"), d>2000m은 2000m로 고정
+ * (추천안 1·3번).
+ * @returns {{ value: number|null, flags: string[], category?: number }}
+ */
+export function calcConcaweBand({ concaweData, freqHz, lwDb, d, groundType, dSoftM, tempC, rhPercent, stability, v, hs, hr = 1.5 }) {
+  if (d < 100) return { value: null, flags: ["근거리100m미만_계산안함"] };
+  const flags = [];
+  let dCalc = d;
+  if (d > 2000) {
+    dCalc = 2000;
+    flags.push("거리2000m초과_외삽");
+  }
+  const k1 = concaweK1(dCalc);
+  const { k2, flags: k2Flags } = concaweK2(concaweData, freqHz, tempC, rhPercent, dCalc);
+  flags.push(...k2Flags);
+  const dSoft = groundType === "soft" ? Math.min(dSoftM ?? dCalc, dCalc) : dCalc;
+  const k3 = concaweK3(concaweData, freqHz, groundType, dSoft);
+  const category = concaweCategory(stability, v);
+  const k4 = concaweK4(concaweData, freqHz, category, dCalc);
+  const k5 = concaweK5(k3, k4, hs, hr, dCalc);
+  if (category !== 4) flags.push(`기상범주${category}`);
+  return { value: lwDb - (k1 + k2 + k3 + k4 + k5), flags: [...flags, "차폐미반영", "설비내부차폐미반영"], category };
+}
+
+/**
+ * CONCAWE 전체(K1~K7) 시간별 추정 시나리오 — 음원 1개×수음점 1개에 대해 옥타브 7밴드를
+ * 전부 계산하고 A가중 로그합까지 끝낸 dB(A)를 돌려줘요(로드맵 §2 계산 순서의 ③④ 단계).
+ * 동시 공연 여러 개 합산(②단계)·가동시간 가중(①단계)은 combine.js가 밴드 로그합 전에 해요.
+ * @param {{ concaweData: object, spectrumRatiosDb: Record<number,number>|undefined, lwDb: number,
+ *   sourceLat: number, sourceLon: number, receiverLat: number, receiverLon: number,
+ *   windVecFromDeg: number, wsd10m: number, stability: string,
+ *   groundType: "hard"|"soft", dSoftM?: number, tempC: number, rhPercent: number,
+ *   hs: number, hr?: number }} p
+ *   spectrumRatiosDb가 없으면(음량 스펙트럼 모양 미확보) 계산하지 않아요 — 원문은 "음원은
+ *   반드시 옥타브 밴드로 입력, dB(A) 단일값 금지"라서(로드맵 §2), 단일주파수 근사 폴백을
+ *   안 둬요(ISO9613 쪽과 다른 점 — CLAUDE.md 규칙 2).
+ * @returns {{ value: number|null, flags: string[], scenario: string, category?: number }}
+ */
+export function calcNoiseConcaweHourly({
+  concaweData, spectrumRatiosDb, lwDb,
+  sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, wsd10m, stability,
+  groundType, dSoftM, tempC, rhPercent, hs, hr = 1.5,
+}) {
+  const scenario = "CONCAWE_전체_시간별추정";
+  if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) return { value: null, flags: ["음원세기미확인"], scenario };
+  if (!spectrumRatiosDb) return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario };
+
+  const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
+  const v = wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
+
+  const flagsAll = new Set();
+  const bandLevelsDbA = [];
+  let category;
+  for (const freqHz of CONCAWE_BANDS_HZ) {
+    const bandLw = lwDb + (spectrumRatiosDb[freqHz] ?? 0);
+    const band = calcConcaweBand({ concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM, groundType, dSoftM, tempC, rhPercent, stability, v, hs, hr });
+    band.flags.forEach((f) => flagsAll.add(f));
+    if (band.value === null) continue;
+    category = band.category;
+    bandLevelsDbA.push(band.value + A_WEIGHT_DB[freqHz]);
+  }
+  if (bandLevelsDbA.length === 0) return { value: null, flags: [...flagsAll], scenario };
+  return { value: logSumDb(bandLevelsDbA), flags: [...flagsAll], scenario, category };
 }
