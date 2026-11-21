@@ -368,44 +368,177 @@ export function calcExhaustGaussianPlume({
 }
 
 // ---------------------------------------------------------------------------
+// 시나리오(가정 묶음) — 11/21 변경안 docs/배출가스_현실화_변경안_검토용.md, 검토 2회 반영
+// ---------------------------------------------------------------------------
+// "기본추정"       : 부하율 0.43(EPA NONROAD 기본값) · ARM2 · 배기구 높이 · 개방된 곳만 Briggs 연기 상승
+// "기존입력가정"   : 11/21 이전 그대로(부하율 1.0 · NO2/NOx 0.9 · 배출 높이 0m · 2m 풍속). 비교·회귀 테스트용
+// "연기상승제외"   : 기본추정에서 모든 발전차의 연기 상승을 뺀 민감도(배기구 높이는 유지)
+// "전량NO2"        : 기본추정에서 NO2/NOx = 1.0으로 둔 민감도(배출 초기 NO2 비율이 높을 가능성 대비)
+// 어느 것도 건물 후류(다운워시)를 계산하지 않아요. '최악'이라고 부르지 않아요.
+export const EXHAUST_ASSUMPTIONS = ["기본추정", "기존입력가정", "연기상승제외", "전량NO2"];
+
+// EPA420-P-04-005(NR-005c, 2004.4.) 부록 표 "Load Factor and Activity Estimates in Draft NONROAD2004",
+// SCC 2270006005 Diesel Light Commercial Generator Sets = 0.43. 실측 부하율이 아니라 모델 기본값.
+export const DEFAULT_LOAD_FACTOR_NONROAD = 0.43;
+
+// 배기 사양을 모를 때 쓰는 가정값(정격 출력 기준 스펙시트 값 — 부분 부하 배기 아님).
+// 높이: 렌탈 발전기 전체 높이 중 가장 낮은 값(Generac MDE570 트레일러 3.0m). 실제 배기구 높이 아님(가정).
+// 온도·배기량: 4종 중 배기량이 가장 작은 Cat XQ570 prime 정격(472℃, 86.7 m³/min).
+export const DEFAULT_EXHAUST = { 배기구높이_m: 3.0, 배기온도_C: 472, 배기량_m3_per_min: 86.7 };
+
+const G = 9.81; // m/s² (ISC3 2권 식 1-8의 g)
+
+/**
+ * 배출 높이의 풍속 (ISC3 2권 식 1-6 거듭제곱 법칙, 도시형 지수 p, 최소 1.0 m/s).
+ * h가 0 이하면 기존처럼 2m를 기준 높이로 써요(advectionWindSpeed와 같음).
+ */
+export function windSpeedAtHeight(wsd10m, stability, h) {
+  const href = h > 0 ? h : 2;
+  return Math.max(wsd10m * (href / 10) ** DISPERSION[stability].p, 1.0);
+}
+
+/** 부력 플럭스 F_b (m⁴/s³). ISC3 2권 식 1-8: g·v_s·d_s²·ΔT/(4T_s) = g·V·ΔT/(π·T_s), V = 배기량(m³/s) */
+export function buoyancyFlux({ 배기온도_C, 배기량_m3_per_min, 대기온도_C }) {
+  const Ts = 배기온도_C + 273.15, Ta = 대기온도_C + 273.15;
+  const dT = Ts - Ta;
+  if (dT <= 0) return 0;
+  return (G * (배기량_m3_per_min / 60) * dT) / (Math.PI * Ts);
+}
+
+/**
+ * Briggs 부력 연기 상승 Δh(m). ISC3 2권(HWIR99판) 1.1.4절.
+ * - A~D 최종 상승: F_b<55 → 21.425·F_b^(3/4)/u_s (식 1-14), F_b≥55 → 38.71·F_b^(3/5)/u_s (식 1-15)
+ *   최종 상승 거리 x_f: F_b<55 → 49·F_b^(5/8) (1-12), F_b≥55 → 119·F_b^(2/5) (1-13)
+ * - E·F 최종 상승: 2.6·(F_b/(u_s·s))^(1/3) (식 1-20), s = g·(∂θ/∂z)/T_a (1-17), ∂θ/∂z E 0.020·F 0.035 K/m
+ *   x_f = 2.0715·u_s/√s (1-19)
+ * - x < x_f: 점진 상승 1.60·F_b^(1/3)·x^(2/3)/u_s (식 1-22), 최종 상승을 넘으면 최종 상승
+ * 부력 지배만 다뤄요(운동량 상승 식 1-16·1-21 미사용 — 배기구 지름 정보 없음, 검토 문서 2-③).
+ * @returns {{dh:number, final:number, xf:number}}
+ */
+export function briggsBuoyantRise({ Fb, us, stability, 대기온도_C, x }) {
+  if (!(Fb > 0)) return { dh: 0, final: 0, xf: 0 };
+  let final, xf;
+  if (stability === "E" || stability === "F") {
+    const s = (G * (stability === "E" ? 0.020 : 0.035)) / (대기온도_C + 273.15);
+    final = 2.6 * Math.cbrt(Fb / (us * s));
+    xf = (2.0715 * us) / Math.sqrt(s);
+  } else if (Fb < 55) {
+    final = (21.425 * Fb ** 0.75) / us;
+    xf = 49 * Fb ** (5 / 8);
+  } else {
+    final = (38.71 * Fb ** 0.6) / us;
+    xf = 119 * Fb ** 0.4;
+  }
+  const dh = x < xf ? Math.min((1.6 * Math.cbrt(Fb) * x ** (2 / 3)) / us, final) : final;
+  return { dh, final, xf };
+}
+
+/**
+ * ARM2 NO2/NOx 비율. 다항식: EPA ARM2 Development and Evaluation Report(2013.9.20.) 3.4절 p.22
+ * (x = 1시간 NOx 농도, µg/m³). 상·하한 0.5~0.9: EPA AERMOD NO2 Changes TSD 4.1절.
+ */
+export function arm2Ratio(noxUgPerM3) {
+  const x = noxUgPerM3;
+  const y = -1.1723e-17 * x ** 6 + 4.2795e-14 * x ** 5 - 5.8345e-11 * x ** 4 + 3.4555e-8 * x ** 3
+    - 5.6062e-6 * x ** 2 - 2.7383e-3 * x + 1.2441;
+  return Math.min(0.9, Math.max(0.5, y));
+}
+
+/**
+ * 발전차 한 대가 한 수음점에 주는 NOx 농도(g/m³) — 시나리오별 가정 적용, NO2 환산 전.
+ * ISC3 2권 식 1-1 + 식 1-50(지면 수음점 z_r=0, 혼합고 반사항 없음): χ = Q/(π u_s σy σz)·exp(−y²/2σy²)·exp(−h_e²/2σz²)
+ * h_e = 0이면 gaussianGroundLevelConc와 같은 식이에요.
+ */
+function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec, 가정, 대기온도_C }) {
+  const flags = [];
+  const legacy = 가정 === "기존입력가정";
+  const load = g.loadFactor === undefined ? (legacy ? 1.0 : DEFAULT_LOAD_FACTOR_NONROAD) : g.loadFactor;
+  if (!legacy && g.loadFactor === undefined) flags.push("부하율EPA기본값");
+
+  const distance = haversineDistanceM(g.lat, g.lon, receiverLat, receiverLon);
+  if (distance < 1) return { nox: null, flags, reason: "음원 위치" };
+  const { diffDeg } = windComponentTowardReceiver(vec, bearingDeg(g.lat, g.lon, receiverLat, receiverLon));
+  const th = (diffDeg * Math.PI) / 180;
+  const x = distance * Math.cos(th);
+  const y = distance * Math.sin(th);
+  if (x <= 0) return { nox: 0, flags };
+  if (x < 100) flags.push("근거리불확실");
+
+  // 배출 높이와 연기 상승
+  let hs = 0, dh = 0;
+  if (!legacy) {
+    const known = ["배기구높이_m", "배기온도_C", "배기량_m3_per_min"].every((k) => typeof g[k] === "number");
+    if (!known) flags.push("배기사양가정");
+    hs = g.배기구높이_m ?? DEFAULT_EXHAUST.배기구높이_m;
+  }
+  const us = legacy ? advectionWindSpeed(wsd10m, stability) : windSpeedAtHeight(wsd10m, stability, hs);
+  if (!legacy) {
+    if (가정 === "연기상승제외") flags.push("연기상승제외");
+    else if (g.건물옆 !== false) flags.push("건물옆_연기상승제외"); // 개방된 곳이라고 명시(false)한 발전차만 상승 적용
+    else if (typeof 대기온도_C !== "number") flags.push("기온없음_연기상승제외");
+    else {
+      const Fb = buoyancyFlux({
+        배기온도_C: g.배기온도_C ?? DEFAULT_EXHAUST.배기온도_C,
+        배기량_m3_per_min: g.배기량_m3_per_min ?? DEFAULT_EXHAUST.배기량_m3_per_min, 대기온도_C,
+      });
+      dh = briggsBuoyantRise({ Fb, us, stability, 대기온도_C, x }).dh;
+      if (dh > 0) flags.push("연기상승적용");
+    }
+  }
+  const he = hs + dh;
+  const qNox = (noxEmissionFactorGPerKWh(g.엔진출력_kW) * g.엔진출력_kW * load) / 3600; // g/s
+  const sy = DISPERSION[stability].sigmaY(x), sz = DISPERSION[stability].sigmaZ(x);
+  const nox = gaussianGroundLevelConc({ qGPerS: qNox, u: us, sigmaY: sy, sigmaZ: sz, y }) * Math.exp(-0.5 * (he / sz) ** 2);
+  return { nox, flags };
+}
+
+// ---------------------------------------------------------------------------
 // 한 수음점의 최종값 — 발전차 여러 대 합산 + 풍향 불확실성 부채꼴
 // ---------------------------------------------------------------------------
 /**
- * 한 수음점에 대해 발전차 여러 대의 NO2 기여를 더하고, 풍향 예보 오차를 고려해
+ * 한 수음점에 대해 발전차 여러 대의 NOx를 더한 뒤 NO2로 환산하고, 풍향 예보 오차를 고려해
  * 예보 풍향 ±fanHalfWidthDeg 안에서 합계가 가장 큰 값을 돌려줘요.
- * - 여러 대: 대수를 곱하지 않고 한 대씩 계산해 더해요(가정값 문서 '배출량').
+ * - 여러 대: 대수를 곱하지 않고 한 대씩 계산해 NOx를 더해요. NO2 환산(ARM2 등)은 '더한 뒤' 수음점별로 해요.
  * - 부채꼴: 같은 시각엔 모든 발전차에 같은 바람이 분다고 보고, 방향을 함께 돌려 가며 합계를 구해요.
- *   폭은 common.js WIND_FAN_HALF_WIDTH_DEG(임시 22.5°, 11/27 예보-AWS 비교로 교체 예정). 0이면 예보 방향만.
- *   간격은 fanStepDeg 그대로 쓰고, 마지막에 ±반폭 끝 방향을 꼭 넣어요(이산 탐색이라 연속 구간의 정확한 최대는 아님).
- * - 결과 해석: value는 '예보 풍향 오차 범위(±반폭) 안의 최대 추정 농도'예요. 실제 풍향이 그 방향이었다는 뜻이 아니에요.
- * - 전제조건: generators에는 그 시각에 가동 중이고 가동 시간 출처가 '미확인'이 아닌 발전차만 넣어요
- *   (시간 필터는 호출하는 쪽 — combine.js — 이 해요. common.js SourceSpec 규칙).
- * - 출력종류가 "엔진"이 아니면(전기·미확인·빈칸) 계산은 하되 flags에 '엔진출력미확인'을 붙여요
- *   (배출계수는 엔진 기계 출력 기준. 가정값 문서 '배출량' 표).
+ *   폭은 common.js WIND_FAN_HALF_WIDTH_DEG(임시 22.5°). 0이면 예보 방향만. 간격은 fanStepDeg 그대로, ±반폭 끝 포함.
+ * - 결과 해석: '그 시간 기상이 한 시간 동안 유지된다는 가정의 1시간 평균 추정 농도'(ISC3 식 1-1은 시간 농도)이고,
+ *   '예보 풍향 오차 범위 안의 최대값'이에요. 측정값이 아니에요.
+ * - 전제조건: generators에는 그 시각에 가동 중인 발전차만 넣어요(시간 필터는 combine.js).
+ * - 출력종류가 "엔진"이 아니면 '엔진출력미확인' 꼬리표.
+ * - 건물옆: 큰 건물 옆 발전차는 기본(undefined)으로 연기 상승을 빼요. 건물 후류를 계산한 게 아니라,
+ *   후류를 계산하지 못하니 연기 상승 효과를 믿지 않는 보수적 선택이에요(검토 2회차, 하린 결정 B).
+ *   개방된 곳 발전차만 건물옆:false로 넣어 상승을 적용해요.
  * @param {Object} p
- * @param {{lat:number, lon:number, 엔진출력_kW:number, 출력종류?:"엔진"|"전기"|"미확인", loadFactor?:number, 정보출처?:"확인"|"시연용가정"}[]} p.generators
+ * @param {{lat:number, lon:number, 엔진출력_kW:number, 출력종류?:string, loadFactor?:number, 정보출처?:string,
+ *   배기구높이_m?:number, 배기온도_C?:number, 배기량_m3_per_min?:number, 건물옆?:boolean}[]} p.generators
  * @param {number} p.receiverLat
  * @param {number} p.receiverLon
  * @param {StabilityClass} p.stability
  * @param {number} p.wsd10m
  * @param {number} p.windVecFromDeg
+ * @param {"기본추정"|"기존입력가정"|"연기상승제외"|"전량NO2"} [p.가정]  기본 "기본추정"
+ * @param {number} [p.대기온도_C]  기상청 TMP. 없으면 연기 상승을 빼요(꼬리표).
  * @param {number} [p.fanHalfWidthDeg]  0 이상 180 이하
  * @param {number} [p.fanStepDeg]  0 초과
- * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null}}
+ * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null, no2NoxRatio?: number}}
  */
 export function calcExhaustAtReceiver({
   generators, receiverLat, receiverLon, stability, wsd10m, windVecFromDeg,
+  가정 = "기본추정", 대기온도_C,
   fanHalfWidthDeg = WIND_FAN_HALF_WIDTH_DEG, fanStepDeg = 2.5,
 }) {
-  const scenario = "가우시안플룸_지면배출_ISC3도시형확산계수_풍향부채꼴최대";
+  const scenario = `가우시안플룸_ISC3도시형확산계수_풍향부채꼴최대_${가정}`;
   const fail = (reason, flags = []) => ({
     value: null, flags: [...new Set([...flags, "계산불가"])], scenario, reason, centerValue: null, maxAtOffsetDeg: null,
   });
   const finite = (v) => typeof v === "number" && Number.isFinite(v);
-  // 부하율을 안 넣었을 때(undefined)만 기본 100%. null은 '잘못된 입력'으로 검증에서 걸러요.
-  const loadOf = (g) => (g.loadFactor === undefined ? 1.0 : g.loadFactor);
+  const legacy = 가정 === "기존입력가정";
+  // 부하율을 안 넣었을 때(undefined)만 기본값. null은 '잘못된 입력'으로 검증에서 걸러요.
+  const loadOf = (g) => (g.loadFactor === undefined ? (legacy ? 1.0 : DEFAULT_LOAD_FACTOR_NONROAD) : g.loadFactor);
 
   // 1) 공통 입력을 부채꼴로 돌리기 '전에' 검증해요(예: 361°가 1°로 바뀌어 통과하는 것 방지).
+  if (!EXHAUST_ASSUMPTIONS.includes(가정)) return fail(`가정은 ${EXHAUST_ASSUMPTIONS.join("·")} 중 하나: ${가정}`);
+  if (대기온도_C !== undefined && (!finite(대기온도_C) || 대기온도_C < -50 || 대기온도_C > 60)) return fail(`대기온도는 −50~60℃: ${대기온도_C}`);
   if (!finite(fanHalfWidthDeg) || fanHalfWidthDeg < 0 || fanHalfWidthDeg > 180) return fail(`부채꼴 반폭은 0~180°: ${fanHalfWidthDeg}`);
   if (!finite(fanStepDeg) || fanStepDeg <= 0) return fail(`부채꼴 간격은 0보다 커야 해요: ${fanStepDeg}`);
   // 간격이 너무 작으면(예: 1e-20) 반복이 끝나지 않거나 지나치게 길어져요. 방향 수 상한을 둬요.
@@ -431,6 +564,17 @@ export function calcExhaustAtReceiver({
       loadFactor: loadOf(g), stability, wsd10m, windVecFromDeg,
     });
     if (bad) return failKeep(`발전차 ${i + 1}번: ${bad}`);
+    if (!legacy) {
+      if (g.배기구높이_m !== undefined && (!finite(g.배기구높이_m) || g.배기구높이_m < 0 || g.배기구높이_m > 50)) return failKeep(`발전차 ${i + 1}번: 배기구 높이 0~50m: ${g.배기구높이_m}`);
+      if (g.배기온도_C !== undefined && (!finite(g.배기온도_C) || g.배기온도_C < -50 || g.배기온도_C > 1000)) return failKeep(`발전차 ${i + 1}번: 배기 온도 −50~1000℃: ${g.배기온도_C}`);
+      if (g.배기량_m3_per_min !== undefined && (!finite(g.배기량_m3_per_min) || g.배기량_m3_per_min <= 0)) return failKeep(`발전차 ${i + 1}번: 배기량은 0보다 커야 해요: ${g.배기량_m3_per_min}`);
+      if (g.건물옆 !== undefined && typeof g.건물옆 !== "boolean") return failKeep(`발전차 ${i + 1}번: 건물옆은 true/false: ${g.건물옆}`);
+    }
+  }
+
+  // 약풍: 10m 풍속 1m/s 미만이면 지도에 그리지 않아요(가정값 문서 "확산" 절). 0이 아니라 null.
+  if (wsd10m < 1.0) {
+    return { value: null, flags: [...baseFlags, "약풍미표시"], scenario, reason: "10m 풍속 1m/s 미만", centerValue: null, maxAtOffsetDeg: null };
   }
 
   // 3) 오프셋: −반폭부터 fanStepDeg 간격, 끝(+반폭)은 꼭 포함
@@ -443,32 +587,29 @@ export function calcExhaustAtReceiver({
     offsets.sort((a, b) => a - b);
   }
 
+  const toNo2 = (noxGPerM3) => {
+    const ratio = legacy ? NO2_NOX_RATIO : 가정 === "전량NO2" ? 1.0 : arm2Ratio(noxGPerM3 * 1e6);
+    return { ppm: mgPerM3ToPpm(noxGPerM3 * ratio * 1000), ratio };
+  };
+
   let best = null;
   let center = null;
   for (const off of offsets) {
     const vec = (((windVecFromDeg + off) % 360) + 360) % 360;
-    let total = 0;
+    let noxTotal = 0;
     const flags = new Set(baseFlags);
     for (const g of generators) {
-      const r = calcExhaustGaussianPlume({
-        sourceLat: g.lat, sourceLon: g.lon, receiverLat, receiverLon,
-        enginePowerKW: g.엔진출력_kW, loadFactor: loadOf(g),
-        stability, wsd10m, windVecFromDeg: vec, 정보출처: g.정보출처,
-      });
-      // 약풍·음원 위치 등으로 한 대라도 null이면 합계를 낼 수 없어요. 그때까지의 꼬리표도 함께 돌려줘요.
-      if (r.value === null) {
-        const keep = [...flags, ...r.flags];
-        return r.flags.includes("약풍미표시")
-          ? { value: null, flags: [...new Set(keep)], scenario, reason: r.reason, centerValue: null, maxAtOffsetDeg: null }
-          : fail(r.reason, keep);
-      }
-      total += r.value;
+      const r = noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec, 가정, 대기온도_C });
+      if (r.nox === null) return fail(r.reason, [...flags, ...r.flags]);
+      noxTotal += r.nox;
       r.flags.forEach((f) => flags.add(f));
     }
-    if (Math.abs(off) < 1e-9) center = total;
-    if (best === null || total > best.total) best = { total, flags, off };
+    const { ppm, ratio } = toNo2(noxTotal);
+    if (Math.abs(off) < 1e-9) center = ppm;
+    if (best === null || ppm > best.ppm) best = { ppm, ratio, flags, off };
   }
   const flags = [...best.flags];
   if (fanHalfWidthDeg > 0) flags.push("풍향부채꼴최대");
-  return { value: best.total, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off };
+  if (!legacy && 가정 !== "전량NO2") flags.push("ARM2");
+  return { value: best.ppm, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off, no2NoxRatio: best.ratio };
 }
