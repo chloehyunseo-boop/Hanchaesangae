@@ -153,6 +153,49 @@ export function calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, recei
   return { value: lwDb + dc - adiv - aatm, flags, scenario };
 }
 
+// ---------------------------------------------------------------------------
+// 음원 세기(LW) 역산 — 11/21 추가. 로드맵 '음원 세기'의 "계약 기준 반영 시나리오":
+// 공단이 알려줄 측정 지점·측정 지표(예: 65dB)로, 그 지점이 정확히 그 값이 나오도록
+// LW를 거꾸로 구해요. "오늘 공연이 실제로 몇 dB였다"가 아니라 "그 공연이 허용 기준치로
+// 운영된다고 가정"하는 거예요 — 숫자 자체(측정 지점 좌표·목표 dB)는 공단 답 대기 중.
+// ---------------------------------------------------------------------------
+
+/**
+ * 측정 지점에서 목표 dB(targetDb)가 정확히 나오도록 음원 세기(LW)를 역산해요.
+ * Lp = LW + Dc − Adiv − Aatm 이고 Dc는 항상 0이니, LW = targetDb + Adiv + Aatm.
+ * 바람 부채꼴은 적용하지 않아요 — 이건 실시간 전파 계산이 아니라, 음원 세기 하나를
+ * 정하는 보정 계산이에요(기준 조건에서 한 번만 하면 됨).
+ * @param {{ sourceLat: number, sourceLon: number, measureLat: number, measureLon: number,
+ *   targetDb: number, freqHz?: number, tempC: number, rhPercent: number }} p
+ *   tempC/rhPercent: 역산에 쓸 기준 날씨 — 공연마다 바뀌는 실시간 예보가 아니라, 호출하는
+ *   쪽이 정한 기준 조건(아직 로드맵에 합의된 기준값 없음 — 공단 답 확인 후 정해요).
+ * @returns {{ lwDb: number, distanceM: number, adiv: number, aatm: number }}
+ */
+export function lwFromTargetDb({ sourceLat, sourceLon, measureLat, measureLon, targetDb, freqHz = 1000, tempC, rhPercent }) {
+  const distanceM = haversineDistanceM(sourceLat, sourceLon, measureLat, measureLon);
+  const adiv = calcAdiv(distanceM);
+  const aatm = calcAatm(distanceM, freqHz, tempC, rhPercent);
+  const dc = stageDirectivityDb();
+  return { lwDb: targetDb - dc + adiv + aatm, distanceM, adiv, aatm };
+}
+
+/**
+ * 공단 화면에서 기본 음량(역산값 또는 문헌 가정값)을 조정할 때 쓰는 preset(±3dB).
+ * 값은 로드맵 2번에 적힌 가정이고, 실측으로 검증된 숫자는 아니에요.
+ */
+export const VOLUME_PRESETS = { 조용한: -3, 기본: 0, 큰공연: 3 };
+
+/**
+ * 기본 LW에 preset을 적용해요.
+ * @param {number} baseLwDb
+ * @param {keyof VOLUME_PRESETS} [preset]
+ * @returns {number}
+ */
+export function applyVolumePreset(baseLwDb, preset = "기본") {
+  if (!(preset in VOLUME_PRESETS)) throw new Error(`알 수 없는 preset: ${preset}(조용한·기본·큰공연 중 하나)`);
+  return baseLwDb + VOLUME_PRESETS[preset];
+}
+
 /**
  * CONCAWE 전체(K1~K7) 시간별 추정 시나리오.
  * @throws {Error} CONCAWE 원문(K1~K7, 기상 범주표)을 아직 확인 못해서 미구현이에요.
