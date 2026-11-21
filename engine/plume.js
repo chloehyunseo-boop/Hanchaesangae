@@ -29,7 +29,7 @@ const NO2_NOX_RATIO = 0.9; // EPA AERMOD NO2 기술문서 4.1절(ARM2 기본범�
  * 발전차 한 대의 NO2 배출률(g/s)을 계산해요.
  * 발전차가 여러 대면 이 함수를 대당 따로 불러서, 농도를 나중에 더해요(대수를 곱해 합치지 않음).
  * @param {number} enginePowerKW
- * @param {number} loadFactor 부하율(기본 1.0 = 100% 가정. 민감도는 0.5·0.75)
+ * @param {number} loadFactor 부하율(이 함수의 기본 1.0 = 기존입력가정용. 지도 기본 계산(calcExhaustAtReceiver "기본추정")은 0.43)
  * @returns {number} g/s
  */
 export function no2EmissionRateGPerS(enginePowerKW, loadFactor = 1.0) {
@@ -272,7 +272,7 @@ export function classifyExhaustLevel(ppm) {
 }
 
 // ---------------------------------------------------------------------------
-// 메인 계산 — 가우시안 플룸 (지면 배출, 지면 수음점, plume rise 미적용)
+// 기존 단일 계산 — 가우시안 플룸 (지면 배출, 지면 수음점, plume rise 미적용). "기존입력가정"·회귀 테스트용. 지도 기본은 아래 calcExhaustAtReceiver
 // ---------------------------------------------------------------------------
 /**
  * 확산 계산 입력이 물리적으로 말이 되는지 확인해요. 문제가 있으면 이유(문자열), 없으면 null.
