@@ -5,7 +5,7 @@
 // 얼마나 바뀌는지. 통과/실패는 정하지 않고 그대로 기록해요(CLAUDE.md 8번).
 //
 // 기준 입력(전부 시연용 — 실제 공연 사양 아님):
-//  - 발전차 4대: KSPO DOME 최대 4~5대 제한(공단 답변 VB0000130509, 2026-03-03)의 아래쪽 값.
+//  - 발전차 5대: KSPO DOME 최대 4~5대 제한(공단 답변 VB0000130509, 2026-03-03)의 상한.
 //    위치는 아직 미확인이라 DOME 중심점에서 동서로 10m 간격 한 줄로 둠(시연용 가정).
 //  - 엔진 출력 500kW, 부하율 100%: 기존 손계산 테스트(stage2)와 같은 시험값. 실제 사양 아님.
 //  - 기상 3가지: 11월 저녁 맑음 약풍 / 11월 저녁 흐림 / 7월 저녁 맑음. 바람은 서풍(270°).
@@ -21,7 +21,7 @@ const M_PER_DEG_LAT = 111320;
 const mLon = M_PER_DEG_LAT * Math.cos((DOME.lat * Math.PI) / 180);
 const kst = (s) => new Date(s.replace(" ", "T") + ":00+09:00");
 
-function trucks({ n = 4, kw = 500, load = 1.0, dxM = 0, dyM = 0 }) {
+function trucks({ n = 5, kw = 500, load = 1.0, dxM = 0, dyM = 0 }) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const ex = (i - (n - 1) / 2) * 10 + dxM;
@@ -81,7 +81,7 @@ const VARIANTS = [
   { name: "엔진 출력 800kW (대형 시험값)", g: { kw: 800 } },
   { name: "부하율 75%", g: { load: 0.75 } },
   { name: "부하율 50%", g: { load: 0.5 } },
-  { name: "대수 5대 (제한 상한)", g: { n: 5 } },
+  { name: "대수 4대 (제한 하한)", g: { n: 4 } },
   { name: "대수 8대 (2026년 2월 이전 상한)", g: { n: 8 } },
   { name: "위치 북쪽 50m", g: { dyM: 50 } },
   { name: "위치 남쪽 50m", g: { dyM: -50 } },
@@ -98,7 +98,7 @@ const VARIANTS = [
 ];
 
 const t0 = Date.now();
-console.log(`격자 ${cell}m, ${grid.length}칸. 기준: 발전차 4대·500kW·부하율 100%·DOME 중심(시연용), 서풍.`);
+console.log(`격자 ${cell}m, ${grid.length}칸. 기준: 발전차 5대·500kW·부하율 100%·DOME 중심(시연용), 서풍.`);
 console.log("변화율 = (기준 또는 변경 후 '약' 이상인 칸 중 단계가 달라진 칸) ÷ (그 칸 수). 근거리(풍하 100m 이내)·약풍 칸은 제외.\n");
 const rows = [];
 for (const c of CASES) {
