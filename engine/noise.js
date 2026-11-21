@@ -8,7 +8,7 @@
 // 스캔본이라 사용자가 PDF를 직접 열어 확인해야 해요(data/assumptions.json의 CONCAWE_원문).
 // CLAUDE.md 규칙 2(확인 안 된 수식을 지어내지 않음) · 5(공개 표준만) 반영.
 
-import { haversineDistanceM, bearingDeg, windComponentTowardReceiver } from "./common.js";
+import { haversineDistanceM, bearingDeg, windComponentTowardReceiver, overlapMinutesInHour } from "./common.js";
 
 /**
  * 소음 음원→수음점의 거리·방위각·풍향 정렬을 구해요. 두 시나리오가 공통으로 쓰는 기하 계산이에요.
@@ -151,6 +151,85 @@ export function calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, recei
   const aatm = calcAatm(geometry.distanceM, freqHz, tempC, rhPercent);
   const dc = stageDirectivityDb();
   return { value: lwDb + dc - adiv - aatm, flags, scenario };
+}
+
+// ---------------------------------------------------------------------------
+// 시간 가중 — 11/21 추가 (로드맵 2번 공통 조건, §7 검증표 "시간 가중")
+// ---------------------------------------------------------------------------
+/**
+ * 공연이 그 1시간 중 일부만 가동됐을 때의 에너지 보정(dB). 예: 30분 가동 → 10·log10(30/60) ≈ −3dB.
+ * 이 처리는 소음(LAeq,1h)에만 써요(로드맵 2번). 배경(무음)까지 1시간 평균에 섞는 단순화라,
+ * 실제보다 낮게 나올 수 있어요 — 그래도 "0분(안 들림)"과는 분명히 달라야 해서 넣어요.
+ * @param {number} activeMinutes 그 시간 안에서 공연이 실제로 가동된 분(0~60)
+ * @returns {number|null} dB 보정값. activeMinutes가 0 이하면 null(계산 자체를 안 함)
+ */
+export function timeWeightDb(activeMinutes) {
+  if (!(activeMinutes > 0)) return null;
+  const clamped = Math.min(activeMinutes, 60);
+  return 10 * Math.log10(clamped / 60);
+}
+
+/**
+ * 무대 음원의 SourceSpec.time과 그 시각(hourIso)으로, 그 시간 안에 실제로 가동된 분을 구해요.
+ * time.출처가 "미확인"이면 계산에 넣지 않아요(로드맵 2번 공통 조건, common.js SourceSpec 참고).
+ * @param {{time?: {start: string|null, end: string|null, 출처: string}}} source
+ * @param {string} hourIso
+ * @returns {{activeMinutes: number, flags: string[]}}
+ */
+export function stageActiveMinutes(source, hourIso) {
+  const time = source?.time;
+  if (!time) return { activeMinutes: 60, flags: [] }; // time을 안 준 음원은 이전처럼 상시 가동 취급(하위호환)
+  if (time.출처 === "미확인" || !time.start) return { activeMinutes: 0, flags: ["공연시간미확인"] };
+  return { activeMinutes: overlapMinutesInHour(time.start, time.end, hourIso), flags: [] };
+}
+
+// ---------------------------------------------------------------------------
+// 옥타브 8밴드 + A특성 — 11/21 추가 (로드맵 '옥타브 8밴드, A특성은 맨 마지막에', §7 검증표)
+// ---------------------------------------------------------------------------
+/** 계산에 쓰는 옥타브밴드 중심주파수(Hz) 8개. */
+export const OCTAVE_BANDS_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000];
+
+/** 옥타브밴드 A가중 보정값(dB). IEC 61672(2003/2014) 공개 표준값 — 여러 출처로 교차 확인(2026-11-21). */
+export const A_WEIGHT_DB = { 63: -26.2, 125: -16.1, 250: -8.6, 500: -3.2, 1000: 0, 2000: 1.2, 4000: 1.0, 8000: -1.1 };
+
+/** 여러 dB 값을 에너지(로그) 합산해 하나의 dB로 합쳐요. null/숫자 아님은 무시해요. */
+export function logSumDb(levelsDb) {
+  const valid = levelsDb.filter((v) => typeof v === "number" && Number.isFinite(v));
+  if (valid.length === 0) return null;
+  const sum = valid.reduce((acc, v) => acc + 10 ** (v / 10), 0);
+  return 10 * Math.log10(sum);
+}
+
+/**
+ * ISO 9613-2 상한 시나리오를 옥타브 8밴드로 나눠 계산한 뒤 A가중 합산해요(로드맵 설계 그대로).
+ * spectrumRatiosDb(밴드별 "전체 LW 대비 상대 dB")가 없으면 — 11/14부터 못 찾은 "음량 스펙트럼
+ * 모양"이 아직 없다는 뜻이라, 지어내지 않고 calcNoiseIso9613Upper()의 단일 대표주파수(1kHz)
+ * 근사로 내려가요(CLAUDE.md 규칙 2).
+ * @param {{ sourceLat: number, sourceLon: number, receiverLat: number, receiverLon: number,
+ *   windVecFromDeg: number, lwDb: number, tempC: number, rhPercent: number,
+ *   spectrumRatiosDb?: Partial<Record<63|125|250|500|1000|2000|4000|8000, number>> }} p
+ * @returns {{ value: number|null, flags: string[], scenario: string }}
+ */
+export function calcNoiseIso9613UpperOctave({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent, spectrumRatiosDb }) {
+  if (!spectrumRatiosDb) {
+    const fallback = calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent });
+    return { ...fallback, flags: [...fallback.flags, "옥타브분해미적용_스펙트럼모양미확인"] };
+  }
+  const scenario = "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드";
+  const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
+  const gate = windGateFor(geometry);
+  const flags = [...gate.flags, "지면효과미적용"];
+  if (!gate.include) return { value: null, flags, scenario };
+  if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) return { value: null, flags: [...flags, "음원세기미확인"], scenario };
+  const adiv = calcAdiv(geometry.distanceM);
+  const dc = stageDirectivityDb();
+  const bandLevelsDbA = OCTAVE_BANDS_HZ.map((freqHz) => {
+    const bandLw = lwDb + (spectrumRatiosDb[freqHz] ?? 0);
+    const aatm = calcAatm(geometry.distanceM, freqHz, tempC, rhPercent);
+    const bandLp = bandLw + dc - adiv - aatm;
+    return bandLp + A_WEIGHT_DB[freqHz];
+  });
+  return { value: logSumDb(bandLevelsDbA), flags, scenario };
 }
 
 // ---------------------------------------------------------------------------

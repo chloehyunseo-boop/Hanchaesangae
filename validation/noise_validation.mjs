@@ -2,7 +2,8 @@
 // 로드맵 M2 11/17·11/20 완료 기준을 확인해요: "거리 감쇠(Adiv)만 단독 검증 시 거리 2배마다
 // −6dB", "공기 흡수", "물리 상식". 실행: node validation/noise_validation.mjs
 
-import { calcAdiv, atmosphericAbsorptionDbPerM, calcNoiseIso9613Upper } from "../engine/noise.js";
+import { calcAdiv, atmosphericAbsorptionDbPerM, calcNoiseIso9613Upper, timeWeightDb, logSumDb, calcNoiseIso9613UpperOctave } from "../engine/noise.js";
+import { windComponentTowardReceiver, overlapMinutesInHour } from "../engine/common.js";
 import { computeNoiseCell } from "../engine/combine.js";
 
 let failCount = 0;
@@ -74,6 +75,73 @@ function check(name, condition, detail) {
   const got = indoorFacadeSourcePowerLevel(95, 45, 500);
   const expect = 95 - 45 + 10 * Math.log10(500) - 6;
   check("실내 외벽 환산식 손계산 대조", Math.abs(got - expect) < 1e-9, `${got.toFixed(4)} = ${expect.toFixed(4)}`);
+}
+
+// 7) 풍향 변환 8방향 단위 테스트 (로드맵 §7: "8방향 단위 테스트. 예: 북서풍이면 음원의
+// 남동쪽 수음점이 순풍" — 8개 모두 통과해야 함)
+{
+  const compass = [0, 45, 90, 135, 180, 225, 270, 315]; // N, NE, E, SE, S, SW, W, NW
+  let allOk = true;
+  for (const vecFromDeg of compass) {
+    const downwindBearing = (vecFromDeg + 180) % 360; // 바람이 불어가는 방향 = 음원→수음점 방위각
+    const r = windComponentTowardReceiver(vecFromDeg, downwindBearing);
+    const ok = Math.abs(r.diffDeg) < 1e-9 && Math.abs(r.alignment - 1) < 1e-9 && r.withinFan === true;
+    if (!ok) allOk = false;
+    console.log(`     VEC=${vecFromDeg}° → 정풍 방향 ${downwindBearing}°: diff=${r.diffDeg.toFixed(4)} align=${r.alignment.toFixed(4)} withinFan=${r.withinFan}`);
+  }
+  check("풍향 변환 8방향 단위 테스트(8개 모두 통과)", allOk);
+}
+
+// 8) 시간 가중: 30분 가동 → 약 -3dB (로드맵 예시 그대로)
+{
+  const w = timeWeightDb(30);
+  check("시간 가중 30분 → 약 -3dB", Math.abs(w - 10 * Math.log10(30 / 60)) < 1e-9, `${w.toFixed(4)}dB`);
+  check("시간 가중 0분 → null(계산 안 함)", timeWeightDb(0) === null);
+  check("시간 가중 60분(꽉 참) → 0dB(보정 없음)", timeWeightDb(60) === 0);
+}
+
+// 9) overlapMinutesInHour: 19:30~21:00 공연이 19시~20시 구간과 겹치는 분 = 30분
+{
+  const minutes = overlapMinutesInHour("2026-11-21T19:30:00+09:00", "2026-11-21T21:00:00+09:00", "2026-11-21T19:00:00+09:00");
+  check("공연시간 겹침 계산(19:30 시작 → 19시대엔 30분)", Math.abs(minutes - 30) < 1e-9, `${minutes}분`);
+}
+
+// 10) 옥타브 8밴드: 스펙트럼을 "전부 1000Hz에 몰아둔" 경우, 단일주파수 근사와 거의 같아야 함(교차검증)
+{
+  const common = {
+    sourceLat: 37.5203, sourceLon: 127.1268,
+    receiverLat: 37.5203 - 0.005, receiverLon: 127.1268 + 0.004,
+    windVecFromDeg: 332, lwDb: 110, tempC: 10, rhPercent: 50,
+  };
+  const flat = calcNoiseIso9613Upper(common);
+  // 1000Hz에 전부 몰아주면(다른 밴드는 사실상 무에너지) logSumDb가 1000Hz 밴드값(A가중 0)으로 수렴해야 함
+  const spectrumRatiosDb = { 63: -99, 125: -99, 250: -99, 500: -99, 1000: 0, 2000: -99, 4000: -99, 8000: -99 };
+  const octave = calcNoiseIso9613UpperOctave({ ...common, spectrumRatiosDb });
+  check("옥타브 분해(1000Hz 집중) ≈ 단일주파수 근사", Math.abs(octave.value - flat.value) < 0.01, `${flat.value.toFixed(3)} vs ${octave.value.toFixed(3)}`);
+
+  check("logSumDb: 같은 레벨 2개 합치면 +3.01dB", Math.abs(logSumDb([70, 70]) - 73.0103) < 1e-3);
+  check("spectrumRatiosDb 없으면 '옥타브분해미적용' 플래그", calcNoiseIso9613UpperOctave({ ...common, spectrumRatiosDb: undefined }).flags.includes("옥타브분해미적용_스펙트럼모양미확인"));
+}
+
+// 11) combine.js 통합: source.time으로 30분만 가동된 공연은 전체시간(60분) 대비 약 3dB 낮게 나와야 함
+{
+  const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
+  const receiver = { lat: 37.5203 - 0.005, lon: 127.1268 + 0.004 };
+  const full = computeNoiseCell({
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T19:00:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
+    receiver, weather, hour: "2026-11-21T19:00:00+09:00",
+  });
+  const half = computeNoiseCell({
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T19:30:00+09:00", end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } },
+    receiver, weather, hour: "2026-11-21T19:00:00+09:00",
+  });
+  check("combine.js: 30분만 가동 → 전체 가동보다 약 3dB 낮음", Math.abs(full.value - half.value - 3.01) < 0.01, `${full.value.toFixed(2)} vs ${half.value.toFixed(2)}`);
+
+  const notYet = computeNoiseCell({
+    source: { lat: 37.5203, lon: 127.1268, lwDb: 110, time: { start: "2026-11-21T20:00:00+09:00", end: "2026-11-21T21:00:00+09:00", 출처: "공단API명시" } },
+    receiver, weather, hour: "2026-11-21T19:00:00+09:00",
+  });
+  check("combine.js: 아직 시작 전 공연 → value:null", notYet.value === null, JSON.stringify(notYet.flags));
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

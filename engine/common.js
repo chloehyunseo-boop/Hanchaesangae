@@ -154,6 +154,27 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
 }
 
 // ---------------------------------------------------------------------------
+// 3.6 시간 가중 보조 — 11/21 추가
+// ---------------------------------------------------------------------------
+/**
+ * [startIso, endIso) 구간이 [hourIso, hourIso+1시간) 한 시간과 겹치는 분(分)을 구해요.
+ * endIso가 없으면(null) 그 시간 끝까지 계속되는 것으로 봐요(종료 미상 — 보수적으로 최대치).
+ * @param {string} startIso
+ * @param {string|null} endIso
+ * @param {string} hourIso
+ * @returns {number} 겹치는 분(0 이상, 60 이하)
+ */
+export function overlapMinutesInHour(startIso, endIso, hourIso) {
+  const hourStartMs = new Date(hourIso).getTime();
+  const hourEndMs = hourStartMs + 3600000;
+  const startMs = new Date(startIso).getTime();
+  const endMs = endIso ? new Date(endIso).getTime() : hourEndMs;
+  const overlapStartMs = Math.max(hourStartMs, startMs);
+  const overlapEndMs = Math.min(hourEndMs, endMs);
+  return Math.max(0, (overlapEndMs - overlapStartMs) / 60000);
+}
+
+// ---------------------------------------------------------------------------
 // 4. 기상 입력 형식 — 11/15 초안 (engine/weather.js가 이 모양으로 돌려줘요)
 // ---------------------------------------------------------------------------
 /**

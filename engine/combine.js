@@ -14,7 +14,7 @@
 // OutputCell.x/y 주석도 11/21에 맞춰 고쳤어요).
 
 import { CALC_GRID, mapDisplayFor } from "./common.js";
-import { calcNoiseIso9613Upper, indoorFacadeSourcePowerLevel, classifyNoiseLevel } from "./noise.js";
+import { calcNoiseIso9613UpperOctave, indoorFacadeSourcePowerLevel, classifyNoiseLevel, stageActiveMinutes, timeWeightDb } from "./noise.js";
 import { calcExhaustAtReceiver, classifyExhaustLevel } from "./plume.js";
 
 const DEG_PER_M_LAT = 1 / 111320;
@@ -97,31 +97,44 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
  * 실내 공연장은 source.indoor={lpIndoorDb, R, S}를 주면 indoorFacadeSourcePowerLevel로
  * LW를 구해요. 실외 무대나 아직 LW를 모르는 음원은 source.lwDb를 직접 주거나, 둘 다
  * 없으면 value:null("음원세기미확인")로 빠져요 — 지어낸 숫자를 넣지 않아요.
+ * source.time이 있으면 그 시간 중 실제로 가동된 분만큼 에너지 가중(LAeq,1h)을 더해요
+ * (30분만 가동 → 약 −3dB, 로드맵 2번 공통 조건·11/21 추가).
  * @returns {import("./common.js").OutputCell}
  */
-export function computeNoiseCell({ source, receiver, weather, hour, freqHz = 1000 }) {
+export function computeNoiseCell({ source, receiver, weather, hour }) {
+  const { activeMinutes, flags: timeFlags } = stageActiveMinutes(source, hour);
+  if (activeMinutes <= 0) {
+    return { x: receiver.lon, y: receiver.lat, hour, layer: "noise", value: null, level: null, flags: [...timeFlags, "지면효과미적용"], scenario: "ISO9613-2_상한추정_지면효과미적용" };
+  }
   const lwDb = source.indoor
     ? indoorFacadeSourcePowerLevel(source.indoor.lpIndoorDb, source.indoor.R, source.indoor.S)
     : source.lwDb;
-  const result = calcNoiseIso9613Upper({
+  const result = calcNoiseIso9613UpperOctave({
     sourceLat: source.lat,
     sourceLon: source.lon,
     receiverLat: receiver.lat,
     receiverLon: receiver.lon,
     windVecFromDeg: weather.windVecFromDeg,
     lwDb,
-    freqHz,
     tempC: weather.tempC,
     rhPercent: weather.rhPercent,
+    spectrumRatiosDb: source.spectrumRatiosDb,
   });
+  let value = result.value;
+  const flags = [...timeFlags, ...result.flags];
+  if (value !== null) {
+    const weight = timeWeightDb(activeMinutes);
+    value += weight;
+    if (activeMinutes < 60) flags.push(`시간가중_${Math.round(activeMinutes)}분`);
+  }
   return {
     x: receiver.lon,
     y: receiver.lat,
     hour,
     layer: "noise",
-    value: result.value,
-    level: classifyNoiseLevel(result.value),
-    flags: result.flags,
+    value,
+    level: classifyNoiseLevel(value),
+    flags,
     scenario: result.scenario,
   };
 }
