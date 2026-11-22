@@ -357,7 +357,10 @@ export function calcExhaustGaussianPlume({
     return { value: 0, flags, scenario };
   }
   // ISC3 지침 p.1-16: 100m 미만 수용점은 의심스러울 수 있음. 확산폭이 풍하 거리 x로 정해지므로 x 기준으로 봐요.
-  if (x < 100) flags.push("근거리불확실");
+  // 11/22 수정(최종 외부 검토 2-(a)): ISC3 지침 p.1-16은 "배출원에서 100m 안의 수용점"을 의심 구간으로 봐요.
+  // 예전엔 풍하 거리 x만 봐서, 부채꼴 방향에 따라 발전차와 옆으로 수백 m 떨어진(농도 ≈ 0) 칸까지
+  // 빗금이 그려졌어요. 이제 실제 거리 100m 미만(+풍하쪽)일 때만 붙여요.
+  if (distance < 100) flags.push("근거리불확실");
 
   const sigmaY = DISPERSION[stability].sigmaY(x);
   const sigmaZ = DISPERSION[stability].sigmaZ(x);
@@ -486,7 +489,10 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
   const x = distance * Math.cos(th);
   const y = distance * Math.sin(th);
   if (x <= 0) return { nox: 0, flags };
-  if (x < 100) flags.push("근거리불확실");
+  // 11/22 수정(최종 외부 검토 2-(a)): ISC3 지침 p.1-16은 "배출원에서 100m 안의 수용점"을 의심 구간으로 봐요.
+  // 예전엔 풍하 거리 x만 봐서, 부채꼴 방향에 따라 발전차와 옆으로 수백 m 떨어진(농도 ≈ 0) 칸까지
+  // 빗금이 그려졌어요. 이제 실제 거리 100m 미만(+풍하쪽)일 때만 붙여요.
+  if (distance < 100) flags.push("근거리불확실");
 
   // 배출 높이와 연기 상승
   let hs = 0, dh = 0;
@@ -572,7 +578,7 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
  * @param {number} [p.fanHalfWidthDeg]  0 이상 180 이하
  * @param {number} [p.fanStepDeg]  0 초과
  * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null, no2NoxRatio?: number, 하한값?: number|null}}
- *   하한값: flags에 "근거리불확실"이 있을 때만 숫자 — 풍하 100m 안 발전차를 뺀 NO2 ppm(부채꼴 최댓값). value의 진짜 하한. 그 외엔 null(계산 실패면 없음).
+ *   하한값: flags에 "근거리불확실"이 있을 때만 숫자 — 수음점에서 100m 안(풍하쪽) 발전차를 뺀 NO2 ppm(부채꼴 최댓값). value의 진짜 하한. 그 외엔 null(계산 실패면 없음).
  */
 export function calcExhaustAtReceiver({
   generators, receiverLat, receiverLon, stability, wsd10m, windVecFromDeg,
@@ -649,7 +655,7 @@ export function calcExhaustAtReceiver({
 
   let best = null;
   let center = null;
-  // 하한값(11/22 결정, '근거리불확실' 표시 B안): 각 방향에서 풍하 100m 안의 발전차를 뺀 NOx 합을
+  // 하한값(11/22 결정, '근거리불확실' 표시 B안): 각 방향에서 수음점 100m 안(풍하쪽)의 발전차를 뺀 NOx 합을
   // NO2로 바꾼 값 중 최댓값. NO2(ARM2 환산 포함)는 NOx가 늘면 줄지 않으므로(validation/
   // plume_lowerbound_test.mjs에서 확인) 뺀 값 ≤ 그 방향의 전체 값 ≤ 부채꼴 최댓값(value)이라
   // value의 진짜 하한이에요. 새 계수 없음.

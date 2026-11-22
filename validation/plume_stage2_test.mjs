@@ -88,9 +88,12 @@ for (const [kw, st, ws, x, exp] of cases) {
   check("잘못된 입력: 좌표 NaN", nan.value === null, `value=${nan.value}, ${nan.reason}`);
   const same = run(500, "D", 3, 270, { lat: DOME.lat, lon: DOME.lon });
   check("음원과 같은 좌표", same.value === null && same.flags.includes("계산불가"), `value=${same.value}, ${same.reason}`);
-  // 직선거리 150m지만 풍축에서 70° 벗어나 풍하 거리 x≈51m → 근거리불확실
+  // 11/22 변경(최종 외부 검토 2-(a)): 근거리 판정을 풍하 거리 x가 아니라 실제 거리 기준으로 바꿈
+  // (ISC3 지침 p.1-16 "배출원에서 100m 안의 수용점"). 예전 기대값은 "x≈51m → 근거리"였어요.
   const off = run(500, "D", 3, 270, dest(90 + 70, 150));
-  check("근거리 판정은 풍하 거리 x 기준", off.flags.includes("근거리불확실"), `x≈${(150 * Math.cos((70 * Math.PI) / 180)).toFixed(0)}m, ${off.flags.join(",")}`);
+  check("직선거리 150m(풍하 x≈51m) → 근거리 아님(실제 거리 기준)", !off.flags.includes("근거리불확실"), `x≈${(150 * Math.cos((70 * Math.PI) / 180)).toFixed(0)}m, ${off.flags.join(",")}`);
+  const off80 = run(500, "D", 3, 270, dest(90 + 70, 80));
+  check("직선거리 80m(풍하 x≈27m) → 근거리불확실", off80.flags.includes("근거리불확실"), off80.flags.join(","));
 }
 // 8) 단계 경계 (기준 0.10ppm 대비)
 check("단계 경계", classifyExhaustLevel(0.05) === "강" && classifyExhaustLevel(0.0499) === "중" && classifyExhaustLevel(0.01) === "중" && classifyExhaustLevel(0.0099) === "약" && classifyExhaustLevel(0.002) === "약" && classifyExhaustLevel(0.0019) === null, "0.05 강 / 0.01 중 / 0.002 약 / 그 미만 미표시");
