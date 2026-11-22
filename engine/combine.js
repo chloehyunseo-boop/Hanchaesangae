@@ -56,10 +56,17 @@ export function isGeneratorActiveAtHour(generator, hourIso) {
   const time = generator?.time;
   if (!time || time.출처 === "미확인" || !time.start) return false;
   const hourMs = new Date(hourIso).getTime();
-  const activeFromMs = new Date(time.start).getTime() - 2 * 3600 * 1000;
+  const startMs = new Date(time.start).getTime();
+  // 4차 외부 검토 지적(11/22): 시작 시각이 파싱 안 되는 문자열(예: "bad")이면 startMs가
+  // NaN이 되는데, "hourMs < activeFromMs"는 NaN과 비교하면 항상 false라 제외 로직을 그냥
+  // 통과해서 "가동 중"으로 둔갑했어요(noise.js의 stageActiveMinutes에 11/22에 먼저 고친
+  // 것과 똑같은 버그가 combine.js에도 있었음). 파싱 실패는 명시적으로 막아요.
+  if (!Number.isFinite(startMs)) return false;
+  const activeFromMs = startMs - 2 * 3600 * 1000;
   if (hourMs < activeFromMs) return false;
   if (time.end) {
     const endMs = new Date(time.end).getTime();
+    if (!Number.isFinite(endMs)) return false;
     if (hourMs >= endMs) return false;
   }
   return true;
@@ -183,7 +190,15 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
   for (const source of stageSources) {
     const { activeMinutes, flags: timeFlags } = stageActiveMinutes(source, hour);
     timeFlags.forEach((f) => allFlags.add(f));
-    if (activeMinutes <= 0) continue;
+    if (activeMinutes <= 0) {
+      // 4차 외부 검토 지적(11/22): "이 공연은 이 시간에 확실히 안 함"(겹침 0분, 플래그 없음)과
+      // "이 공연이 이 시간에 했는지 몰라서 뺐음"(시간정보없음·공연시간미확인·시간파싱오류)이
+      // 똑같이 조용히 continue돼서 구분이 안 됐어요 — 음량이 큰 공연이 후자라도 작은 공연만
+      // 있을 때와 똑같은 등급이 그대로 나왔습니다. 몰라서 뺀 경우만 "일부음원제외"로 셈해요.
+      const uncertain = ["공연시간미확인", "공연시간정보없음", "시간파싱오류"];
+      if (timeFlags.some((f) => uncertain.includes(f))) excludedCount++;
+      continue;
+    }
     anyActive = true;
 
     if (!finite(source.lat) || source.lat < -90 || source.lat > 90 || !finite(source.lon) || source.lon < -180 || source.lon > 180) {

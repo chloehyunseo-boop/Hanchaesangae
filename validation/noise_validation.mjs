@@ -29,9 +29,12 @@ function check(name, condition, detail) {
     [0, 50, 101.325, 10000, 172.1], [30, 80, 101.325, 1000, 7.41], [30, 80, 101.325, 10000, 80.7],
     [20, 50, 80.0, 1000, 4.62], [20, 5, 101.325, 1000, 26.51], [20, 5, 101.325, 4000, 64.48], [-20, 50, 101.325, 1000, 9.14],
   ];
+  // 4차 외부 검토 지적(11/22): dbPerKm이 NaN이면 errPct도 NaN이 되고, "errPct >= 1.5"는
+  // NaN과 비교하면 항상 false라 떨어지지 않아요 — 계산이 깨져도 통과하던 버그. 유한수부터 확인.
   let allOk = true;
   for (const [T, RH, p, f, expectedDbPerKm] of cases) {
     const dbPerKm = atmosphericAbsorptionDbPerM(f, T, RH, p) * 1000;
+    if (!Number.isFinite(dbPerKm)) { allOk = false; continue; }
     const errPct = (Math.abs(dbPerKm - expectedDbPerKm) / expectedDbPerKm) * 100;
     if (errPct >= 1.5) allOk = false;
   }

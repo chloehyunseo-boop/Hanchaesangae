@@ -26,12 +26,16 @@ const EXPECT_K4 = { 63: -0.91, 125: -2.38, 250: -3.94, 500: -3.94, 1000: -5.02, 
 check("범주 판정(안정도 D, v=+2 → 범주 5)", concaweCategory(EX.stability, EX.v) === 5);
 check("K1(500m) ≈ 64.97dB(원문 예제)", Math.abs(concaweK1(EX.d) - EXPECT_K1) < 0.01);
 
+// 4차 외부 검토 지적(11/22): "bandsOk = true로 시작, 틀리면 false로 떨어뜨림" 패턴은 diff가
+// NaN이면 "diff > 임계값" 비교가 항상 false가 돼서 절대 안 떨어져요(NaN은 모든 비교에서
+// false) — 계산이 NaN으로 깨져도 이 테스트가 "일치"로 통과하던 버그. 유한수인지부터 확인해요.
 let bandsOk = true;
 for (const f of CONCAWE_BANDS_HZ) {
   const { k2 } = concaweK2(concaweData, f, EX.tempC, EX.rhPercent, EX.d);
   const k3 = concaweK3(concaweData, f, "soft", EX.d);
   const k4 = concaweK4(concaweData, f, 5, EX.d);
   const k5 = concaweK5(k3, k4, EX.hs, EX.hr, EX.d);
+  if (![k2, k3, k4, k5].every(Number.isFinite)) bandsOk = false;
   if (Math.abs(k2 - EXPECT_K2[f]) > 0.01) bandsOk = false;
   if (Math.abs(k3 - EXPECT_K3[f]) > 0.02) bandsOk = false;
   if (Math.abs(k4 - EXPECT_K4[f]) > 0.02) bandsOk = false;

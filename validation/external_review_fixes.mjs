@@ -7,7 +7,7 @@ import {
   calcNoiseConcaweHourly, calcConcaweBand, indoorFacadeSourcePowerLevel,
   stageActiveMinutes, validateNoiseInput, validateSpectrum, CONCAWE_BANDS_HZ,
 } from "../engine/noise.js";
-import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints } from "../engine/combine.js";
+import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints, isGeneratorActiveAtHour } from "../engine/combine.js";
 import { mapDisplayFor } from "../engine/common.js";
 
 const concaweData = JSON.parse(fs.readFileSync(new URL("../data/concawe_4_81.json", import.meta.url), "utf8"));
@@ -253,6 +253,40 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
   const dispPartial = mapDisplayFor(farPlusNear);
   check("전부 반영된 셀은 등급을 그대로 보여줌", dispFarOnly.hideLevel === false);
   check("일부 제외된 셀은 숫자는 보이되 등급은 보류함(hideLevel:true)", dispPartial.mode === "value" && dispPartial.hideValue === false && dispPartial.hideLevel === true);
+}
+
+// 18) 4차 외부 검토: 작은 공연만 있을 때와, 큰 공연이 "시간 미확인/정보없음"이라 빠졌을 때가
+// 똑같은 등급으로 나오던 문제 — 이제 '일부음원제외'로 구분돼야 함
+{
+  const weather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const hour = "2026-11-22T19:00:00+09:00";
+  const timeAllHour = { start: hour, end: "2026-11-22T20:00:00+09:00", 출처: "공단API명시" };
+  const smallFar = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: timeAllHour };
+  const bigNear = { lat: receiver.lat - 200 / 111320, lon: receiver.lon, lwDb: 150, groundType: "soft", dSoftM: 200, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: timeAllHour };
+
+  const smallOnly = computeNoiseCellConcawe({ stageSources: [smallFar], receiver, weather, hour, concaweData });
+  check("작은 공연만 → 일부음원제외 없음", !smallOnly.flags.includes("일부음원제외"));
+
+  const bigUnknownTime = { ...bigNear, time: { start: null, end: null, 출처: "미확인" } };
+  const mixedUnknown = computeNoiseCellConcawe({ stageSources: [smallFar, bigUnknownTime], receiver, weather, hour, concaweData });
+  check("큰 공연이 '미확인'이라 빠지면 → 값은 작은공연뿐이어도 일부음원제외 붙음", Math.abs(mixedUnknown.value - smallOnly.value) < 1e-9 && mixedUnknown.flags.includes("일부음원제외"));
+
+  const bigNoTime = { ...bigNear, time: undefined };
+  const mixedNoTime = computeNoiseCellConcawe({ stageSources: [smallFar, bigNoTime], receiver, weather, hour, concaweData });
+  check("큰 공연이 time 필드 자체가 없어서 빠지면 → 일부음원제외 붙음", mixedNoTime.flags.includes("일부음원제외"));
+
+  const bothActive = computeNoiseCellConcawe({ stageSources: [smallFar, bigNear], receiver, weather, hour, concaweData });
+  check("둘 다 시간이 확실하면 → 일부음원제외 없고 값은 더 큼", !bothActive.flags.includes("일부음원제외") && bothActive.value > smallOnly.value);
+}
+
+// 19) 4차 외부 검토: 발전차 시작 시각 파싱 실패("bad")가 "가동 중"으로 둔갑하던 문제
+{
+  const hour = "2026-11-22T19:00:00+09:00";
+  check("발전차 시작시각 파싱 실패(end 없음) → 가동 아님", isGeneratorActiveAtHour({ time: { start: "bad", end: null, 출처: "공단API명시" } }, hour) === false);
+  check("발전차 시작시각 파싱 실패(end 있음) → 가동 아님", isGeneratorActiveAtHour({ time: { start: "bad", end: "2026-12-01T00:00:00+09:00", 출처: "공단API명시" } }, hour) === false);
+  check("발전차 종료시각 파싱 실패 → 가동 아님", isGeneratorActiveAtHour({ time: { start: "2026-11-22T17:00:00+09:00", end: "bad", 출처: "공단API명시" } }, hour) === false);
+  check("발전차 정상 입력 → 가동 중(회귀 확인)", isGeneratorActiveAtHour({ time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } }, hour) === true);
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);
