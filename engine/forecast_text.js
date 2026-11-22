@@ -195,7 +195,7 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES }) {
     } else {
       const r = g.state.reason;
       const text =
-        r === "약풍" ? (where === "주요 장소 전체" ? `${eunNeun(when)} 바람이 약해 ${LAYER_TOPIC_SUBJ[g.layer]} 어디로 퍼질지 계산하지 않았어요(지도 회색)` : `${eunNeun(when)} 바람이 약해 ${where} 쪽 ${LAYER_TOPIC[g.layer]} 퍼짐을 계산하지 않았어요(지도 회색)`) :
+        r === "약풍" ? (where === "주요 장소 전체" ? `${eunNeun(when)} 바람이 너무 약해 ${LAYER_TOPIC_SUBJ[g.layer]} 어디로 퍼질지 계산하지 못했어요. 안전하다는 뜻은 아니에요(지도 회색)` : `${eunNeun(when)} 바람이 너무 약해 ${where} 쪽 ${LAYER_TOPIC[g.layer]} 퍼짐을 계산하지 못했어요. 안전하다는 뜻은 아니에요(지도 회색)`) :
         r === "근거리" ? `${when} ${eunNeun(where)} 발전차 바로 옆이라 단계를 정하지 않았어요(지도 빗금)` :
         r === "시간미확인" ? `${when} 가동 시간을 모르는 ${g.layer === "exhaust" ? "발전차가" : "공연이"} 있어 ${where} 쪽 ${LAYER_TOPIC[g.layer]}${hasJong(LAYER_TOPIC[g.layer]) ? "을" : "를"} 계산하지 않았어요` :
         r === "일부제외" ? `${when} ${where} 쪽 ${eunNeun(LAYER_TOPIC[g.layer])} 일부 공연 정보가 빠져 단계를 정하지 않았어요` :
