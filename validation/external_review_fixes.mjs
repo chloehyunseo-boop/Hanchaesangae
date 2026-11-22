@@ -7,7 +7,7 @@ import {
   calcNoiseConcaweHourly, calcConcaweBand, indoorFacadeSourcePowerLevel,
   stageActiveMinutes, validateNoiseInput, validateSpectrum, CONCAWE_BANDS_HZ,
 } from "../engine/noise.js";
-import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints, isGeneratorActiveAtHour } from "../engine/combine.js";
+import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints, isGeneratorActiveAtHour, generatorActivityAtHour, computeExhaustCell } from "../engine/combine.js";
 import { mapDisplayFor } from "../engine/common.js";
 
 const concaweData = JSON.parse(fs.readFileSync(new URL("../data/concawe_4_81.json", import.meta.url), "utf8"));
@@ -287,6 +287,36 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
   check("발전차 시작시각 파싱 실패(end 있음) → 가동 아님", isGeneratorActiveAtHour({ time: { start: "bad", end: "2026-12-01T00:00:00+09:00", 출처: "공단API명시" } }, hour) === false);
   check("발전차 종료시각 파싱 실패 → 가동 아님", isGeneratorActiveAtHour({ time: { start: "2026-11-22T17:00:00+09:00", end: "bad", 출처: "공단API명시" } }, hour) === false);
   check("발전차 정상 입력 → 가동 중(회귀 확인)", isGeneratorActiveAtHour({ time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } }, hour) === true);
+}
+
+// 20) 하린 11/22 요청: 매연은 "발전차 하나라도 시간을 몰라서 못 셈" ≠ "확실히 가동 안 함"
+{
+  const hour = "2026-11-22T19:00:00+09:00";
+  check("generatorActivityAtHour: time 필드 자체 없음 → unknown", generatorActivityAtHour({}, hour) === "unknown");
+  check("generatorActivityAtHour: 출처 미확인 → unknown", generatorActivityAtHour({ time: { start: null, end: null, 출처: "미확인" } }, hour) === "unknown");
+  check("generatorActivityAtHour: 시작시각 파싱 실패 → unknown", generatorActivityAtHour({ time: { start: "bad", end: null, 출처: "공단API명시" } }, hour) === "unknown");
+  check("generatorActivityAtHour: 종료시각 파싱 실패 → unknown", generatorActivityAtHour({ time: { start: "2026-11-22T17:00:00+09:00", end: "bad", 출처: "공단API명시" } }, hour) === "unknown");
+  check("generatorActivityAtHour: 시작 2시간 전도 안 됨(확실히 안 함) → inactive", generatorActivityAtHour({ time: { start: "2026-11-23T10:00:00+09:00", end: null, 출처: "공단API명시" } }, hour) === "inactive");
+  check("generatorActivityAtHour: 이미 종료됨(확실히 안 함) → inactive", generatorActivityAtHour({ time: { start: "2026-11-22T10:00:00+09:00", end: "2026-11-22T18:00:00+09:00", 출처: "공단API명시" } }, hour) === "inactive");
+  check("generatorActivityAtHour: 정상 가동 중 → active", generatorActivityAtHour({ time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } }, hour) === "active");
+
+  const receiver = { lat: 37.5203, lon: 127.1268 };
+  const weather = { stability: "D", wsd10m: 3, windVecFromDeg: 270, tmp: 10 };
+  const activeGen = { lat: 37.5200, lon: 127.1265, 엔진출력_kW: 500, time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } };
+  const unknownGen = { lat: 37.5200, lon: 127.1265, 엔진출력_kW: 500, time: { start: "bad", end: null, 출처: "공단API명시" } };
+  const confirmedOffGen = { lat: 37.5200, lon: 127.1265, 엔진출력_kW: 500, time: { start: "2026-11-23T10:00:00+09:00", end: null, 출처: "공단API명시" } };
+
+  const allActive = computeExhaustCell({ generators: [activeGen, activeGen], receiver, weather, hour });
+  check("발전차 전부 확실히 가동 → 정상 계산(플래그 없음)", typeof allActive.value === "number" && !allActive.flags.includes("발전차시간미확인"));
+
+  const oneUnknown = computeExhaustCell({ generators: [activeGen, unknownGen], receiver, weather, hour });
+  check("5대 중 1대라도 시간 모르면 → value:null + 발전차시간미확인(낮은 값으로 조용히 안 나옴)", oneUnknown.value === null && oneUnknown.flags.includes("발전차시간미확인"));
+
+  const allConfirmedOff = computeExhaustCell({ generators: [confirmedOffGen], receiver, weather, hour });
+  check("전부 확실히 꺼져 있으면 → 가동중발전차없음(발전차시간미확인 아님)", allConfirmedOff.value === null && allConfirmedOff.flags.includes("가동중발전차없음") && !allConfirmedOff.flags.includes("발전차시간미확인"));
+
+  const allUnknown = computeExhaustCell({ generators: [unknownGen], receiver, weather, hour });
+  check("전부 시간을 몰라서 못 셈 → 발전차시간미확인(가동중발전차없음과 구분됨)", allUnknown.flags.includes("발전차시간미확인") && !allUnknown.flags.includes("가동중발전차없음"));
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

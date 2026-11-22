@@ -47,29 +47,41 @@ export function generateGridPoints(cellSizeM = CALC_GRID.cellSizeM) {
 
 /**
  * 발전차 하나가 그 시각에 가동 중인지 — 연결된 공연 시작 2시간 전부터 종료까지예요.
- * 시간 출처가 "미확인"이거나 시작 시각이 없으면 아예 빼요(하린 11/21 지시 2번).
+ * "가동 안 함(확실)"과 "시간을 몰라서 못 판단함"을 구분해요(하린 11/22 요청) —
+ * 둘 다 예전엔 똑같이 false였는데, 매연은 "모르면 발전차 하나 때문에 전체를 비운다"는
+ * 설계(calcExhaustAtReceiver의 all-or-nothing 방식과 같은 원칙, 하린 11/22 확인)라서
+ * computeExhaustCell이 이 둘을 다르게 처리해야 해요.
  * @param {{time?: {start: string|null, end: string|null, 출처: string}}} generator
  * @param {string} hourIso
- * @returns {boolean}
+ * @returns {"active"|"inactive"|"unknown"}
  */
-export function isGeneratorActiveAtHour(generator, hourIso) {
+export function generatorActivityAtHour(generator, hourIso) {
   const time = generator?.time;
-  if (!time || time.출처 === "미확인" || !time.start) return false;
+  if (!time || time.출처 === "미확인" || !time.start) return "unknown"; // 정보 자체가 없음/명시적 미확인
   const hourMs = new Date(hourIso).getTime();
   const startMs = new Date(time.start).getTime();
   // 4차 외부 검토 지적(11/22): 시작 시각이 파싱 안 되는 문자열(예: "bad")이면 startMs가
   // NaN이 되는데, "hourMs < activeFromMs"는 NaN과 비교하면 항상 false라 제외 로직을 그냥
   // 통과해서 "가동 중"으로 둔갑했어요(noise.js의 stageActiveMinutes에 11/22에 먼저 고친
-  // 것과 똑같은 버그가 combine.js에도 있었음). 파싱 실패는 명시적으로 막아요.
-  if (!Number.isFinite(startMs)) return false;
+  // 것과 똑같은 버그가 combine.js에도 있었음). 파싱 실패는 "모름"으로 둬요(값은 있는데
+  // 못 믿는 거라, "가동 안 함"이라고 확신할 수 없음).
+  if (!Number.isFinite(startMs)) return "unknown";
   const activeFromMs = startMs - 2 * 3600 * 1000;
-  if (hourMs < activeFromMs) return false;
+  if (hourMs < activeFromMs) return "inactive"; // 시작 시각을 알고, 아직 2시간 전도 안 됨 → 확실히 안 함
   if (time.end) {
     const endMs = new Date(time.end).getTime();
-    if (!Number.isFinite(endMs)) return false;
-    if (hourMs >= endMs) return false;
+    if (!Number.isFinite(endMs)) return "unknown"; // 종료 시각이 있는데 못 읽음 → 모름
+    if (hourMs >= endMs) return "inactive"; // 종료 시각을 알고, 이미 끝남 → 확실히 안 함
   }
-  return true;
+  return "active";
+}
+
+/**
+ * @deprecated generatorActivityAtHour를 쓰세요 — "모름"과 "확실히 안 함"을 구분 못 해요.
+ * 외부에서 단순 가동 여부만 필요할 때를 위해 남겨뒀어요.
+ */
+export function isGeneratorActiveAtHour(generator, hourIso) {
+  return generatorActivityAtHour(generator, hourIso) === "active";
 }
 
 /**
@@ -80,10 +92,26 @@ export function isGeneratorActiveAtHour(generator, hourIso) {
  * @returns {import("./common.js").OutputCell}
  */
 export function computeExhaustCell({ generators, receiver, weather, hour, 가정 = "기본추정" }) {
-  const activeGenerators = generators.filter((g) => isGeneratorActiveAtHour(g, hour));
   const baseCell = { x: receiver.lon, y: receiver.lat, hour, layer: "exhaust" };
+  const scenario = `가우시안플룸_ISC3도시형확산계수_풍향부채꼴최대_${가정}`;
+
+  const activeGenerators = [];
+  let unknownCount = 0;
+  for (const g of generators) {
+    const status = generatorActivityAtHour(g, hour);
+    if (status === "active") activeGenerators.push(g);
+    else if (status === "unknown") unknownCount++;
+  }
+
+  // 하린 11/22 요청: 발전차 하나라도 "가동 중인지 몰라서" 뺀 거라면, 그 하나 때문에
+  // 전체 농도가 과소평가될 수 있어요(매연은 발전차 하나 이상이면 전체를 비우는 설계와
+  // 같은 원칙 — ARM2가 전체 NOx 합으로 계산돼서 일부만 빼면 비율 자체가 틀려짐).
+  // "확실히 가동 안 함"(시간을 알고 그 시간엔 꺼져 있음)과는 구분해요.
+  if (unknownCount > 0) {
+    return { ...baseCell, value: null, level: null, flags: ["발전차시간미확인"], scenario };
+  }
   if (activeGenerators.length === 0) {
-    return { ...baseCell, value: null, level: null, flags: ["가동중발전차없음"], scenario: `가우시안플룸_ISC3도시형확산계수_풍향부채꼴최대_${가정}` };
+    return { ...baseCell, value: null, level: null, flags: ["가동중발전차없음"], scenario };
   }
   const result = calcExhaustAtReceiver({
     generators: activeGenerators,
