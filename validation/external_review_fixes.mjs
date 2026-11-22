@@ -25,7 +25,13 @@ const BASE = {
   windVecFromDeg: 0, wsd10m: 2, stability: "D",
   groundType: "soft", dSoftM: 500, tempC: 10, rhPercent: 75, hs: 1.5,
 };
-const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0])); // 7밴드에 같은 에너지 배분(근사)
+// 2차 외부 검토 지적(11/22): 밴드마다 0dB를 준다고 "에너지를 7밴드에 균등 배분"하는 게
+// 아니에요 — calcConcaweBand의 lwDb는 "그 밴드의 LW"를 직접 받고, 함수 계약상 전체 LW를
+// 나누는 게 아니라 각 밴드가 "LW + 상대비율(dB)"을 그대로 받아요. 즉 0dB×7밴드는 7개
+// 밴드 전부가 '전체 LW만큼' 독립적으로 소리를 내는 셈이라 실제보다 훨씬 커요. 아래 테스트는
+// 이 테스트용 고정값일 뿐이고, 실제 음원 스펙트럼은 반드시 에너지 총합이 LW가 되도록
+// (예: 로그합하면 LW로 돌아오는) 밴드별 상대비율을 넣어야 해요.
+const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
 
 // 1) 빈 스펙트럼 객체 {} → 밴드마다 전체 파워가 중복 배정되던 버그. 이제 계산 자체를 안 함(null).
 {
@@ -112,7 +118,104 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0])); /
   const hour = "2026-11-22T19:00:00+09:00";
   const source = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: {}, time: { start: hour, end: "2026-11-22T20:00:00+09:00", 출처: "공단API명시" } };
   const cell = computeNoiseCellConcawe({ stageSources: [source], receiver, weather, hour, concaweData });
-  check("combine.js 통합: 빈 스펙트럼 음원은 값에 안 들어감(value:null)", cell.value === null && cell.flags.has ? true : cell.flags.includes("옥타브스펙트럼필수_모양미확인"));
+  // 2차 외부 검토 지적(11/22): 원래 `cell.flags.has`(배열엔 .has가 없어 항상 undefined) 때문에
+  // 삼항 연산자 왼쪽이 늘 거짓이 되어 cell.value를 사실상 전혀 검사하지 않는 버그가 있었어요.
+  // 검토자가 {value:58, flags:[...]} 같은 반례로 실제로 통과함을 보여줬어요 — 이제 둘 다 확인해요.
+  check("combine.js 통합: 빈 스펙트럼 음원은 값에 안 들어감(value:null)", cell.value === null && cell.flags.includes("옥타브스펙트럼필수_모양미확인"));
+}
+
+// 12) 2차 외부 검토: combine.js가 실제로 쓰는 500m 정풍 케이스의 정확한 수치 회귀값
+{
+  const weather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const makeSource = (startIso, endIso) => ({
+    lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120,
+    groundType: "soft", dSoftM: 500, hs: 1.5,
+    spectrumRatiosDb: FLAT_SPECTRUM,
+    time: { start: startIso, end: endIso, 출처: "공단API명시" },
+  });
+  const hour = "2026-11-22T19:00:00+09:00";
+
+  // 아래 세 수치는 2026-11-22 수정 직후 이 코드로 실제 계산한 값을 그대로 고정한
+  // 회귀값이에요(외부 검토가 제시한 숫자가 아니라, 이 시점 결과를 기준으로 앞으로의
+  // 의도치 않은 변화를 잡기 위한 것 — FLAT_SPECTRUM은 "균등 배분"이 아니라 밴드마다
+  // 전체 LW를 독립으로 받는다는 점, 위 주석 참고).
+  const r60 = computeNoiseCellConcawe({ stageSources: [makeSource("2026-11-22T19:00:00+09:00", "2026-11-22T20:00:00+09:00")], receiver, weather, hour, concaweData });
+  check("60분 가동 500m 회귀값", Math.abs(r60.value - 58.0117) < 0.001, `${r60.value?.toFixed(4)}dB(A)`);
+
+  const r30 = computeNoiseCellConcawe({ stageSources: [makeSource("2026-11-22T19:30:00+09:00", "2026-11-22T20:00:00+09:00")], receiver, weather, hour, concaweData });
+  check("30분 가동 500m 회귀값", Math.abs(r30.value - 55.0014) < 0.001, `${r30.value?.toFixed(4)}dB(A)`);
+
+  const rDouble = computeNoiseCellConcawe({
+    stageSources: [
+      makeSource("2026-11-22T19:00:00+09:00", "2026-11-22T20:00:00+09:00"),
+      makeSource("2026-11-22T19:00:00+09:00", "2026-11-22T20:00:00+09:00"),
+    ],
+    receiver, weather, hour, concaweData,
+  });
+  check("동일 음원 2개 동시 합산 회귀값", Math.abs(rDouble.value - 61.0220) < 0.001, `${rDouble.value?.toFixed(4)}dB(A)`);
+}
+
+// 13) 2차 외부 검토: combine.js 최상위 입력 검증 — leaf 함수가 아니라 실제 메인 지도 경로에서 검사되는지
+{
+  const okWeather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const source = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: { start: "2026-11-22T19:00:00+09:00", end: "2026-11-22T20:00:00+09:00", 출처: "공단API명시" } };
+  const hour = "2026-11-22T19:00:00+09:00";
+
+  const badWsd = computeNoiseCellConcawe({ stageSources: [source], receiver, weather: { ...okWeather, wsd10m: null }, hour, concaweData });
+  check("wsd10m=null → 계산불가_풍속(무풍으로 조용히 안 바뀜)", badWsd.value === null && badWsd.flags.includes("계산불가_풍속"));
+
+  const negWsd = computeNoiseCellConcawe({ stageSources: [source], receiver, weather: { ...okWeather, wsd10m: -2 }, hour, concaweData });
+  check("wsd10m=-2 → 계산불가_풍속", negWsd.value === null && negWsd.flags.includes("계산불가_풍속"));
+
+  const badWindDeg = computeNoiseCellConcawe({ stageSources: [source], receiver, weather: { ...okWeather, windVecFromDeg: null }, hour, concaweData });
+  check("windVecFromDeg=null → 계산불가_풍향", badWindDeg.value === null && badWindDeg.flags.includes("계산불가_풍향"));
+
+  const overWindDeg = computeNoiseCellConcawe({ stageSources: [source], receiver, weather: { ...okWeather, windVecFromDeg: 540 }, hour, concaweData });
+  check("windVecFromDeg=540(범위 밖) → 계산불가_풍향(모듈로로 조용히 안 고쳐짐)", overWindDeg.value === null && overWindDeg.flags.includes("계산불가_풍향"));
+
+  const badLon = computeNoiseCellConcawe({ stageSources: [{ ...source, lon: 487 }], receiver, weather: okWeather, hour, concaweData });
+  check("음원 경도=487(범위 밖) → 음원좌표미확인+일부음원제외(haversine이 그냥 넘기지 않음)", badLon.value === null && badLon.flags.includes("음원좌표미확인") && badLon.flags.includes("일부음원제외"));
+
+  const badReceiverLon = computeNoiseCellConcawe({ stageSources: [source], receiver: { lat: receiver.lat, lon: 487 }, weather: okWeather, hour, concaweData });
+  check("수음점 경도=487(범위 밖) → 계산불가_수음점좌표", badReceiverLon.value === null && badReceiverLon.flags.includes("계산불가_수음점좌표"));
+}
+
+// 14) 2차 외부 검토: noiseScenario/grid 오류가 "일단 던지긴 하는지"가 아니라 구체적인 이유로 던지는지
+{
+  let message = "";
+  try {
+    computeHourOutputCells({ stageSources: [], generatorSources: [], weather: {}, hour: "2026-11-22T19:00:00+09:00" });
+  } catch (e) { message = e.message; }
+  check("noiseScenario 생략 → 에러 메시지에 'noiseScenario' 언급", message.includes("noiseScenario"));
+
+  let message2 = "";
+  try {
+    computeHourOutputCells({ stageSources: [], generatorSources: [], weather: {}, hour: "2026-11-22T19:00:00+09:00", noiseScenario: "concawe", concaweData: {} });
+  } catch (e) { message2 = e.message; }
+  check("concaweData={}(빈 객체, truthy) → TypeError 아니라 명확한 '필수 키' 에러", message2.includes("필수 키"));
+
+  let message3 = "";
+  try {
+    generateGridPoints(0);
+  } catch (e) { message3 = e.message; }
+  check("격자 간격 0 → 에러 메시지에 '0보다 커야' 언급", message3.includes("0보다 커야"));
+}
+
+// 15) 2차 외부 검토: 일부 음원만 데이터 문제로 빠졌을 때 "전부 합산"과 구분되는 flag가 붙는지
+{
+  const weather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const hour = "2026-11-22T19:00:00+09:00";
+  const goodSource = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: { start: hour, end: "2026-11-22T20:00:00+09:00", 출처: "공단API명시" } };
+  const badSpectrumSource = { ...goodSource, spectrumRatiosDb: {} };
+
+  const fullSum = computeNoiseCellConcawe({ stageSources: [goodSource, goodSource], receiver, weather, hour, concaweData });
+  check("전부 합산되면 일부음원제외 flag 없음", !fullSum.flags.includes("일부음원제외"));
+
+  const partialSum = computeNoiseCellConcawe({ stageSources: [goodSource, badSpectrumSource], receiver, weather, hour, concaweData });
+  check("일부만 데이터 문제로 빠지면 일부음원제외 flag 붙음(값은 살아있음)", typeof partialSum.value === "number" && partialSum.flags.includes("일부음원제외"));
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

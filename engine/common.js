@@ -256,7 +256,9 @@ export function overlapMinutesInHour(startIso, endIso, hourIso) {
  *   mode "value": 그 외 → 숫자·단계 그대로 보여줌
  */
 export function mapDisplayFor(cell) {
-  if (cell.value === null) {
+  // 2차 외부 검토 지적(11/22): null만 걸렀고 NaN은 "value" 모드로 그대로 표시되고
+  // 있었어요(결측 기온 등으로 NaN이 나올 수 있는 경로가 있음) — NaN도 blank로 처리해요.
+  if (typeof cell.value !== "number" || !Number.isFinite(cell.value)) {
     return { mode: "blank", hideValue: true, hideLevel: true };
   }
   if (cell.flags?.includes("근거리불확실")) {

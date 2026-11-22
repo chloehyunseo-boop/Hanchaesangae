@@ -30,9 +30,12 @@ export function validateNoiseInput({ sourceLat, sourceLon, receiverLat, receiver
   const finite = (v) => typeof v === "number" && Number.isFinite(v);
   for (const [k, v] of Object.entries({ sourceLat, receiverLat })) if (!finite(v) || v < -90 || v > 90) return `${k} 범위 밖: ${v}`;
   for (const [k, v] of Object.entries({ sourceLon, receiverLon })) if (!finite(v) || v < -180 || v > 180) return `${k} 범위 밖: ${v}`;
-  if (tempC !== undefined && (!finite(tempC) || tempC < -50 || tempC > 60)) return `기온은 −50~60℃: ${tempC}`;
-  if (rhPercent !== undefined && (!finite(rhPercent) || rhPercent < 0 || rhPercent > 100)) return `습도는 0~100%: ${rhPercent}`;
-  if (windVecFromDeg !== undefined && (!finite(windVecFromDeg) || windVecFromDeg < 0 || windVecFromDeg > 360)) return `풍향은 0~360°: ${windVecFromDeg}`;
+  // 11/22 재검토 지적: "값이 undefined면 검사를 건너뛴다"는 예외를 뒀었는데, 이 셋은
+  // 두 시나리오 다 항상 필요해서 건너뛸 이유가 없었어요 — null이 곱셈에서 0이 되거나
+  // 각도가 범위 밖이어도 모듈로 연산을 그냥 통과하는 일을 막으려면 항상 검사해야 해요.
+  if (!finite(tempC) || tempC < -50 || tempC > 60) return `기온은 −50~60℃: ${tempC}`;
+  if (!finite(rhPercent) || rhPercent < 0 || rhPercent > 100) return `습도는 0~100%: ${rhPercent}`;
+  if (!finite(windVecFromDeg) || windVecFromDeg < 0 || windVecFromDeg > 360) return `풍향은 0~360°: ${windVecFromDeg}`;
   const distanceM = haversineDistanceM(sourceLat, sourceLon, receiverLat, receiverLon);
   if (!finite(distanceM) || distanceM < 1) return `음원-수음점 거리가 너무 가깝거나 계산 불가: ${distanceM}`;
   return null;

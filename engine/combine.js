@@ -19,6 +19,8 @@ import {
   stageActiveMinutes, timeWeightDb, calcConcaweBand, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
   sourceReceiverGeometry, validateSpectrum,
 } from "./noise.js";
+
+const finite = (v) => typeof v === "number" && Number.isFinite(v);
 import { calcExhaustAtReceiver, classifyExhaustLevel } from "./plume.js";
 
 const DEG_PER_M_LAT = 1 / 111320;
@@ -159,9 +161,24 @@ export function computeNoiseCell({ source, receiver, weather, hour }) {
  */
 export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour, concaweData }) {
   const scenario = "CONCAWE_전체_시간별추정";
+  const baseCell = { x: receiver.lon, y: receiver.lat, hour, layer: "noise" };
+
+  // 2차 외부 검토 지적(11/22): 이 함수가 geometry·v를 raw weather/receiver로 직접 계산해서
+  // noise.js의 validateNoiseInput을 전혀 거치지 않고 있었어요(leaf 함수만 검증되고 실제
+  // 메인 지도가 부르는 이 함수는 뚫려 있던 구멍). null*숫자=0으로 조용히 무풍 처리되거나,
+  // 범위 밖 각도가 모듈로 연산을 그냥 통과하는 일을 막기 위해 공통 입력을 맨 앞에서 한 번에
+  // 검사해요 — 하나라도 틀리면 셀 전체를 계산 안 함(null)으로 둬요.
+  if (!finite(receiver.lat) || receiver.lat < -90 || receiver.lat > 90) return { ...baseCell, value: null, level: null, flags: ["계산불가_수음점좌표"], scenario };
+  if (!finite(receiver.lon) || receiver.lon < -180 || receiver.lon > 180) return { ...baseCell, value: null, level: null, flags: ["계산불가_수음점좌표"], scenario };
+  if (!finite(weather.wsd10m) || weather.wsd10m < 0) return { ...baseCell, value: null, level: null, flags: ["계산불가_풍속"], scenario };
+  if (!finite(weather.windVecFromDeg) || weather.windVecFromDeg < 0 || weather.windVecFromDeg > 360) return { ...baseCell, value: null, level: null, flags: ["계산불가_풍향"], scenario };
+  if (!finite(weather.tempC) || weather.tempC < -50 || weather.tempC > 60) return { ...baseCell, value: null, level: null, flags: ["계산불가_기온"], scenario };
+  if (!finite(weather.rhPercent) || weather.rhPercent < 0 || weather.rhPercent > 100) return { ...baseCell, value: null, level: null, flags: ["계산불가_습도"], scenario };
+
   const allFlags = new Set();
   const perBandLevels = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, []]));
   let anyActive = false;
+  let excludedCount = 0; // 가동은 했는데 데이터 문제로 합산에서 빠진 음원 수(부분 합계 표시, 외부 검토 지적)
 
   for (const source of stageSources) {
     const { activeMinutes, flags: timeFlags } = stageActiveMinutes(source, hour);
@@ -169,12 +186,18 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
     if (activeMinutes <= 0) continue;
     anyActive = true;
 
+    if (!finite(source.lat) || source.lat < -90 || source.lat > 90 || !finite(source.lon) || source.lon < -180 || source.lon > 180) {
+      allFlags.add("음원좌표미확인");
+      excludedCount++;
+      continue;
+    }
+
     const lwDb = source.indoor
       ? indoorFacadeSourcePowerLevel(source.indoor.lpIndoorDb, source.indoor.R, source.indoor.S)
       : source.lwDb;
-    if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) { allFlags.add("음원세기미확인"); continue; }
+    if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) { allFlags.add("음원세기미확인"); excludedCount++; continue; }
     const specBad = validateSpectrum(source.spectrumRatiosDb, CONCAWE_BANDS_HZ);
-    if (specBad) { allFlags.add("옥타브스펙트럼필수_모양미확인"); continue; } // 밴드 누락·빈 객체도 여기서 막힘(외부 검토 지적)
+    if (specBad) { allFlags.add("옥타브스펙트럼필수_모양미확인"); excludedCount++; continue; } // 밴드 누락·빈 객체도 여기서 막힘(외부 검토 지적)
 
     const weightDb = timeWeightDb(activeMinutes) ?? 0; // ①시간가중: 음원별·밴드별 LW에 미리 더함
     if (activeMinutes < 60) allFlags.add(`시간가중_${Math.round(activeMinutes)}분`);
@@ -199,7 +222,7 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
     }
   }
 
-  const baseCell = { x: receiver.lon, y: receiver.lat, hour, layer: "noise" };
+  if (excludedCount > 0) allFlags.add("일부음원제외"); // 전부 합산된 것과 구분 — 몇 개가 빠졌는지는 다른 flags로 알 수 있음
   if (!anyActive) return { ...baseCell, value: null, level: null, flags: [...allFlags], scenario };
 
   // ②같은 밴드끼리 음원 에너지 합산 → ③A가중 → ④밴드 로그합
@@ -231,6 +254,16 @@ export function computeHourOutputCells({ stageSources, generatorSources, weather
   }
   if (noiseScenario === "concawe" && !concaweData) {
     throw new Error("noiseScenario이 'concawe'면 concaweData(data/concawe_4_81.json)를 꼭 같이 넘겨야 해요.");
+  }
+  // 2차 외부 검토 지적(11/22): concaweData가 참(truthy)이기만 하면 통과시켰던 걸, {}같은
+  // 빈 객체도 참이라 통과한 뒤 calcConcaweBand 안에서 없는 키를 읽다가 TypeError로 터지는
+  // 문제가 있었어요 — 필수 최상위 키가 다 있는지 여기서 미리 확인해요.
+  if (noiseScenario === "concawe") {
+    const requiredKeys = ["K2_대기흡음_dB_per_km", "K3_지면효과_soft", "K4_기상보정", "K5_높이보정_gamma"];
+    const missing = requiredKeys.filter((k) => !(k in concaweData));
+    if (missing.length > 0) {
+      throw new Error(`concaweData에 필수 키가 없어요(data/concawe_4_81.json 형식이 아닌 것 같아요): ${missing.join(", ")}`);
+    }
   }
   const cells = [];
   for (const receiver of grid) {
