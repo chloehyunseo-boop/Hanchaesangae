@@ -379,5 +379,19 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
   check("플래그 없이 value:null → blank(그대로)", mapDisplayFor({ value: null, flags: [] }).mode === "blank");
 }
 
+// 27) 11/22 결정(사용자+하린, "근거리불확실" B안): computeExhaustCell이 plume.js의
+// `하한값`을 받아 등급까지 매겨 OutputCell에 실어주는지(통과 경로). plume.js는 아직
+// 하한값을 안 돌려주므로(하린 쪽 작업 예정) 지금은 null이 그대로 나오는 게 맞아요 —
+// plume.js가 하한값을 넣어주기 시작하면 이 테스트를 실제 숫자로 바꿔 확인해야 해요.
+{
+  const hour = "2026-11-22T19:00:00+09:00";
+  const receiver = { lat: 37.5203, lon: 127.1268 };
+  const weather = { stability: "D", wsd10m: 3, windVecFromDeg: 0, tmp: 10 }; // 바람이 북→남, 수음점 북쪽 음원이 풍하
+  const nearGen = { lat: 37.5203 + 50 / 111320, lon: 127.1268, 엔진출력_kW: 500, time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } };
+  const cell = computeExhaustCell({ generators: [nearGen], receiver, weather, hour });
+  check("근거리(50m) 발전차 → 근거리불확실 플래그 붙음(재현 확인)", cell.flags.includes("근거리불확실"));
+  check("plume.js가 하한값을 아직 안 주므로 하한값/하한등급은 null(통과 경로만 확인)", cell.하한값 === null && cell.하한등급 === null);
+}
+
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);
 process.exitCode = failCount === 0 ? 0 : 1;

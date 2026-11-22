@@ -135,7 +135,7 @@ const CanvasCellLayer = L.Layer.extend({
         ctx.beginPath();
         ctx.rect(nw.x, nw.y, w, h);
         ctx.clip();
-        ctx.strokeStyle = "rgba(60,60,60,0.55)";
+        ctx.strokeStyle = style.hatchColor ?? "rgba(60,60,60,0.55)";
         ctx.lineWidth = 1;
         for (let off = -Math.max(w, h); off < Math.max(w, h); off += 5) {
           ctx.beginPath();
@@ -170,7 +170,13 @@ const CanvasCellLayer = L.Layer.extend({
     // 계산함"(unknown, 가장 위험할 수 있는 약풍 밤 등)을 다르게 그려야 해요 — unknown은
     // 점 패턴(빗금과 또 다르게)으로 "모름"을 표시해요.
     if (disp.mode === "unknown") return { fill: palette.uncertain, dotted: true };
-    if (disp.mode === "hatch") return { fill: palette.uncertain, hatch: true };
+    if (disp.mode === "hatch") {
+      // 11/22 결정(사용자+하린, B안): 근거리불확실이어도 하한등급이 있으면 "최소 이
+      // 등급 이상"을 빗금 색으로 바로 보여줘요(칸이 작아 글자는 안 보이니 색으로 — 범례에
+      // "빗금 색 = 하한 등급" 설명 추가).
+      const hatchColor = cell.하한등급 ? (palette[cell.하한등급] ?? palette.uncertain) : "rgba(60,60,60,0.55)";
+      return { fill: palette.uncertain, hatch: true, hatchColor };
+    }
     if (disp.hideLevel) return { fill: palette.uncertain, hatch: true }; // 일부음원제외 — 등급 보류
     return { fill: palette[cell.level] ?? palette.uncertain, hatch: false };
   },

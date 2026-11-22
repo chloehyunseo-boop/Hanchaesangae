@@ -146,12 +146,21 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
     // 받아들이고, 기온 없음은 연기 상승을 빼는 쪽으로 처리해요(하린 11/21 지시 3번).
     대기온도_C: weather.tmp,
   });
+  // 11/22 결정(사용자+하린, "근거리불확실" 표시 방식 B안): 발전차 중 일부가 100m 이내라
+  // 전체 값이 불확실(근거리불확실)해도, 그 발전차들을 뺀 합계(하한값)는 실제 농도의
+  // 진짜 하한이에요(NO2는 ARM2 환산이라도 NOx가 늘면 줄지 않으니, 빼면 값이 줄 수밖에
+  // 없음 — 외부 검토가 확인). plume.js(하린)가 calcExhaustAtReceiver 결과에 `하한값`을
+  // 넣어주면 여기서 등급까지 매겨서 화면에 "빗금 + ○○ 이상"으로 보여줄 수 있게 해요.
+  // 아직 plume.js 쪽 구현 전이라 result.하한값이 없으면 null로 통과시켜요.
+  const 하한값 = typeof result.하한값 === "number" ? result.하한값 : null;
   return {
     ...baseCell,
     value: result.value,
     level: classifyExhaustLevel(result.value),
     flags: result.flags,
     scenario: result.scenario,
+    하한값,
+    하한등급: 하한값 !== null ? classifyExhaustLevel(하한값) : null,
   };
 }
 
