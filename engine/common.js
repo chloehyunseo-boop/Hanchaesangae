@@ -264,6 +264,12 @@ export function mapDisplayFor(cell) {
   if (cell.flags?.includes("근거리불확실")) {
     return { mode: "hatch", hideValue: true, hideLevel: true };
   }
+  // 3차 외부 검토 지적(11/22): 일부 음원만 데이터 문제로 빠진 셀은 "알려진 기여분"은
+  // 보여주되 강·중·약 등급은 확정 짓지 말아야 해요(빠진 음원이 더 크면 등급이 틀릴 수
+  // 있음) — 숫자는 보이고 등급만 보류하는 모드.
+  if (cell.flags?.includes("일부음원제외")) {
+    return { mode: "value", hideValue: false, hideLevel: true };
+  }
   return { mode: "value", hideValue: false, hideLevel: false };
 }
 

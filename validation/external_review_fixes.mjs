@@ -8,6 +8,7 @@ import {
   stageActiveMinutes, validateNoiseInput, validateSpectrum, CONCAWE_BANDS_HZ,
 } from "../engine/noise.js";
 import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints } from "../engine/combine.js";
+import { mapDisplayFor } from "../engine/common.js";
 
 const concaweData = JSON.parse(fs.readFileSync(new URL("../data/concawe_4_81.json", import.meta.url), "utf8"));
 
@@ -216,6 +217,42 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
 
   const partialSum = computeNoiseCellConcawe({ stageSources: [goodSource, badSpectrumSource], receiver, weather, hour, concaweData });
   check("일부만 데이터 문제로 빠지면 일부음원제외 flag 붙음(값은 살아있음)", typeof partialSum.value === "number" && partialSum.flags.includes("일부음원제외"));
+}
+
+// 16) 3차 외부 검토: time 필드 자체가 없으면 "모름"으로 제외해야 하는데 "60분 상시 가동"으로
+// 처리되던 역전 — time:{}(빈 객체)·start만 빠진 경우와 똑같이 제외되는지 확인
+{
+  const r1 = stageActiveMinutes({}, "2026-11-22T19:00:00+09:00"); // time 필드 자체 없음
+  check("time 필드 자체 없음 → activeMinutes:0(과거엔 60분 상시가동이었음)", r1.activeMinutes === 0 && r1.flags.includes("공연시간정보없음"));
+
+  const r2 = stageActiveMinutes({ time: null }, "2026-11-22T19:00:00+09:00");
+  check("time: null → activeMinutes:0", r2.activeMinutes === 0 && r2.flags.includes("공연시간정보없음"));
+
+  const r3 = stageActiveMinutes({ time: {} }, "2026-11-22T19:00:00+09:00");
+  check("time: {} → activeMinutes:0(일관됨)", r3.activeMinutes === 0 && r3.flags.includes("공연시간미확인"));
+}
+
+// 17) 3차 외부 검토 핵심 사례: 가까운 큰 무대(100m 제한으로 제외)가 있는데 먼 무대만으로
+// 등급이 확정되고, "일부 제외"와 "전부 반영"이 화면에서 구별 안 되던 문제
+{
+  const weather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const hour = "2026-11-22T19:00:00+09:00";
+  const timeAllHour = { start: hour, end: "2026-11-22T20:00:00+09:00", 출처: "공단API명시" };
+  const farStage = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: timeAllHour };
+  // receiver에서 약 30m — 100m 제한에 걸려 7밴드 전부 null이 되는 무대
+  const nearStage = { lat: receiver.lat - 30 / 111320, lon: receiver.lon, lwDb: 135, groundType: "soft", dSoftM: 30, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: timeAllHour };
+
+  const farOnly = computeNoiseCellConcawe({ stageSources: [farStage], receiver, weather, hour, concaweData });
+  const farPlusNear = computeNoiseCellConcawe({ stageSources: [farStage, nearStage], receiver, weather, hour, concaweData });
+
+  check("가까운 무대가 100m 제한으로 전부 제외되면 일부음원제외 플래그가 붙음", farPlusNear.flags.includes("일부음원제외"));
+  check("먼 무대만 있을 때와 똑같은 값이 나오더라도 flags로는 구별됨", Math.abs(farPlusNear.value - farOnly.value) < 1e-9 && !farOnly.flags.includes("일부음원제외"));
+
+  const dispFarOnly = mapDisplayFor(farOnly);
+  const dispPartial = mapDisplayFor(farPlusNear);
+  check("전부 반영된 셀은 등급을 그대로 보여줌", dispFarOnly.hideLevel === false);
+  check("일부 제외된 셀은 숫자는 보이되 등급은 보류함(hideLevel:true)", dispPartial.mode === "value" && dispPartial.hideValue === false && dispPartial.hideLevel === true);
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

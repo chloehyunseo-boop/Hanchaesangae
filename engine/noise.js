@@ -224,7 +224,12 @@ export function timeWeightDb(activeMinutes) {
  */
 export function stageActiveMinutes(source, hourIso) {
   const time = source?.time;
-  if (!time) return { activeMinutes: 60, flags: [] }; // time을 안 준 음원은 이전처럼 상시 가동 취급(하위호환)
+  // 3차 외부 검토 지적(11/22): time 필드 자체가 없거나 null이면 "상시 가동"(60분)으로
+  // 봤는데, 이건 time:{}(빈 객체)나 start만 빠진 경우(둘 다 "공연시간미확인"으로 제외됨)보다
+  // 오히려 더 확실하게 가동 중으로 처리되는 역전이었어요 — "아무 정보 없음"이 "정보가
+  // 일부 있지만 불완전함"보다 더 신뢰받으면 안 돼요(계산 못 하면 null로 비운다는 원칙,
+  // CLAUDE.md 3번). 이제 둘 다 똑같이 "모르면 제외"로 통일해요.
+  if (!time) return { activeMinutes: 0, flags: ["공연시간정보없음"] };
   if (time.출처 === "미확인" || !time.start) return { activeMinutes: 0, flags: ["공연시간미확인"] };
   const minutes = overlapMinutesInHour(time.start, time.end, hourIso);
   // 시작·종료 시각이 파싱 안 되는 문자열이면 Date가 NaN을 주는데, NaN<=0이 항상 false라

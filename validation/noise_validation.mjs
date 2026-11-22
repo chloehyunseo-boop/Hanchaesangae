@@ -41,9 +41,12 @@ function check(name, condition, detail) {
 // 3) 물리 상식: 음원 세기(LW)가 10dB 세지면 결과도 정확히 10dB 세져야 함(선형 가산)
 {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
-  const source = { lat: 37.5203, lon: 127.1268 };
-  const receiver = { lat: 37.5203 - 0.005, lon: 127.1268 + 0.004 }; // 풍향 부채꼴 안
   const hour = "2026-11-21T19:00:00+09:00";
+  // time을 안 주면(11/22 3차 외부 검토로 "항상 가동"이 아니라 "모름→제외"로 바뀜) 전파
+  // 물리만 보는 이 테스트들이 전부 value:null이 돼버려서, 그 시간 내내 가동하는 걸로
+  // 명시해요.
+  const source = { lat: 37.5203, lon: 127.1268, time: { start: hour, end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } };
+  const receiver = { lat: 37.5203 - 0.005, lon: 127.1268 + 0.004 }; // 풍향 부채꼴 안
   const low = computeNoiseCell({ source: { ...source, lwDb: 100, allowApprox: true }, receiver, weather, hour });
   const high = computeNoiseCell({ source: { ...source, lwDb: 110, allowApprox: true }, receiver, weather, hour });
   check("LW +10dB → 결과도 +10dB", Math.abs(high.value - low.value - 10) < 1e-9, `${low.value.toFixed(2)} → ${high.value.toFixed(2)}`);
@@ -52,8 +55,8 @@ function check(name, condition, detail) {
 // 4) 물리 상식: 거리가 멀수록(같은 풍향선 상) 항상 더 작아져야 함(단조 감소)
 {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
-  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true };
   const hour = "2026-11-21T19:00:00+09:00";
+  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true, time: { start: hour, end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } };
   const near = computeNoiseCell({ source, receiver: { lat: 37.5203 - 0.003, lon: 127.1268 + 0.0024 }, weather, hour });
   const mid = computeNoiseCell({ source, receiver: { lat: 37.5203 - 0.006, lon: 127.1268 + 0.0048 }, weather, hour });
   const far = computeNoiseCell({ source, receiver: { lat: 37.5203 - 0.012, lon: 127.1268 + 0.0096 }, weather, hour });
@@ -63,9 +66,10 @@ function check(name, condition, detail) {
 // 5) 풍향 부채꼴 밖이면 계산 안 함(value:null) — "계산 안 함" vs "0" 구분 확인
 {
   const weather = { windVecFromDeg: 332, wsd10m: 3, tempC: 10, rhPercent: 50 };
-  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true };
+  const hour5 = "2026-11-21T19:00:00+09:00";
+  const source = { lat: 37.5203, lon: 127.1268, lwDb: 110, allowApprox: true, time: { start: hour5, end: "2026-11-21T20:00:00+09:00", 출처: "공단API명시" } };
   // 바람 반대쪽(풍상측)
-  const upwind = computeNoiseCell({ source, receiver: { lat: 37.5203 + 0.01, lon: 127.1268 - 0.008 }, weather, hour: "2026-11-21T19:00:00+09:00" });
+  const upwind = computeNoiseCell({ source, receiver: { lat: 37.5203 + 0.01, lon: 127.1268 - 0.008 }, weather, hour: hour5 });
   check("풍향 부채꼴 밖 → value:null(0 아님)", upwind.value === null && upwind.flags.includes("풍향부채꼴밖"), JSON.stringify(upwind.flags));
 }
 

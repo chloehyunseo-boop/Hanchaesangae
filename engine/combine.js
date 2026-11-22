@@ -209,6 +209,7 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
     });
     const v = weather.wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
 
+    let sourceContributed = false;
     for (const freqHz of CONCAWE_BANDS_HZ) {
       const bandLw = lwDb + source.spectrumRatiosDb[freqHz] + weightDb; // validateSpectrum이 이미 확인함
       const band = calcConcaweBand({
@@ -218,8 +219,17 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
         stability: weather.stability, v, hs: source.hs, hr: source.hr,
       });
       band.flags.forEach((f) => allFlags.add(f));
-      if (band.value !== null && Number.isFinite(band.value)) perBandLevels[freqHz].push(band.value); // NaN 방어(외부 검토 지적)
+      if (band.value !== null && Number.isFinite(band.value)) { // NaN 방어(외부 검토 지적)
+        perBandLevels[freqHz].push(band.value);
+        sourceContributed = true;
+      }
     }
+    // 3차 외부 검토 지적(11/22): 음원이 "가동 중"으로 셈해졌는데도(anyActive=true) 7밴드
+    // 전부 거리<100m 등의 이유로 null이면 — 예를 들어 30m 앞 큰 무대가 100m 제한에 걸려
+    // 전부 빠지고 먼 무대만 남는 경우 — 그동안 excludedCount에 안 잡혔어요. 그 결과
+    // "일부음원제외" 없이 "전부 합산된 정상 결과"처럼 등급까지 그대로 나왔습니다. 음원이
+    // 활성인데 밴드를 하나도 못 채웠으면 이것도 제외로 셈해요.
+    if (!sourceContributed) excludedCount++;
   }
 
   if (excludedCount > 0) allFlags.add("일부음원제외"); // 전부 합산된 것과 구분 — 몇 개가 빠졌는지는 다른 flags로 알 수 있음
