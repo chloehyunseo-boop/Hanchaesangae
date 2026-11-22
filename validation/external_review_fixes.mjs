@@ -390,7 +390,13 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
   const nearGen = { lat: 37.5203 + 50 / 111320, lon: 127.1268, 엔진출력_kW: 500, time: { start: hour, end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } };
   const cell = computeExhaustCell({ generators: [nearGen], receiver, weather, hour });
   check("근거리(50m) 발전차 → 근거리불확실 플래그 붙음(재현 확인)", cell.flags.includes("근거리불확실"));
-  check("plume.js가 하한값을 아직 안 주므로 하한값/하한등급은 null(통과 경로만 확인)", cell.하한값 === null && cell.하한등급 === null);
+  // 11/22 하린 라인: plume.js가 하한값을 돌려주기 시작해서 실제 숫자로 바꿨어요.
+  // 가까운 1대만 있으면 그 1대를 뺀 합계 = 0 → 하한값 0, 하한등급 null(기준 미만).
+  check("근거리 1대만 → 하한값 0, 하한등급 null", cell.하한값 === 0 && cell.하한등급 === null);
+  // 먼 발전차 4대(풍하 400m) + 가까운 1대 → 하한값은 숫자이고 value 이하
+  const far = [0, 1, 2, 3].map((i) => ({ ...nearGen, lat: 37.5203 + 400 / 111320, lon: 127.1268 + (i * 10) / 88000 }));
+  const cell2 = computeExhaustCell({ generators: [...far, nearGen], receiver, weather, hour });
+  check("먼 4대 + 가까운 1대 → 하한값은 숫자, value 이하", typeof cell2.하한값 === "number" && cell2.하한값 > 0 && cell2.하한값 <= cell2.value);
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

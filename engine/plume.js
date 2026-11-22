@@ -571,7 +571,8 @@ function noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec,
  * @param {number} [p.대기온도_C]  기상청 TMP. 없으면 연기 상승을 빼요(꼬리표).
  * @param {number} [p.fanHalfWidthDeg]  0 이상 180 이하
  * @param {number} [p.fanStepDeg]  0 초과
- * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null, no2NoxRatio?: number}}
+ * @returns {{value: number|null, flags: string[], scenario: string, reason?: string, centerValue: number|null, maxAtOffsetDeg: number|null, no2NoxRatio?: number, 하한값?: number|null}}
+ *   하한값: flags에 "근거리불확실"이 있을 때만 숫자 — 풍하 100m 안 발전차를 뺀 NO2 ppm(부채꼴 최댓값). value의 진짜 하한. 그 외엔 null(계산 실패면 없음).
  */
 export function calcExhaustAtReceiver({
   generators, receiverLat, receiverLon, stability, wsd10m, windVecFromDeg,
@@ -648,22 +649,33 @@ export function calcExhaustAtReceiver({
 
   let best = null;
   let center = null;
+  // 하한값(11/22 결정, '근거리불확실' 표시 B안): 각 방향에서 풍하 100m 안의 발전차를 뺀 NOx 합을
+  // NO2로 바꾼 값 중 최댓값. NO2(ARM2 환산 포함)는 NOx가 늘면 줄지 않으므로(validation/
+  // plume_lowerbound_test.mjs에서 확인) 뺀 값 ≤ 그 방향의 전체 값 ≤ 부채꼴 최댓값(value)이라
+  // value의 진짜 하한이에요. 새 계수 없음.
+  let lower = null;
   for (const off of offsets) {
     const vec = (((windVecFromDeg + off) % 360) + 360) % 360;
     let noxTotal = 0;
+    let noxFar = 0;
     const flags = new Set(baseFlags);
     for (const g of generators) {
       const r = noxFromGenerator({ g, receiverLat, receiverLon, stability, wsd10m, vec, 가정, 대기온도_C });
       if (r.nox === null) return fail(r.reason, [...flags, ...r.flags]);
       noxTotal += r.nox;
+      if (!r.flags.includes("근거리불확실")) noxFar += r.nox;
       r.flags.forEach((f) => flags.add(f));
     }
     const { ppm, ratio } = toNo2(noxTotal);
+    const farPpm = toNo2(noxFar).ppm;
+    if (lower === null || farPpm > lower) lower = farPpm;
     if (Math.abs(off) < 1e-9) center = ppm;
     if (best === null || ppm > best.ppm) best = { ppm, ratio, flags, off };
   }
   const flags = [...best.flags];
   if (fanHalfWidthDeg > 0) flags.push("풍향부채꼴최대");
   if (!legacy && 가정 !== "전량NO2") flags.push("ARM2");
-  return { value: best.ppm, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off, no2NoxRatio: best.ratio };
+  // 지도에 빗금이 그려지는 경우(최댓값 방향에 근거리불확실)에만 하한값을 돌려줘요. 그 외엔 null.
+  const 하한값 = flags.includes("근거리불확실") ? Math.min(lower, best.ppm) : null;
+  return { value: best.ppm, flags, scenario, centerValue: center, maxAtOffsetDeg: best.off, no2NoxRatio: best.ratio, 하한값 };
 }
