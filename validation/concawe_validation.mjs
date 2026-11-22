@@ -84,9 +84,18 @@ check("범주4 ⇒ K4=0", concaweK4(concaweData, 1000, 4, 500) === 0);
 {
   const near = calcConcaweBand({ concaweData, freqHz: 1000, lwDb: 110, d: 50, groundType: "soft", dSoftM: 50, tempC: 10, rhPercent: 75, stability: "D", v: 2, hs: 1.5 });
   check("100m 미만 → value:null", near.value === null && near.flags.includes("근거리100m미만_계산안함"));
+  // 5차 외부 검토 지적(11/22, 하린): K3·K4·K5(원문 다항식, 100~2000m에서만 검증됨)만
+  // 2000m로 고정하고, K1(거리감쇠)·K2(공기흡수)는 실제 거리를 그대로 써야 해요 — 전에는
+  // K1·K2까지 고정해서 2000m 밖에서 소리가 전혀 안 줄어드는(2km·4km 똑같이 30.89dB(A))
+  // 버그가 있었어요. 이제 2000m 넘어도 계속 줄어드는지, 플래그는 그대로 붙는지 확인해요.
   const far2000 = calcConcaweBand({ concaweData, freqHz: 1000, lwDb: 110, d: 2000, groundType: "soft", dSoftM: 2000, tempC: 10, rhPercent: 75, stability: "D", v: 2, hs: 1.5 });
   const far3000 = calcConcaweBand({ concaweData, freqHz: 1000, lwDb: 110, d: 3000, groundType: "soft", dSoftM: 2000, tempC: 10, rhPercent: 75, stability: "D", v: 2, hs: 1.5 });
-  check("2000m 초과 → 2000m 값으로 고정(외삽 플래그)", far3000.value === far2000.value && far3000.flags.includes("거리2000m초과_외삽"));
+  const far4000 = calcConcaweBand({ concaweData, freqHz: 1000, lwDb: 110, d: 4000, groundType: "soft", dSoftM: 2000, tempC: 10, rhPercent: 75, stability: "D", v: 2, hs: 1.5 });
+  check(
+    "2000m 초과해도 K1·K2는 실제 거리로 계속 줄어듦(외삽 플래그는 그대로)",
+    far3000.value < far2000.value && far4000.value < far3000.value && far3000.flags.includes("거리2000m초과_외삽") && far4000.flags.includes("거리2000m초과_외삽"),
+    `2000m=${far2000.value?.toFixed(2)} > 3000m=${far3000.value?.toFixed(2)} > 4000m=${far4000.value?.toFixed(2)}`,
+  );
 }
 
 // calcNoiseConcaweHourly 통합: 스펙트럼 없으면 계산 안 함(ISO 쪽과 달리 폴백 없음 — 로드맵 규칙)

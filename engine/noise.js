@@ -231,6 +231,17 @@ export function stageActiveMinutes(source, hourIso) {
   // CLAUDE.md 3번). 이제 둘 다 똑같이 "모르면 제외"로 통일해요.
   if (!time) return { activeMinutes: 0, flags: ["공연시간정보없음"] };
   if (time.출처 === "미확인" || !time.start) return { activeMinutes: 0, flags: ["공연시간미확인"] };
+  // 5차 외부 검토 지적(11/22, 하린): 종료가 시작보다 빠르면(자정 넘는 공연을 날짜 안
+  // 바꾸고 입력한 실수 등) overlapMinutesInHour가 조용히 0을 돌려줘서(음수를 0으로
+  // 자르는 Math.max 때문) "확실히 안 함"과 똑같이 보였어요 — 실제로는 "입력이 이상해서
+  // 모름"이에요.
+  if (time.end) {
+    const startMs = new Date(time.start).getTime();
+    const endMs = new Date(time.end).getTime();
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs <= startMs) {
+      return { activeMinutes: 0, flags: ["시간역전"] };
+    }
+  }
   const minutes = overlapMinutesInHour(time.start, time.end, hourIso);
   // 시작·종료 시각이 파싱 안 되는 문자열이면 Date가 NaN을 주는데, NaN<=0이 항상 false라
   // 제외 로직을 그냥 통과해서 "한 시간 내내 가동"처럼 동작했어요(외부 검토 지적, 11/22 수정).
@@ -343,7 +354,10 @@ export function applyVolumePreset(baseLwDb, preset = "기본") {
 // ---------------------------------------------------------------------------
 // CONCAWE 전체(K1~K7) — 11/21 구현. 숫자 출처: data/concawe_4_81.json(하린이
 // 1차+2차 독립 대조). 원문이 답하지 않는 부분(거리 밖, 25.7 인쇄오류, K5 γ 불일치,
-// 경계값, K6·K7 등)은 그 문서 16번 "검토자 추천안"을 그대로 따랐어요(친구 라인 결정).
+// 경계값, K6·K7 등)은 그 문서 §11 "결정할 것" 12개 항목을 11/21에 친구와 상의해 고른
+// 결과예요. ("16번 검토자 추천안"이라는 인용은 §16이 실제로 존재하지 않는 잘못된 인용
+// 이었어요 — 하린이 11/22에 지적, decisions.md 11/22 "CONCAWE_원문정리.md §16 인용
+// 오류" 기록 참고. 이 12개 선택이 실제로 상의한 내용인지는 재확인 중.)
 // ---------------------------------------------------------------------------
 
 /** 계산에 쓰는 CONCAWE 밴드(Hz). 원문 범위 그대로 7개(8kHz 제외 — 추천안 3번). */
@@ -395,7 +409,13 @@ function k2TableLookup(concaweData, freqHz, tempC, rhPercent) {
 export function concaweK2(concaweData, freqHz, tempC, rhPercent, d) {
   const alphaTable = k2TableLookup(concaweData, freqHz, tempC, rhPercent); // dB/km
   if (alphaTable !== null) return { k2: alphaTable * (d / 1000), flags: [] };
-  const alphaIso = atmosphericAbsorptionDbPerM(freqHz, tempC, rhPercent) * 1000; // dB/m → dB/km
+  // 5차 외부 검토 지적(11/22, 하린): 표가 범위 밖이라 ISO 식으로 대체할 때, 그냥 freqHz
+  // (예: 4000Hz)를 넣으면 CONCAWE 원문이 쓰는 "아래쪽 1/3옥타브" 대표주파수(4000Hz 밴드는
+  // 실제로 표의 3200Hz 행을 씀, concaweData의 옥타브_to_표행 매핑과 같은 규칙)와 안 맞아서
+  // 격차가 커요(예: 4000Hz로 계산하면 55.3dB/km, 표가 쓰는 3200Hz로 계산하면 37.2dB/km —
+  // 표값 32.5와 더 가까움). ISO로 대체할 때도 같은 대표주파수를 써요.
+  const representativeFreq = Number(concaweData.K2_대기흡음_dB_per_km.옥타브_to_표행[String(freqHz)] ?? freqHz);
+  const alphaIso = atmosphericAbsorptionDbPerM(representativeFreq, tempC, rhPercent) * 1000; // dB/m → dB/km
   return { k2: alphaIso * (d / 1000), flags: ["K2범위밖_ISO9613대체"] };
 }
 
@@ -448,7 +468,9 @@ export function concaweK4(concaweData, freqHz, category, d) {
   return evalPoly(coeffs, Math.log10(d));
 }
 
-// K5 γ — 추천안 B(원문 p76 그림 9 그래프 판독값, docs/CONCAWE_원문정리.md 15번 G).
+// K5 γ — 원문 p76 그림 9 그래프 판독값 사용(docs/CONCAWE_원문정리.md §14 "K5 γ 원문
+// 불일치"의 B안). 아래 6개 점(ψ,γ)을 누가·언제·어떻게 그림에서 읽었는지는 문서에
+// 기록이 없어요(하린이 11/22에 지적) — 그림 9를 다시 읽어 표로 남겨야 해요.
 // 원문 인쇄 식(1−0.478ψ+0.068ψ²−0.0029ψ³)은 이 그래프와 안 맞아요(원문 내부 불일치,
 // 같은 문서 14번) — 본문(p32)이 "γ는 그림 9에서 구한다"고 적어 그래프 쪽을 따랐어요.
 const GAMMA_GRAPH_PSI_DEG = [0, 1, 2, 3, 4, 5.2];
@@ -523,8 +545,13 @@ export function calcConcaweBand({ concaweData, freqHz, lwDb, d, groundType, dSof
     dCalc = 2000;
     flags.push("거리2000m초과_외삽");
   }
-  const k1 = concaweK1(dCalc);
-  const { k2, flags: k2Flags } = concaweK2(concaweData, freqHz, tempC, rhPercent, dCalc);
+  // 5차 외부 검토 지적(11/22, 하린): K1(거리감쇠)·K2(공기흡수)는 2000m 밖에서도 실제
+  // 물리 현상(거리가 늘수록 계속 줄어드는 것)이라 d를 그대로 써야 해요 — K3·K4·K5만
+  // CONCAWE 원문 다항식이 100~2000m에서만 검증됐으니 dCalc(클램프)를 써요. 전에는
+  // K1·K2까지 dCalc를 써서 2000m 밖에서 소리가 전혀 안 줄어드는(과대추정) 버그가 있었어요
+  // (2km와 4km에서 똑같이 30.89dB(A)가 나오는 걸로 확인됨, 3차 검토 때 이미 관찰했었음).
+  const k1 = concaweK1(d);
+  const { k2, flags: k2Flags } = concaweK2(concaweData, freqHz, tempC, rhPercent, d);
   flags.push(...k2Flags);
   const dSoft = groundType === "soft" ? Math.min(dSoftM ?? dCalc, dCalc) : dCalc;
   // K3 다항식도 100~2000m 범위에서만 맞다고 검증됐어요(concawe_4_81.json의 _적용거리_m) —

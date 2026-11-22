@@ -250,15 +250,31 @@ export function overlapMinutesInHour(startIso, endIso, hourIso) {
  * OutputCell 하나를 지도에서 어떻게 표시할지 정해요. 값 자체(숫자·단계)를 바꾸지 않고,
  * "보여주는 방식"만 결정해요 — 계산은 noise.js/plume.js가, 표시 규칙은 여기 한 곳에만 둬요.
  * @param {import("./common.js").OutputCell} cell
- * @returns {{ mode: "blank"|"hatch"|"value", hideValue: boolean, hideLevel: boolean }}
- *   mode "blank": value가 null → 빈칸(아무 것도 안 그림)
+ * @returns {{ mode: "blank"|"unknown"|"hatch"|"value", hideValue: boolean, hideLevel: boolean }}
+ *   mode "blank": value가 null이고 "확실히 조용함"(예: 가동중발전차없음) → 빈칸(아무 것도 안 그림)
+ *   mode "unknown": value가 null이지만 이유가 "몰라서 못 계산함"(약풍·시간미확인·입력오류 등,
+ *     5차 외부 검토 지적 — 안전한 것처럼 보이는 빈칸과 구분해야 함) → blank와 다른 표시(예: 회색)
  *   mode "hatch": flags에 "근거리불확실"이 있음 → 숫자·단계 안 보여주고 회색 빗금만
- *   mode "value": 그 외 → 숫자·단계 그대로 보여줌
+ *   mode "value": 그 외 → 숫자·단계 그대로 보여줌(일부음원제외면 hideLevel:true)
  */
+// 5차 외부 검토 지적(11/22, 하린): value:null이 전부 똑같이 "빈칸"으로 보여서, 이유가
+// "확실히 조용함"(발전차 없음 등)인지 "몰라서 못 계산함"(약풍·시간미확인·입력오류 등 —
+// 가장 위험할 수 있는 약풍 밤이 여기 해당)인지 구분이 안 됐어요. "모르는" 쪽을 가리키는
+// 플래그가 하나라도 있으면 blank 대신 unknown으로 구분해요.
+const UNCERTAIN_NULL_FLAGS = new Set([
+  "약풍미표시", "발전차시간미확인", "발전차시간역전",
+  "공연시간미확인", "공연시간정보없음", "시간파싱오류", "시간역전",
+  "계산불가", "계산불가_수음점좌표", "계산불가_풍속", "계산불가_풍향", "계산불가_기온", "계산불가_습도",
+]);
+
 export function mapDisplayFor(cell) {
   // 2차 외부 검토 지적(11/22): null만 걸렀고 NaN은 "value" 모드로 그대로 표시되고
-  // 있었어요(결측 기온 등으로 NaN이 나올 수 있는 경로가 있음) — NaN도 blank로 처리해요.
+  // 있었어요(결측 기온 등으로 NaN이 나올 수 있는 경로가 있음) — NaN도 blank/unknown으로
+  // 처리해요.
   if (typeof cell.value !== "number" || !Number.isFinite(cell.value)) {
+    if (cell.flags?.some((f) => UNCERTAIN_NULL_FLAGS.has(f))) {
+      return { mode: "unknown", hideValue: true, hideLevel: true };
+    }
     return { mode: "blank", hideValue: true, hideLevel: true };
   }
   if (cell.flags?.includes("근거리불확실")) {

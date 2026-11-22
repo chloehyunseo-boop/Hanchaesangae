@@ -145,12 +145,31 @@ const CanvasCellLayer = L.Layer.extend({
         }
         ctx.restore();
       }
+      if (style.dotted) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(nw.x, nw.y, w, h);
+        ctx.clip();
+        ctx.fillStyle = "rgba(60,60,60,0.6)";
+        for (let yy = nw.y + 3; yy < se.y; yy += 6) {
+          for (let xx = nw.x + 3; xx < se.x; xx += 6) {
+            ctx.beginPath();
+            ctx.arc(xx, yy, 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
     }
   },
   _styleFor(cell) {
     const disp = mapDisplayFor(cell);
     if (disp.mode === "blank") return null;
     const palette = this.options.palette;
+    // 5차 외부 검토 지적(11/22, 하린): "확실히 조용함"(blank, 안 그림)과 "몰라서 못
+    // 계산함"(unknown, 가장 위험할 수 있는 약풍 밤 등)을 다르게 그려야 해요 — unknown은
+    // 점 패턴(빗금과 또 다르게)으로 "모름"을 표시해요.
+    if (disp.mode === "unknown") return { fill: palette.uncertain, dotted: true };
     if (disp.mode === "hatch") return { fill: palette.uncertain, hatch: true };
     if (disp.hideLevel) return { fill: palette.uncertain, hatch: true }; // 일부음원제외 — 등급 보류
     return { fill: palette[cell.level] ?? palette.uncertain, hatch: false };

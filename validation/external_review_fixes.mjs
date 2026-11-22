@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import {
   calcNoiseConcaweHourly, calcConcaweBand, indoorFacadeSourcePowerLevel,
-  stageActiveMinutes, validateNoiseInput, validateSpectrum, CONCAWE_BANDS_HZ,
+  stageActiveMinutes, validateNoiseInput, validateSpectrum, CONCAWE_BANDS_HZ, concaweK2,
 } from "../engine/noise.js";
 import { computeNoiseCellConcawe, computeHourOutputCells, generateGridPoints, isGeneratorActiveAtHour, generatorActivityAtHour, computeExhaustCell } from "../engine/combine.js";
 import { mapDisplayFor } from "../engine/common.js";
@@ -317,6 +317,66 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
 
   const allUnknown = computeExhaustCell({ generators: [unknownGen], receiver, weather, hour });
   check("전부 시간을 몰라서 못 셈 → 발전차시간미확인(가동중발전차없음과 구분됨)", allUnknown.flags.includes("발전차시간미확인") && !allUnknown.flags.includes("가동중발전차없음"));
+}
+
+// 21) 5차 외부 검토(하린): K1·K2는 2000m 밖에서도 실제 거리로 계속 줄어야 함(이미 20번 위
+// concawe_validation.mjs에서 확인 — 여기선 K2의 ISO 대체 대표주파수만 재확인)
+{
+  const representative = concaweK2(concaweData, 4000, 5, 40, 1000);
+  const nominal4000 = concaweK2({ ...concaweData, K2_대기흡음_dB_per_km: { ...concaweData.K2_대기흡음_dB_per_km, 옥타브_to_표행: {} } }, 4000, 5, 40, 1000);
+  check("K2 범위 밖(4000Hz) ISO 대체가 대표주파수(3200Hz 매핑) 씀 — 그냥 4000Hz보다 작음", representative.k2 < nominal4000.k2, `대표주파수=${representative.k2.toFixed(2)} vs 4000Hz그대로=${nominal4000.k2.toFixed(2)}`);
+}
+
+// 22) 5차 외부 검토(하린): 발전차 가동 판정이 "시간대 칸 시작"만 보고 절반 가동인 칸을
+// 통째로 '안 함'으로 잘못 분류하던 문제(19:30 시작 → 가동시작 17:30인데 17:00~18:00 칸)
+{
+  const g = { time: { start: "2026-11-22T19:30:00+09:00", end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } };
+  check("발전차 19:30 시작(가동시작 17:30) → 17:00~18:00 칸은 active(절반 가동)", generatorActivityAtHour(g, "2026-11-22T17:00:00+09:00") === "active");
+  check("같은 발전차 → 16:00~17:00 칸은 아직 inactive", generatorActivityAtHour(g, "2026-11-22T16:00:00+09:00") === "inactive");
+}
+
+// 23) 5차 외부 검토(하린): hourIso 자체가 깨진 문자열이면 발전차가 전부 '가동 중'으로
+// 둔갑하던 문제
+{
+  const g = { time: { start: "2026-11-22T19:00:00+09:00", end: "2026-11-22T22:00:00+09:00", 출처: "공단API명시" } };
+  check("hourIso가 깨진 문자열 → unknown(가동 중으로 둔갑 안 함)", generatorActivityAtHour(g, "이상한시각") === "unknown");
+}
+
+// 24) 5차 외부 검토(하린): 종료가 시작보다 빠르면(시간 역전, 자정 넘는 공연 입력 실수 등)
+// 조용히 "가동 안 함"으로 흘러가던 문제 — 발전차·공연 양쪽 다
+{
+  const hour = "2026-11-22T19:00:00+09:00";
+  check("발전차 시간 역전(종료<시작) → unknown", generatorActivityAtHour({ time: { start: "2026-11-22T19:00:00+09:00", end: "2026-11-22T17:00:00+09:00", 출처: "공단API명시" } }, hour) === "unknown");
+
+  const r = stageActiveMinutes({ time: { start: "2026-11-22T19:00:00+09:00", end: "2026-11-22T17:00:00+09:00", 출처: "공단API명시" } }, hour);
+  check("공연 시간 역전(종료<시작) → activeMinutes:0 + '시간역전' 플래그(모름으로 처리됨)", r.activeMinutes === 0 && r.flags.includes("시간역전"));
+
+  const receiver = { lat: BASE.receiverLat, lon: BASE.receiverLon };
+  const weather = { windVecFromDeg: 0, wsd10m: 2, stability: "D", tempC: 10, rhPercent: 75 };
+  const reversedSource = { lat: BASE.sourceLat, lon: BASE.sourceLon, lwDb: 120, groundType: "soft", dSoftM: 500, hs: 1.5, spectrumRatiosDb: FLAT_SPECTRUM, time: { start: hour, end: "2026-11-22T17:00:00+09:00", 출처: "공단API명시" } };
+  const cell = computeNoiseCellConcawe({ stageSources: [reversedSource], receiver, weather, hour, concaweData });
+  check("음원 시간 역전인 음원만 있으면 → 일부음원제외 플래그 붙음(단순 '안 함'과 구분)", cell.flags.includes("일부음원제외") && cell.flags.includes("시간역전"));
+}
+
+// 25) 5차 외부 검토(하린): computeExhaustCell이 '발전차시간역전'을 '발전차시간미확인'과
+// 구분해서 알려주는지
+{
+  const hour = "2026-11-22T19:00:00+09:00";
+  const receiver = { lat: 37.5203, lon: 127.1268 };
+  const weather = { stability: "D", wsd10m: 3, windVecFromDeg: 270, tmp: 10 };
+  const reversedGen = { lat: 37.5200, lon: 127.1265, 엔진출력_kW: 500, time: { start: hour, end: "2026-11-22T17:00:00+09:00", 출처: "공단API명시" } };
+  const cell = computeExhaustCell({ generators: [reversedGen], receiver, weather, hour });
+  check("발전차 시간 역전 → 발전차시간미확인 + 발전차시간역전 둘 다 붙음", cell.flags.includes("발전차시간미확인") && cell.flags.includes("발전차시간역전"));
+}
+
+// 26) 5차 외부 검토(하린): mapDisplayFor가 "확실히 조용함"(blank)과 "몰라서 못 함"(unknown,
+// 가장 위험할 수 있는 약풍 밤 등)을 구분하는지
+{
+  check("가동중발전차없음(확실히 조용함) → blank", mapDisplayFor({ value: null, flags: ["가동중발전차없음"] }).mode === "blank");
+  check("약풍미표시(몰라서 못 계산, 위험할 수 있음) → unknown(blank 아님)", mapDisplayFor({ value: null, flags: ["약풍미표시"] }).mode === "unknown");
+  check("발전차시간미확인 → unknown", mapDisplayFor({ value: null, flags: ["발전차시간미확인"] }).mode === "unknown");
+  check("계산불가_풍속 → unknown", mapDisplayFor({ value: null, flags: ["계산불가_풍속"] }).mode === "unknown");
+  check("플래그 없이 value:null → blank(그대로)", mapDisplayFor({ value: null, flags: [] }).mode === "blank");
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

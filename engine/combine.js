@@ -58,7 +58,12 @@ export function generateGridPoints(cellSizeM = CALC_GRID.cellSizeM) {
 export function generatorActivityAtHour(generator, hourIso) {
   const time = generator?.time;
   if (!time || time.출처 === "미확인" || !time.start) return "unknown"; // 정보 자체가 없음/명시적 미확인
-  const hourMs = new Date(hourIso).getTime();
+  // 5차 외부 검토 지적(11/22, 하린): hourIso 자체가 깨진 문자열이면 hourMs가 NaN이 되는데,
+  // 아래 두 비교(< , >=)가 NaN과 비교하면 항상 false라 "가동 중"으로 둔갑했어요. 호출하는
+  // 쪽(combine.js 안)은 항상 유효한 hourIso를 주지만, 방어적으로 막아요.
+  const hourStartMs = new Date(hourIso).getTime();
+  if (!Number.isFinite(hourStartMs)) return "unknown";
+  const hourEndMs = hourStartMs + 3600 * 1000;
   const startMs = new Date(time.start).getTime();
   // 4차 외부 검토 지적(11/22): 시작 시각이 파싱 안 되는 문자열(예: "bad")이면 startMs가
   // NaN이 되는데, "hourMs < activeFromMs"는 NaN과 비교하면 항상 false라 제외 로직을 그냥
@@ -67,12 +72,20 @@ export function generatorActivityAtHour(generator, hourIso) {
   // 못 믿는 거라, "가동 안 함"이라고 확신할 수 없음).
   if (!Number.isFinite(startMs)) return "unknown";
   const activeFromMs = startMs - 2 * 3600 * 1000;
-  if (hourMs < activeFromMs) return "inactive"; // 시작 시각을 알고, 아직 2시간 전도 안 됨 → 확실히 안 함
+  let endMs = null;
   if (time.end) {
-    const endMs = new Date(time.end).getTime();
+    endMs = new Date(time.end).getTime();
     if (!Number.isFinite(endMs)) return "unknown"; // 종료 시각이 있는데 못 읽음 → 모름
-    if (hourMs >= endMs) return "inactive"; // 종료 시각을 알고, 이미 끝남 → 확실히 안 함
+    // 5차 외부 검토 지적(11/22, 하린): 종료가 시작보다 빠르면(예: 자정 넘는 공연을 날짜
+    // 안 바꾸고 입력한 실수) "가동 안 함"으로 조용히 흘러가던 문제 — 모름으로 둬요.
+    if (endMs <= activeFromMs) return "unknown"; // 시간 역전
   }
+  // 5차 외부 검토 지적(11/22, 하린): "이 시간대 칸의 시작 시각"만 activeFromMs와 비교해서,
+  // 19:30 시작(가동 시작 17:30)인데 17:00~18:00 칸은 "칸 시작(17:00)이 17:30보다 이르다"는
+  // 이유로 통째로 '안 함'이 됐어요 — 실제로는 그 칸의 절반(17:30~18:00)은 가동 중이에요.
+  // 칸 전체(hourEndMs)가 가동 시작 전에 끝나야만 "확실히 안 함"이에요.
+  if (hourEndMs <= activeFromMs) return "inactive";
+  if (endMs !== null && hourStartMs >= endMs) return "inactive"; // 칸 전체가 종료 후
   return "active";
 }
 
@@ -97,10 +110,18 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
 
   const activeGenerators = [];
   let unknownCount = 0;
+  const extraFlags = new Set();
   for (const g of generators) {
     const status = generatorActivityAtHour(g, hour);
     if (status === "active") activeGenerators.push(g);
-    else if (status === "unknown") unknownCount++;
+    else if (status === "unknown") {
+      unknownCount++;
+      // 5차 외부 검토 지적(11/22, 하린): "시간 정보가 아예 없음/파싱 실패"와 "종료가 시작
+      // 보다 빠름(입력 실수로 보이는 시간 역전)"은 원인이 달라서 따로 표시해요.
+      const s = g?.time?.start ? new Date(g.time.start).getTime() : NaN;
+      const e = g?.time?.end ? new Date(g.time.end).getTime() : NaN;
+      if (Number.isFinite(s) && Number.isFinite(e) && e <= s) extraFlags.add("발전차시간역전");
+    }
   }
 
   // 하린 11/22 요청: 발전차 하나라도 "가동 중인지 몰라서" 뺀 거라면, 그 하나 때문에
@@ -108,7 +129,7 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
   // 같은 원칙 — ARM2가 전체 NOx 합으로 계산돼서 일부만 빼면 비율 자체가 틀려짐).
   // "확실히 가동 안 함"(시간을 알고 그 시간엔 꺼져 있음)과는 구분해요.
   if (unknownCount > 0) {
-    return { ...baseCell, value: null, level: null, flags: ["발전차시간미확인"], scenario };
+    return { ...baseCell, value: null, level: null, flags: ["발전차시간미확인", ...extraFlags], scenario };
   }
   if (activeGenerators.length === 0) {
     return { ...baseCell, value: null, level: null, flags: ["가동중발전차없음"], scenario };
@@ -223,7 +244,7 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
       // "이 공연이 이 시간에 했는지 몰라서 뺐음"(시간정보없음·공연시간미확인·시간파싱오류)이
       // 똑같이 조용히 continue돼서 구분이 안 됐어요 — 음량이 큰 공연이 후자라도 작은 공연만
       // 있을 때와 똑같은 등급이 그대로 나왔습니다. 몰라서 뺀 경우만 "일부음원제외"로 셈해요.
-      const uncertain = ["공연시간미확인", "공연시간정보없음", "시간파싱오류"];
+      const uncertain = ["공연시간미확인", "공연시간정보없음", "시간파싱오류", "시간역전"];
       if (timeFlags.some((f) => uncertain.includes(f))) excludedCount++;
       continue;
     }
