@@ -17,7 +17,7 @@ import { CALC_GRID, mapDisplayFor } from "./common.js";
 import {
   calcNoiseIso9613UpperOctave, indoorFacadeSourcePowerLevel, classifyNoiseLevel,
   stageActiveMinutes, timeWeightDb, calcConcaweBand, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
-  sourceReceiverGeometry,
+  sourceReceiverGeometry, validateSpectrum,
 } from "./noise.js";
 import { calcExhaustAtReceiver, classifyExhaustLevel } from "./plume.js";
 
@@ -29,6 +29,7 @@ const DEG_PER_M_LAT = 1 / 111320;
  * @returns {{lat: number, lon: number}[]}
  */
 export function generateGridPoints(cellSizeM = CALC_GRID.cellSizeM) {
+  if (!(cellSizeM > 0)) throw new Error(`격자 간격은 0보다 커야 해요(무한 반복 방지, 외부 검토 지적): ${cellSizeM}`);
   const { minLat, maxLat, minLon, maxLon } = CALC_GRID.bounds;
   const midLat = (minLat + maxLat) / 2;
   const latStep = cellSizeM * DEG_PER_M_LAT;
@@ -172,7 +173,8 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
       ? indoorFacadeSourcePowerLevel(source.indoor.lpIndoorDb, source.indoor.R, source.indoor.S)
       : source.lwDb;
     if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) { allFlags.add("음원세기미확인"); continue; }
-    if (!source.spectrumRatiosDb) { allFlags.add("옥타브스펙트럼필수_모양미확인"); continue; }
+    const specBad = validateSpectrum(source.spectrumRatiosDb, CONCAWE_BANDS_HZ);
+    if (specBad) { allFlags.add("옥타브스펙트럼필수_모양미확인"); continue; } // 밴드 누락·빈 객체도 여기서 막힘(외부 검토 지적)
 
     const weightDb = timeWeightDb(activeMinutes) ?? 0; // ①시간가중: 음원별·밴드별 LW에 미리 더함
     if (activeMinutes < 60) allFlags.add(`시간가중_${Math.round(activeMinutes)}분`);
@@ -185,7 +187,7 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
     const v = weather.wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
 
     for (const freqHz of CONCAWE_BANDS_HZ) {
-      const bandLw = lwDb + (source.spectrumRatiosDb[freqHz] ?? 0) + weightDb;
+      const bandLw = lwDb + source.spectrumRatiosDb[freqHz] + weightDb; // validateSpectrum이 이미 확인함
       const band = calcConcaweBand({
         concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM,
         groundType: source.groundType, dSoftM: source.dSoftM,
@@ -193,7 +195,7 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
         stability: weather.stability, v, hs: source.hs, hr: source.hr,
       });
       band.flags.forEach((f) => allFlags.add(f));
-      if (band.value !== null) perBandLevels[freqHz].push(band.value);
+      if (band.value !== null && Number.isFinite(band.value)) perBandLevels[freqHz].push(band.value); // NaN 방어(외부 검토 지적)
     }
   }
 
@@ -215,17 +217,24 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
  * 합쳐요(로드맵 M2 11/19 완료 기준). 배출가스는 수음점마다 가동 중인 발전차를 전부
  * 모아 한 번만 계산해요(발전차별로 셀을 따로 안 만듦 — 11/21 바뀐 방식).
  *
- * 소음은 concaweData를 주면 **CONCAWE 전체(시민·공단 메인 지도, 로드맵 §2 표)**로 수음점당
- * 셀 하나(동시 음원 전부 합산)를 만들고, 안 주면 예전처럼 **ISO9613-2 상한(공단 비교용)**으로
- * 음원마다 셀을 따로 만들어요(11/21 이전 동작, 하위호환).
+ * `noiseScenario`를 **반드시** "concawe"(시민·공단 메인 지도, 로드맵 §2 표 — 수음점당 셀
+ * 하나, 동시 음원 전부 합산) 또는 "iso"(공단 비교용 — 음원마다 셀을 따로 만듦)로 명시해야
+ * 해요. 11/21엔 concaweData 유무로 조용히 자동 분기했는데, 표를 빠뜨리면 메인 지도가
+ * 아무 경고 없이 비교용 엔진으로 바뀌는 문제가 있었어요(외부 검토 지적, 11/22 수정).
  * @param {{ stageSources: any[], generatorSources: any[], weather: any, hour: string,
- *   grid?: {lat:number, lon:number}[], 가정?: string, concaweData?: object }} p
+ *   grid?: {lat:number, lon:number}[], 가정?: string, noiseScenario: "concawe"|"iso", concaweData?: object }} p
  * @returns {import("./common.js").OutputCell[]}
  */
-export function computeHourOutputCells({ stageSources, generatorSources, weather, hour, grid = generateGridPoints(), 가정 = "기본추정", concaweData }) {
+export function computeHourOutputCells({ stageSources, generatorSources, weather, hour, grid = generateGridPoints(), 가정 = "기본추정", noiseScenario, concaweData }) {
+  if (noiseScenario !== "concawe" && noiseScenario !== "iso") {
+    throw new Error(`noiseScenario은 "concawe" 또는 "iso" 중 하나를 꼭 넘겨야 해요(받은 값: ${noiseScenario}) — 메인 지도/공단 비교용이 조용히 안 바뀌게 11/22에 필수로 바꿨어요.`);
+  }
+  if (noiseScenario === "concawe" && !concaweData) {
+    throw new Error("noiseScenario이 'concawe'면 concaweData(data/concawe_4_81.json)를 꼭 같이 넘겨야 해요.");
+  }
   const cells = [];
   for (const receiver of grid) {
-    if (concaweData) {
+    if (noiseScenario === "concawe") {
       cells.push(computeNoiseCellConcawe({ stageSources, receiver, weather, hour, concaweData }));
     } else {
       for (const source of stageSources) {

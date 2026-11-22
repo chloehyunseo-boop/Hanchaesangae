@@ -279,3 +279,12 @@ export const NOISE_SOURCE_DISCLAIMER = {
   계약기준역산: "공연 음량은 공단 계약 기준 최대치로 가정",
   문헌기반가정: "공연 음량은 문헌 기반 가정값",
 };
+
+/**
+ * 소음 레이어에 시나리오별로 같이 보여줄 "무엇을 안 넣었는지" 문구. 외부 검토에서 제안한
+ * 표현을 그대로 채택했어요(11/22) — OutputCell.scenario로 어느 쪽인지 구분해요.
+ */
+export const NOISE_LAYER_DISCLAIMER = {
+  concawe: "CONCAWE 기반 시간별 추정 · 건물 및 방음벽 차폐 미반영",
+  iso: "ISO 기반 비교 추정 · 지면반사·차폐 미반영",
+};

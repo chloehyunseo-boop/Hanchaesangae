@@ -21,6 +21,38 @@ export function sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, rece
   return { distanceM, bearingDegSR, ...wind };
 }
 
+/**
+ * 소음 계산 입력이 물리적으로 말이 되는지 확인해요(plume.js의 validatePlumeInput과 같은
+ * 역할 — 외부 검토에서 noise.js 쪽엔 이 검증이 없다는 지적을 받아 11/22에 추가함).
+ * 문제가 있으면 이유(문자열), 없으면 null.
+ */
+export function validateNoiseInput({ sourceLat, sourceLon, receiverLat, receiverLon, tempC, rhPercent, windVecFromDeg }) {
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  for (const [k, v] of Object.entries({ sourceLat, receiverLat })) if (!finite(v) || v < -90 || v > 90) return `${k} 범위 밖: ${v}`;
+  for (const [k, v] of Object.entries({ sourceLon, receiverLon })) if (!finite(v) || v < -180 || v > 180) return `${k} 범위 밖: ${v}`;
+  if (tempC !== undefined && (!finite(tempC) || tempC < -50 || tempC > 60)) return `기온은 −50~60℃: ${tempC}`;
+  if (rhPercent !== undefined && (!finite(rhPercent) || rhPercent < 0 || rhPercent > 100)) return `습도는 0~100%: ${rhPercent}`;
+  if (windVecFromDeg !== undefined && (!finite(windVecFromDeg) || windVecFromDeg < 0 || windVecFromDeg > 360)) return `풍향은 0~360°: ${windVecFromDeg}`;
+  const distanceM = haversineDistanceM(sourceLat, sourceLon, receiverLat, receiverLon);
+  if (!finite(distanceM) || distanceM < 1) return `음원-수음점 거리가 너무 가깝거나 계산 불가: ${distanceM}`;
+  return null;
+}
+
+/**
+ * spectrumRatiosDb가 필요한 밴드를 전부 유한한 숫자로 갖고 있는지 확인해요. 밴드가 빠지면
+ * "?? 0"이 그 밴드에 전체 LW를 통째로 배정해버리는 과대평가 버그가 있었어요(외부 검토
+ * 지적, 11/22 수정) — 빈 객체나 일부 밴드 누락을 조용히 통과시키지 않아요.
+ * @returns {string|null} 문제 있으면 이유, 없으면 null
+ */
+export function validateSpectrum(spectrumRatiosDb, bands) {
+  if (!spectrumRatiosDb) return "스펙트럼 없음";
+  for (const f of bands) {
+    const v = spectrumRatiosDb[f];
+    if (typeof v !== "number" || !Number.isFinite(v)) return `밴드 ${f}Hz 값이 없거나 숫자가 아님`;
+  }
+  return null;
+}
+
 /** CLAUDE.md 6번: 강 65dB↑ · 중 55~65 · 약 45~55 (기준 미만이면 null) */
 export function classifyNoiseLevel(dBA) {
   if (dBA >= 65) return "강";
@@ -120,15 +152,24 @@ export function windGateFor(geometry) {
  * @returns {number} LW(dB)
  */
 export function indoorFacadeSourcePowerLevel(lpIndoorDb, transmissionLossDb, wallAreaM2) {
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  // R(투과손실)이 null/undefined면 JS가 뺄셈에서 0으로 취급해 "벽이 소리를 하나도 안 막는다"가
+  // 조용히 돼버려요(외부 검토 지적, 11/22 수정) — NaN을 돌려줘서 호출하는 쪽의
+  // Number.isFinite(lwDb) 검사에 걸리게 해요.
+  if (!finite(lpIndoorDb) || !finite(transmissionLossDb) || !finite(wallAreaM2) || wallAreaM2 <= 0) return NaN;
   return lpIndoorDb - transmissionLossDb + 10 * Math.log10(wallAreaM2) - 6;
 }
 
 /**
  * ISO 9613-2 상한 시나리오: Lp = LW + Dc − Adiv − Aatm.
  * 11/21 결정(사용자·하린 확인): Aground(지면 효과)·Abar(차폐) 원문은 여전히 못 구했지만
- * (유료 표준, noise.js 상단 주석 참고), 이 시나리오 이름 자체가 "상한"이고 지면 효과는
- * 보통 소리를 깎아주는 쪽이라 빼면 더 보수적(높은) 값이 나와요 — 그래서 지금은 이 둘을
- * 빼고 "거리 감쇠+공기 흡수+무대 지향성+바람 부채꼴"만으로 상한을 추정해요. 나중에 원문을
+ * (유료 표준, noise.js 상단 주석 참고). 그래서 지금은 이 둘을 빼고 "거리 감쇠+공기
+ * 흡수+무대 지향성+바람 부채꼴"만으로 추정해요. ⚠️ ISO 9613-2 표 3은 지면 효과(Agr)가
+ * 음수(지면이 소리를 더 크게 만드는 쪽)가 될 수 있는 경우도 인정해요 — 그래서 "Agr을
+ * 빼면 항상 더 높은(보수적인) 값이 나온다"는 보장은 사실 없어요(외부 검토 지적, 11/22에
+ * 과장된 표현 바로잡음). 지면 효과가 보통은 소리를 깎아주는 방향이라 "대체로" 보수적
+ * 쪽에 가깝다는 정도로만 이해해주세요 — "상한"이라는 이름은 그대로 두되, 엄밀한 수학적
+ * 보장이 아니라 설계 의도(공단 비교용 참고치)로 읽어주세요. 나중에 원문을
  * 구하면 Aground 항만 추가하면 돼요(구조는 안 바뀜).
  * @param {{ sourceLat: number, sourceLon: number, receiverLat: number, receiverLon: number,
  *   windVecFromDeg: number, lwDb: number, freqHz?: number, tempC: number, rhPercent: number }} p
@@ -138,6 +179,8 @@ export function indoorFacadeSourcePowerLevel(lpIndoorDb, transmissionLossDb, wal
  */
 export function calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, freqHz = 1000, tempC, rhPercent }) {
   const scenario = "ISO9613-2_상한추정_지면효과미적용";
+  const bad = validateNoiseInput({ sourceLat, sourceLon, receiverLat, receiverLon, tempC, rhPercent, windVecFromDeg });
+  if (bad) return { value: null, flags: ["계산불가"], scenario, reason: bad };
   const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
   const gate = windGateFor(geometry);
   const flags = [...gate.flags, "지면효과미적용"];
@@ -180,7 +223,11 @@ export function stageActiveMinutes(source, hourIso) {
   const time = source?.time;
   if (!time) return { activeMinutes: 60, flags: [] }; // time을 안 준 음원은 이전처럼 상시 가동 취급(하위호환)
   if (time.출처 === "미확인" || !time.start) return { activeMinutes: 0, flags: ["공연시간미확인"] };
-  return { activeMinutes: overlapMinutesInHour(time.start, time.end, hourIso), flags: [] };
+  const minutes = overlapMinutesInHour(time.start, time.end, hourIso);
+  // 시작·종료 시각이 파싱 안 되는 문자열이면 Date가 NaN을 주는데, NaN<=0이 항상 false라
+  // 제외 로직을 그냥 통과해서 "한 시간 내내 가동"처럼 동작했어요(외부 검토 지적, 11/22 수정).
+  if (!Number.isFinite(minutes)) return { activeMinutes: 0, flags: ["시간파싱오류"] };
+  return { activeMinutes: minutes, flags: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -215,14 +262,17 @@ export function logSumDb(levelsDb) {
  * @returns {{ value: number|null, flags: string[], scenario: string }}
  */
 export function calcNoiseIso9613UpperOctave({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent, spectrumRatiosDb, allowApprox = false }) {
-  if (!spectrumRatiosDb) {
+  const scenario = "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드";
+  const specBad = validateSpectrum(spectrumRatiosDb, OCTAVE_BANDS_HZ);
+  if (specBad) {
     if (allowApprox) {
       const fallback = calcNoiseIso9613Upper({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg, lwDb, tempC, rhPercent });
       return { ...fallback, flags: [...fallback.flags, "비공식근사_명시요청", "옥타브분해미적용_스펙트럼모양미확인"] };
     }
-    return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario: "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드" };
+    return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario, reason: specBad };
   }
-  const scenario = "ISO9613-2_상한추정_지면효과미적용_옥타브8밴드";
+  const bad = validateNoiseInput({ sourceLat, sourceLon, receiverLat, receiverLon, tempC, rhPercent, windVecFromDeg });
+  if (bad) return { value: null, flags: ["계산불가"], scenario, reason: bad };
   const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
   const gate = windGateFor(geometry);
   const flags = [...gate.flags, "지면효과미적용"];
@@ -231,7 +281,7 @@ export function calcNoiseIso9613UpperOctave({ sourceLat, sourceLon, receiverLat,
   const adiv = calcAdiv(geometry.distanceM);
   const dc = stageDirectivityDb();
   const bandLevelsDbA = OCTAVE_BANDS_HZ.map((freqHz) => {
-    const bandLw = lwDb + (spectrumRatiosDb[freqHz] ?? 0);
+    const bandLw = lwDb + spectrumRatiosDb[freqHz]; // validateSpectrum이 이미 전부 유한수임을 확인함
     const aatm = calcAatm(geometry.distanceM, freqHz, tempC, rhPercent);
     const bandLp = bandLw + dc - adiv - aatm;
     return bandLp + A_WEIGHT_DB[freqHz];
@@ -410,7 +460,10 @@ function gammaFromGraph(psiDeg) {
 }
 
 /**
- * K5: 음원·수음점 높이 보정. hs≤2m이면 0(원문 그림 9). hr은 수음점 높이(기본 1.5m, 원문 검증 조건).
+ * K5: 음원·수음점 높이 보정. hs≤2m이면 0(원문 그림 9). hr은 수음점 높이 — 원문이 실제로
+ * 검증한 조건은 1.2m(CONCAWE_원문정리.md §7)예요. 기본값 1.5m은 ISO 9613-2가 흔히 쓰는
+ * 수음점 높이 관례를 맞춘 우리 가정이고, 원문 검증 조건 그대로는 아니에요(외부 검토
+ * 지적으로 11/22에 이 구분을 분명히 함 — 전에는 "원문 검증 조건"이라고만 적어 혼동 있었음).
  * (K3+K4)가 −3dB보다 크지 않으면(즉 ≤−3) 0이에요(원문 p32, "<"지만 경계에서 두 식이 같은 0이라 영향 없음).
  */
 export function concaweK5(k3, k4, hs, hr, d) {
@@ -427,7 +480,34 @@ export function concaweK5(k3, k4, hs, hr, d) {
  * (추천안 1·3번).
  * @returns {{ value: number|null, flags: string[], category?: number }}
  */
+const VALID_STABILITY = ["A", "B", "C", "D", "E", "F", "G"];
+
+/**
+ * calcConcaweBand의 입력을 검증해요 — combine.js가 이 함수를 직접(calcNoiseConcaweHourly를
+ * 거치지 않고) 호출하기 때문에, 여기서도 한 번 더 막아야 해요. 안 그러면 v=NaN이 모든
+ * 비교를 통과해 조용히 범주 6이 되는 등(외부 검토 지적), 잘못된 입력이 그럴듯한 결과로
+ * 둔갑해요.
+ */
+function validateConcaweBandInput({ freqHz, d, tempC, rhPercent, stability, v, hs, hr }) {
+  const finite = (x) => typeof x === "number" && Number.isFinite(x);
+  if (!CONCAWE_BANDS_HZ.includes(freqHz)) return `밴드 아님: ${freqHz}`;
+  if (!finite(d) || d < 0) return `거리는 0 이상: ${d}`;
+  if (!finite(tempC) || tempC < -50 || tempC > 60) return `기온은 −50~60℃: ${tempC}`;
+  if (!finite(rhPercent) || rhPercent < 0 || rhPercent > 100) return `습도는 0~100%: ${rhPercent}`;
+  if (!VALID_STABILITY.includes(stability)) return `안정도는 A~G: ${stability}`;
+  if (!finite(v)) return `벡터풍속이 숫자가 아님: ${v}`;
+  if (!finite(hs) || hs < 0) return `음원 높이는 0 이상: ${hs}`;
+  if (!finite(hr) || hr < 0) return `수음점 높이는 0 이상: ${hr}`;
+  return null;
+}
+
 export function calcConcaweBand({ concaweData, freqHz, lwDb, d, groundType, dSoftM, tempC, rhPercent, stability, v, hs, hr = 1.5 }) {
+  if (groundType !== "hard" && groundType !== "soft") {
+    // 오타·누락이 조용히 "soft"로 흘러가던 버그(외부 검토 지적, 11/22 수정) — 명시적으로 막음.
+    return { value: null, flags: ["지면유형미확인"] };
+  }
+  const bad = validateConcaweBandInput({ freqHz, d, tempC, rhPercent, stability, v, hs, hr });
+  if (bad) return { value: null, flags: ["계산불가"], reason: bad };
   if (d < 100) return { value: null, flags: ["근거리100m미만_계산안함"] };
   const flags = [];
   let dCalc = d;
@@ -439,6 +519,12 @@ export function calcConcaweBand({ concaweData, freqHz, lwDb, d, groundType, dSof
   const { k2, flags: k2Flags } = concaweK2(concaweData, freqHz, tempC, rhPercent, dCalc);
   flags.push(...k2Flags);
   const dSoft = groundType === "soft" ? Math.min(dSoftM ?? dCalc, dCalc) : dCalc;
+  // K3 다항식도 100~2000m 범위에서만 맞다고 검증됐어요(concawe_4_81.json의 _적용거리_m) —
+  // 전체 거리는 500m라도 "잔디 구간" 길이를 1m로 넣으면 다항식이 범위 밖으로 폭주해서
+  // K3가 −100dB 넘게 나오는 버그가 있었어요(외부 검토 지적, 11/22 수정).
+  if (groundType === "soft" && dSoft < 100) {
+    return { value: null, flags: [...flags, "연질구간100m미만_계산불가"] };
+  }
   const k3 = concaweK3(concaweData, freqHz, groundType, dSoft);
   const category = concaweCategory(stability, v);
   const k4 = concaweK4(concaweData, freqHz, category, dCalc);
@@ -468,7 +554,11 @@ export function calcNoiseConcaweHourly({
 }) {
   const scenario = "CONCAWE_전체_시간별추정";
   if (typeof lwDb !== "number" || !Number.isFinite(lwDb)) return { value: null, flags: ["음원세기미확인"], scenario };
-  if (!spectrumRatiosDb) return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario };
+  const specBad = validateSpectrum(spectrumRatiosDb, CONCAWE_BANDS_HZ);
+  if (specBad) return { value: null, flags: ["옥타브스펙트럼필수_모양미확인"], scenario, reason: specBad };
+  const bad = validateNoiseInput({ sourceLat, sourceLon, receiverLat, receiverLon, tempC, rhPercent, windVecFromDeg });
+  if (bad) return { value: null, flags: ["계산불가"], scenario, reason: bad };
+  if (typeof wsd10m !== "number" || !Number.isFinite(wsd10m) || wsd10m < 0) return { value: null, flags: ["계산불가"], scenario, reason: `풍속은 0 이상: ${wsd10m}` };
 
   const geometry = sourceReceiverGeometry({ sourceLat, sourceLon, receiverLat, receiverLon, windVecFromDeg });
   const v = wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
@@ -477,7 +567,7 @@ export function calcNoiseConcaweHourly({
   const bandLevelsDbA = [];
   let category;
   for (const freqHz of CONCAWE_BANDS_HZ) {
-    const bandLw = lwDb + (spectrumRatiosDb[freqHz] ?? 0);
+    const bandLw = lwDb + spectrumRatiosDb[freqHz]; // validateSpectrum이 이미 전부 유한수임을 확인함
     const band = calcConcaweBand({ concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM, groundType, dSoftM, tempC, rhPercent, stability, v, hs, hr });
     band.flags.forEach((f) => flagsAll.add(f));
     if (band.value === null) continue;
