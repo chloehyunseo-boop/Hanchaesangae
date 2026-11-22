@@ -4,9 +4,75 @@
   <meta charset="utf-8" />
   <title>올팍 바람지도</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; }
+    #map { height: 70vh; width: 100%; }
+    #panel { padding: 12px 16px; }
+    #panel h1 { font-size: 1.1rem; margin: 0 0 8px; }
+    .row { margin: 8px 0; }
+    .legend-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
+    .disclaimer { font-size: 0.8rem; color: #555; background: #fff8e1; padding: 8px; border-radius: 4px; }
+    fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 8px 0; }
+    #venue-checkboxes label { display: inline-block; margin-right: 10px; font-size: 0.9rem; }
+    #slider-label { font-weight: bold; }
+    #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
+  </style>
 </head>
 <body>
-  <h1>올팍 바람지도 — 시민 화면</h1>
-  <p>11/22(M3)에 지도·슬라이더·문장 예보를 넣어요. 지금은 저장소 뼈대만 있어요.</p>
+  <div id="panel">
+    <h1>올팍 바람지도 — 시민 화면 (데모)</h1>
+    <p class="disclaimer">
+      ⚠️ 지금은 <b>엔진 연결 데모 화면</b>이에요. 실제 공연 일정은 아직 자동으로 안 불러오고,
+      아래 체크박스로 "공연 중이라고 가정"하는 음원을 직접 켜고 끌 수 있어요.
+      음원 세기(음량)는 공단이 줄 측정 기준이 아직 없어서 <b>가정값</b>이에요(실제 숫자 아님).
+      소음 레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·설비차폐는 미반영),
+      배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두 대기환경기준 초과 판정이 아니에요.
+    </p>
+
+    <div class="row">
+      <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
+      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강
+      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중
+      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약
+      &nbsp;&nbsp;
+      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스 레이어</label>
+      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강
+      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중
+      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
+      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금/회색 = 일부 음원 제외 또는 근거리 불확실(등급 보류)
+    </div>
+
+    <fieldset>
+      <legend>데모: 공연 중이라고 가정할 장소(복수 선택)</legend>
+      <div id="venue-checkboxes"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>데모: 엔진 만져 보기</legend>
+      <div class="row">
+        음량: <select id="volume-preset"><option value="조용한">조용한</option><option value="기본" selected>기본</option><option value="큰공연">큰공연</option></select>
+        &nbsp;&nbsp;발전차 대수(0~5): <input type="number" id="generator-count" min="0" max="5" value="0" style="width:3em" />
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="wind-override-toggle" /> 실제 예보 대신 풍향·풍속 직접 설정</label>
+        <span id="wind-override-fields">
+          풍향(바람이 불어오는 쪽, 0~360°): <input type="number" id="wind-dir" min="0" max="360" value="270" style="width:4em" />
+          풍속(m/s): <input type="number" id="wind-speed" min="0" max="20" step="0.5" value="3" style="width:4em" />
+        </span>
+      </div>
+    </fieldset>
+
+    <div class="row">
+      시간: <span id="slider-label"></span>
+      <input type="range" id="time-slider" style="width:100%" />
+      <div id="slider-warning"></div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./app/main.js"></script>
 </body>
 </html>
