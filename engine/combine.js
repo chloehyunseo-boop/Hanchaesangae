@@ -21,7 +21,13 @@ import {
 } from "./noise.js";
 
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
-import { calcExhaustAtReceiver, classifyExhaustLevel } from "./plume.js";
+import { classifyExhaustLevel } from "./plume.js";
+// 11/24 하린 지시(배출가스 v2 연결, 커밋 813eef1): 발전차 입력을 "국내 현실"(발전기 2대,
+// Cat XQ230 인증/DE200 GC 비인증)로 바꾼 v2를 써요. v1(calcExhaustAtReceiver)은 plume_v2.js
+// 안에서 그대로 불려요 — 계산 자체(가우시안 플룸·ISC3·Turner·Briggs·ARM2·부채꼴·하한값)는
+// 안 바뀌고 "발전차 1대 = 몇 kW짜리 엔진 몇 대"만 바뀌어요. v1으로 되돌리려면 이 import만
+// calcExhaustAtReceiver(plume.js)로 바꾸면 돼요.
+import { calcExhaustAtReceiverV2 } from "./plume_v2.js";
 
 const DEG_PER_M_LAT = 1 / 111320;
 
@@ -105,12 +111,15 @@ export function isGeneratorActiveAtHour(generator, hourIso) {
  * 한 수음점의 배출가스 OutputCell을 만들어요. 그 시각에 가동 중인 발전차를 전부 모아
  * plume.js의 calcExhaustAtReceiver를 한 번만 불러요(발전차별로 따로 안 부름 — 합산·풍향
  * 부채꼴·ARM2를 그 함수 안에서 다 처리해요. 하린 11/21 지시 1번).
- * @param {{ generators: any[], receiver: {lat:number, lon:number}, weather: {stability, wsd10m, windVecFromDeg, tmp?: number|null}, hour: string, 가정?: "기본추정"|"기존입력가정"|"연기상승제외"|"전량NO2" }} p
+ * generators 배열의 각 원소는 발전차(트럭) 한 대예요(v2, 11/24) — 트럭 안에 발전기가
+ * 몇 대인지(기본 2대)는 plume_v2.js의 expandTrucksV2가 펼쳐서 세요. 가동 시간 판정은
+ * 지금처럼 트럭 단위로 해요(하린 11/24 지시).
+ * @param {{ generators: any[], receiver: {lat:number, lon:number}, weather: {stability, wsd10m, windVecFromDeg, tmp?: number|null}, hour: string, 가정?: "기본추정"|"기존입력가정"|"연기상승제외"|"전량NO2", 배출시나리오?: "인증"|"비인증" }} p
  * @returns {import("./common.js").OutputCell}
  */
-export function computeExhaustCell({ generators, receiver, weather, hour, 가정 = "기본추정" }) {
+export function computeExhaustCell({ generators, receiver, weather, hour, 가정 = "기본추정", 배출시나리오 = "인증" }) {
   const baseCell = { x: receiver.lon, y: receiver.lat, hour, layer: "exhaust" };
-  const scenario = `가우시안플룸_ISC3도시형확산계수_풍향부채꼴최대_${가정}`;
+  const scenario = `v2_${배출시나리오}_가우시안플룸_ISC3도시형확산계수_풍향부채꼴최대_${가정}`;
 
   const activeGenerators = [];
   let unknownCount = 0;
@@ -138,14 +147,14 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
   if (activeGenerators.length === 0) {
     return { ...baseCell, value: null, level: null, flags: ["가동중발전차없음"], scenario };
   }
-  const result = calcExhaustAtReceiver({
-    generators: activeGenerators,
+  const result = calcExhaustAtReceiverV2({
+    trucks: activeGenerators,
+    배출시나리오,
     receiverLat: receiver.lat,
     receiverLon: receiver.lon,
     stability: weather.stability,
     wsd10m: weather.wsd10m,
     windVecFromDeg: weather.windVecFromDeg,
-    가정,
     // 기상청 TMP. 없으면 undefined/null 그대로 — calcExhaustAtReceiver가 null을 undefined로
     // 받아들이고, 기온 없음은 연기 상승을 빼는 쪽으로 처리해요(하린 11/21 지시 3번).
     대기온도_C: weather.tmp,
@@ -332,10 +341,10 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
  * 해요. 11/21엔 concaweData 유무로 조용히 자동 분기했는데, 표를 빠뜨리면 메인 지도가
  * 아무 경고 없이 비교용 엔진으로 바뀌는 문제가 있었어요(외부 검토 지적, 11/22 수정).
  * @param {{ stageSources: any[], generatorSources: any[], weather: any, hour: string,
- *   grid?: {lat:number, lon:number}[], 가정?: string, noiseScenario: "concawe"|"iso", concaweData?: object }} p
+ *   grid?: {lat:number, lon:number}[], 가정?: string, noiseScenario: "concawe"|"iso", concaweData?: object, 배출시나리오?: "인증"|"비인증" }} p
  * @returns {import("./common.js").OutputCell[]}
  */
-export function computeHourOutputCells({ stageSources, generatorSources, weather, hour, grid = generateGridPoints(), 가정 = "기본추정", noiseScenario, concaweData }) {
+export function computeHourOutputCells({ stageSources, generatorSources, weather, hour, grid = generateGridPoints(), 가정 = "기본추정", noiseScenario, concaweData, 배출시나리오 = "인증" }) {
   if (noiseScenario !== "concawe" && noiseScenario !== "iso") {
     throw new Error(`noiseScenario은 "concawe" 또는 "iso" 중 하나를 꼭 넘겨야 해요(받은 값: ${noiseScenario}) — 메인 지도/공단 비교용이 조용히 안 바뀌게 11/22에 필수로 바꿨어요.`);
   }
@@ -361,7 +370,7 @@ export function computeHourOutputCells({ stageSources, generatorSources, weather
         cells.push(computeNoiseCell({ source, receiver, weather, hour }));
       }
     }
-    cells.push(computeExhaustCell({ generators: generatorSources, receiver, weather, hour, 가정 }));
+    cells.push(computeExhaustCell({ generators: generatorSources, receiver, weather, hour, 가정, 배출시나리오 }));
   }
   return cells;
 }

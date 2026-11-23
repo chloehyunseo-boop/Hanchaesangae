@@ -196,6 +196,7 @@ const state = {
   siteByName: new Map(),
   selectedVenues: new Set(),
   generatorCount: 0,
+  배출시나리오: "인증", // 발전차 인증등급 가정(v2). "인증" = 시민 지도 기본(하린 11/23 결정), "비인증" = 비교 보기
   volumePreset: "기본",
   windOverride: null, // {windVecFromDeg, wsd10m} 또는 null(실제 예보 사용)
   cellCache: new Map(), // hourIso -> {cells, warnings}
@@ -250,19 +251,16 @@ function buildStageSources(hourIso) {
   return sources;
 }
 
+// 11/24 하린 지시(배출가스 v2, 커밋 813eef1): "발전차 대수"는 이제 발전차(트럭) 수예요 —
+// 트럭 한 대 = 발전기 2대(국내 렌탈 조사 기준, engine/plume_v2.js V2_ASSUMPTIONS). 엔진출력·
+// 인증등급을 안 넣으면 v2가 대표모델(Cat XQ230, 320마력) 가정값을 쓰고 꼬리표도 붙여줘요.
 function buildGeneratorSources() {
   if (state.generatorCount <= 0) return [];
   const feature = state.siteByName.get("KSPO DOME");
   const [lon, lat] = feature.geometry.coordinates;
   return Array.from({ length: state.generatorCount }, () => ({
     lat, lon,
-    엔진출력_kW: 500,
-    출력종류: "엔진",
     정보출처: "시연용가정",
-    // 6차 외부 검토 지적(11/23, 하린): DEFAULT_EXHAUST를 여기서 펼쳐 넣으면 plume.js가
-    // "배기 사양을 안다"고 착각해서 '배기사양가정' 꼬리표를 안 붙여요 — 가정값인데 가정값
-    // 표시가 안 되는 규칙 위반이었어요. 안 넣어도 plume.js가 같은 기본값을 알아서 쓰고
-    // 꼬리표도 제대로 붙여줘요.
     time: { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" },
   }));
 }
@@ -302,6 +300,7 @@ async function getCellsForHour(date) {
   const generatorSources = buildGeneratorSources();
   const { cells, error } = await computeHourInWorker({
     stageSources, generatorSources, weather, hour: hourIso, noiseScenario: "concawe", concaweData: state.concaweData,
+    배출시나리오: state.배출시나리오,
   });
   const result = error ? { cells: [], warning: `계산 오류: ${error}` } : { cells, warning: null };
   state.cellCache.set(hourIso, result);
@@ -362,6 +361,11 @@ async function main() {
   });
   document.getElementById("generator-count").addEventListener("change", (e) => {
     state.generatorCount = Number(e.target.value) || 0;
+    state.cellCache.clear();
+    refresh();
+  });
+  document.getElementById("generator-grade-unauthorized").addEventListener("change", (e) => {
+    state.배출시나리오 = e.target.checked ? "비인증" : "인증";
     state.cellCache.clear();
     refresh();
   });

@@ -9,11 +9,11 @@ import { computeHourOutputCells, generateGridPoints } from "../engine/combine.js
 let grid = null;
 
 self.onmessage = (ev) => {
-  const { requestId, stageSources, generatorSources, weather, hour, noiseScenario, concaweData, cellSizeM } = ev.data;
+  const { requestId, stageSources, generatorSources, weather, hour, noiseScenario, concaweData, cellSizeM, 배출시나리오 } = ev.data;
   try {
     if (!grid) grid = generateGridPoints(cellSizeM);
     const cells = computeHourOutputCells({
-      stageSources, generatorSources, weather, hour, grid, noiseScenario, concaweData,
+      stageSources, generatorSources, weather, hour, grid, noiseScenario, concaweData, 배출시나리오,
     });
     self.postMessage({ requestId, ok: true, cells });
   } catch (err) {
