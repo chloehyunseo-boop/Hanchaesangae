@@ -22,11 +22,14 @@ python3 scripts/dev-server.py
 
 ## 폴더 구조
 
-- `index.html` — 시민 화면
-- `agency.html` — 공단 화면
-- `app/` — 화면 쪽 코드(지도·슬라이더·데모 컨트롤). `main.js`가 화면을 그리고,
-  `grid-worker.js`는 격자 전체 계산을 Web Worker에서 돌려요(엔진 코드 자체는
-  `engine/`에 그대로 두고 그걸 부르기만 해요).
+- `index.html` — 시민 화면 (`app/main.js`)
+- `agency.html` — 공단 화면 (`app/agency.js`, 11/24). 발전차를 대수가 아니라 한 대씩
+  (위치·발전기 수·인증 등급·엔진 출력)으로 입력하고, 영향 강습 목록·예보 기록 CSV가 있어요.
+  입력은 이 브라우저에만 저장돼요(서버 전송 없음).
+- `app/` — 화면 쪽 코드(지도·슬라이더·데모 컨트롤). `shared.js`가 두 화면이 같이 쓰는
+  지도 레이어·날짜·데이터 로딩 코드를 모아 둬서 "공단 화면도 시민 화면과 같은 엔진"이
+  실제로 같은 함수를 쓰게 보장해요. `grid-worker.js`는 격자 전체 계산을 Web Worker에서
+  돌려요(엔진 코드 자체는 `engine/`에 그대로 두고 그걸 부르기만 해요).
 - `engine/` — 계산 코드 (common.js 공통 규격, noise.js 소음, plume.js 배출가스, weather.js 예보 파싱)
 - `data/` — 좌표·가정값·갱신되는 날씨/공연 데이터 (site.geojson: 공연장·무대·주거지 좌표)
 - `docs/` — 가정값·근거를 정리한 상세 문서 (발전차 배출가스, 공원 좌표, 민원 정리)

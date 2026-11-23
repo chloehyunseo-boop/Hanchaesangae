@@ -4,9 +4,105 @@
   <meta charset="utf-8" />
   <title>올팍 바람지도 — 공단 화면</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; }
+    #map { height: 60vh; width: 100%; }
+    #panel { padding: 12px 16px; }
+    #panel h1 { font-size: 1.1rem; margin: 0 0 8px; }
+    .row { margin: 8px 0; }
+    .legend-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
+    .disclaimer { font-size: 0.8rem; color: #555; background: #fff8e1; padding: 8px; border-radius: 4px; }
+    fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 8px 0; }
+    #venue-checkboxes label { display: inline-block; margin-right: 10px; font-size: 0.9rem; }
+    #slider-label { font-weight: bold; }
+    #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
+    table#truck-table { border-collapse: collapse; width: 100%; }
+    table#truck-table th, table#truck-table td { border: 1px solid #ddd; padding: 4px 6px; font-size: 0.85rem; text-align: left; }
+    #impacted-lessons { font-size: 0.9rem; background: #f5f5f5; padding: 8px; border-radius: 4px; min-height: 1.5em; }
+    #impacted-lessons div { margin: 2px 0; }
+  </style>
 </head>
 <body>
-  <h1>올팍 바람지도 — 공단 화면</h1>
-  <p>11/24(M3)에 영향 강습 목록·공연 일정 입력·예보 기록 CSV를 넣어요. 지금은 저장소 뼈대만 있어요.</p>
+  <div id="panel">
+    <h1>올팍 바람지도 — 공단 화면</h1>
+    <p class="disclaimer">
+      이 화면은 공단 직원이 공연별 발전차 정보(위치·대수·인증 등급·출력)를 직접 넣어 보는 화면이에요.
+      여기 입력한 내용은 <b>이 브라우저에만 저장</b>되고(서버에 전송 안 함) 시민 화면에는 영향을 안 줘요.
+      계산 엔진은 시민 화면과 똑같아요(같은 격자·같은 공식). 공연 일정·강좌 시간표 자동 수집은
+      아직 연결 전이라, 발전차는 직접 입력하고 "영향 강습 목록"은 자료가 들어오기 전까지 비어 있어요.
+    </p>
+
+    <div class="row">
+      <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
+      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강
+      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중
+      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약
+      &nbsp;&nbsp;
+      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스 레이어</label>
+      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강
+      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중
+      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
+      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금/점 무늬 = 등급 보류·모름(시민 화면과 같음)
+    </div>
+
+    <fieldset>
+      <legend>공연 중이라고 가정할 장소(복수 선택)</legend>
+      <div id="venue-checkboxes"></div>
+      <div class="row">음량: <select id="volume-preset"><option value="조용한">조용한</option><option value="기본" selected>기본</option><option value="큰공연">큰공연</option></select></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>발전차 입력 (한 줄 = 발전차 한 대)</legend>
+      <table id="truck-table">
+        <thead><tr><th>위치</th><th>발전기 수</th><th>인증 등급</th><th>엔진 출력(kW)</th><th></th></tr></thead>
+        <tbody id="truck-rows"></tbody>
+      </table>
+      <button type="button" id="add-truck">발전차 추가</button>
+      <div class="row">
+        모르는 발전차의 인증 등급 기본값:
+        <select id="scenario-default">
+          <option value="인증" selected>인증(기본, 규제 적용 엔진으로 가정)</option>
+          <option value="비인증">비인증(규제 미적용 엔진으로 가정 — 비교 보기)</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>풍향·풍속 직접 설정(선택)</legend>
+      <div class="row">
+        <label><input type="checkbox" id="wind-override-toggle" /> 실제 예보 대신 직접 설정</label>
+        <span id="wind-override-fields">
+          풍향(바람이 불어오는 쪽, 0~360°): <input type="number" id="wind-dir" min="0" max="360" value="270" style="width:4em" />
+          풍속(m/s): <input type="number" id="wind-speed" min="0" max="20" step="0.5" value="3" style="width:4em" />
+        </span>
+      </div>
+    </fieldset>
+
+    <div class="row">
+      시간: <span id="slider-label"></span>
+      <input type="range" id="time-slider" style="width:100%" />
+      <div id="slider-warning"></div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="panel">
+    <fieldset>
+      <legend>영향 강습 목록 (이 시각)</legend>
+      <div id="impacted-lessons"></div>
+    </fieldset>
+    <fieldset>
+      <legend>예보 기록 CSV</legend>
+      <div class="row">
+        <button type="button" id="download-csv">지금 설정으로 72시간 CSV 받기</button>
+        <span style="font-size:0.8rem;color:#555">주요 장소 8곳 × 72시간 × 소음·배출가스 상태표(안전 기준 판정 아님)</span>
+      </div>
+    </fieldset>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./app/agency.js"></script>
 </body>
 </html>

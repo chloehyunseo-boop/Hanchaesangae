@@ -74,16 +74,16 @@ export function cellState(cell) {
 
 /**
  * 장소별 셀을 한 시각에 대해 계산해요(장소 좌표를 수음점으로 엔진을 그대로 불러요).
- * @param {{places:{name:string, lat:number, lon:number}[], stageSources:any[], generatorSources:any[], weather:any, hour:string, concaweData:object, 가정?:string}} p
+ * @param {{places:{name:string, lat:number, lon:number}[], stageSources:any[], generatorSources:any[], weather:any, hour:string, concaweData:object, 가정?:string, 배출시나리오?:"인증"|"비인증"}} p
  * @returns {Record<string, {noise: any, exhaust: any}>}
  */
-export function placeCellsForHour({ places, stageSources, generatorSources, weather, hour, concaweData, 가정 = "기본추정" }) {
+export function placeCellsForHour({ places, stageSources, generatorSources, weather, hour, concaweData, 가정 = "기본추정", 배출시나리오 = "인증" }) {
   const out = {};
   for (const pl of places) {
     const receiver = { lat: pl.lat, lon: pl.lon };
     out[pl.name] = {
       noise: stageSources?.length ? computeNoiseCellConcawe({ stageSources, receiver, weather, hour, concaweData }) : null,
-      exhaust: generatorSources?.length ? computeExhaustCell({ generators: generatorSources, receiver, weather, hour, 가정 }) : null,
+      exhaust: generatorSources?.length ? computeExhaustCell({ generators: generatorSources, receiver, weather, hour, 가정, 배출시나리오 }) : null,
     };
   }
   return out;
