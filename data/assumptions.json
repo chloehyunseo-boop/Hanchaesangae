@@ -462,5 +462,50 @@
       "전량NO2": "기본추정에서 NO2/NOx = 1.0 민감도",
       "명칭주의": "어느 것도 건물 후류를 계산하지 않아요. '최악'·'현실'이라고 부르지 않아요"
     }
+  },
+  "배출가스_v2": {
+    "_설명": "11/23 v2. 코드 engine/plume_v2.js(V2_ASSUMPTIONS와 같은 값), 근거 docs/발전차_배출가스_v2_가정값.md. v1 '배출가스' 키는 그대로.",
+    "발전기_per_발전차": {
+      "값": 2,
+      "근거": "국내 렌탈 업체 홈페이지 9곳 조사 최대 구성(200kW×2), 2026-11-23"
+    },
+    "엔진출력_kW": {
+      "값": 238.62,
+      "원값": "320 HP at 1800 RPM (Cat C7.1)",
+      "출처": "https://csdieselgenerators.com/used-caterpillar-xq230-rental-grade-diesel-generator--2767-hrs--epa-tier-4f-4524.html",
+      "성격": "중고 판매 페이지 표기, Cat 공식 사양서엔 엔진 출력 없음"
+    },
+    "부하율": {
+      "값": 0.43,
+      "출처": "v1과 같음(EPA NR-005c)"
+    },
+    "배기구높이_m": {
+      "값": 3.0,
+      "성격": "v1과 같음(가정)"
+    },
+    "인증": {
+      "대표모델": "Cat XQ230 EPA Tier 4 Final",
+      "NOx_g_per_kWh": {
+        "56~560kW": 0.4,
+        "560kW초과_발전기세트": 0.67,
+        "출처": "40 CFR 1039.101 표 1"
+      },
+      "배기온도_C": 533,
+      "배기량_m3_per_min": 38.3,
+      "배기출처": "Cat D200 GC 사양서 LEHE2668-02(같은 C7.1 엔진) https://s7d2.scene7.com/is/content/Caterpillar/CM20201027-3a427-fb68c",
+      "모델출처": "https://s7d2.scene7.com/is/content/Caterpillar/CM20181108-15209-06717"
+    },
+    "비인증": {
+      "대표모델": "Cat DE200 GC (배출 인증 표기 없음, Low BSFC)",
+      "NOx_g_per_kWh": {
+        "600마력이하": 18.8,
+        "600마력초과": 14.6,
+        "출처": "AP-42 3.3/3.4 (v1과 같음), DE200 GC NOx 미공개"
+      },
+      "배기온도_C": 485,
+      "배기량_m3_per_min": 39.4,
+      "모델출처": "https://emc.cat.com/pubdirect.ashx?media_string_id=LEHE2691-"
+    },
+    "시민지도_기본시나리오": "인증 (하린 결정 2026-11-23)"
   }
 }
