@@ -76,9 +76,13 @@ export function generatorActivityAtHour(generator, hourIso) {
   if (time.end) {
     endMs = new Date(time.end).getTime();
     if (!Number.isFinite(endMs)) return "unknown"; // 종료 시각이 있는데 못 읽음 → 모름
-    // 5차 외부 검토 지적(11/22, 하린): 종료가 시작보다 빠르면(예: 자정 넘는 공연을 날짜
-    // 안 바꾸고 입력한 실수) "가동 안 함"으로 조용히 흘러가던 문제 — 모름으로 둬요.
-    if (endMs <= activeFromMs) return "unknown"; // 시간 역전
+    // 5차 외부 검토(11/22, 하린) + 6차 재검토(11/23, 하린): 종료가 시작보다 빠르면(예: 자정
+    // 넘는 공연을 날짜 안 바꾸고 입력한 실수) "가동 안 함"으로 조용히 흘러가던 문제 — 모름으로
+    // 둬요. 처음엔 activeFromMs(시작 2시간 전)와 비교했는데, 그러면 "시작 19:30·종료 18:00"
+    // 같은 입력(activeFromMs=17:30)이 18:00<=17:30이 거짓이라 걸러지지 않고 17:30~18:00이
+    // 조용히 "가동"으로 계산되는 구멍이 있었어요 — 역전 여부는 시작 시각(startMs) 자체와
+    // 비교해야 맞아요.
+    if (endMs <= startMs) return "unknown"; // 시간 역전
   }
   // 5차 외부 검토 지적(11/22, 하린): "이 시간대 칸의 시작 시각"만 activeFromMs와 비교해서,
   // 19:30 시작(가동 시작 17:30)인데 17:00~18:00 칸은 "칸 시작(17:00)이 17:30보다 이르다"는
@@ -150,8 +154,8 @@ export function computeExhaustCell({ generators, receiver, weather, hour, 가정
   // 전체 값이 불확실(근거리불확실)해도, 그 발전차들을 뺀 합계(하한값)는 실제 농도의
   // 진짜 하한이에요(NO2는 ARM2 환산이라도 NOx가 늘면 줄지 않으니, 빼면 값이 줄 수밖에
   // 없음 — 외부 검토가 확인). plume.js(하린)가 calcExhaustAtReceiver 결과에 `하한값`을
-  // 넣어주면 여기서 등급까지 매겨서 화면에 "빗금 + ○○ 이상"으로 보여줄 수 있게 해요.
-  // 아직 plume.js 쪽 구현 전이라 result.하한값이 없으면 null로 통과시켜요.
+  // 실제로 넣어줘요(11/23, "근거리불확실"이 붙을 때만 숫자, 그 외엔 null) — 여기서는
+  // 그대로 받아 등급만 매겨서 화면에 "빗금 + ○○ 이상"으로 보여줄 수 있게 해요.
   const 하한값 = typeof result.하한값 === "number" ? result.하한값 : null;
   return {
     ...baseCell,

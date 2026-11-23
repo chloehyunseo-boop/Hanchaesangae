@@ -4,7 +4,7 @@
     {
       "name": "올팍 바람지도 (로컬 정적 서버)",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8787"],
+      "runtimeArgs": ["scripts/dev-server.py", "8787"],
       "port": 8787
     }
   ]

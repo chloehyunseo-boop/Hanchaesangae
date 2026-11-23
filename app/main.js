@@ -10,7 +10,7 @@
 
 import { mapDisplayFor } from "../engine/common.js";
 import { VOLUME_PRESETS, applyVolumePreset, CONCAWE_BANDS_HZ } from "../engine/noise.js";
-import { skyCodeToName, stabilityFromForecast, DEFAULT_EXHAUST } from "../engine/plume.js";
+import { skyCodeToName, stabilityFromForecast } from "../engine/plume.js";
 
 const PARK_CENTER = { lat: 37.5203, lon: 127.1268 };
 const NUM_HOURS = 72; // 로드맵: 지금부터 6시간(초단기)+3일(단기), 1시간 단위
@@ -178,7 +178,12 @@ const CanvasCellLayer = L.Layer.extend({
       return { fill: palette.uncertain, hatch: true, hatchColor };
     }
     if (disp.hideLevel) return { fill: palette.uncertain, hatch: true }; // 일부음원제외 — 등급 보류
-    return { fill: palette[cell.level] ?? palette.uncertain, hatch: false };
+    // 실제 브라우저 확인(11/22) 중 발견: 값은 있지만 기준 미만(강·중·약 어디에도 안
+    // 들어감, level:null — 예: 음원에서 아주 먼 칸)인 경우까지 palette.uncertain(회색)으로
+    // 칠해서, 격자 전체가 "근거리불확실/모름"인 것처럼 회색으로 덮여 보이는 버그가 있었어요.
+    // 기준 미만은 "문제없음"이지 "모름"이 아니라서 칠하지 않아요(blank와 같은 처리).
+    if (!cell.level) return null;
+    return { fill: palette[cell.level], hatch: false };
   },
 });
 
@@ -254,11 +259,19 @@ function buildGeneratorSources() {
     엔진출력_kW: 500,
     출력종류: "엔진",
     정보출처: "시연용가정",
-    ...DEFAULT_EXHAUST,
+    // 6차 외부 검토 지적(11/23, 하린): DEFAULT_EXHAUST를 여기서 펼쳐 넣으면 plume.js가
+    // "배기 사양을 안다"고 착각해서 '배기사양가정' 꼬리표를 안 붙여요 — 가정값인데 가정값
+    // 표시가 안 되는 규칙 위반이었어요. 안 넣어도 plume.js가 같은 기본값을 알아서 쓰고
+    // 꼬리표도 제대로 붙여줘요.
     time: { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" },
   }));
 }
 
+// 알려진 한계(6차 외부 검토, 하린 — "동결 후 미해결로 남겨도 됨" 합의): 이 함수가 계산을
+// 끝낸 뒤 state.cellCache에 쓰는 시점 자체는 refresh()의 요청 순번 검사를 안 거쳐요 —
+// 화면에 "그리는 것"은 refresh()의 refreshSeq로 막아뒀지만(최신 요청이 아니면 안 그림),
+// 아주 드물게 늦게 끝난 옛 요청이 캐시"값"을 새 값 뒤에 다시 덮어쓸 수 있어요(그 시각으로
+// 나중에 다시 돌아오면 잠깐 옛 값이 보일 수 있음). 동결 전 급한 문제는 아니라고 봐서 보류.
 async function getCellsForHour(date) {
   const hourIso = hourSlotIso(date);
   if (state.cellCache.has(hourIso)) return state.cellCache.get(hourIso);
@@ -386,12 +399,19 @@ async function main() {
   const sliderLabel = document.getElementById("slider-label");
   const warningEl = document.getElementById("slider-warning");
 
+  // 6차 외부 검토 지적(11/23, 하린): 계산 도중(worker 응답 대기 중) 설정을 또 바꾸면,
+  // 먼저 시작한 낡은 요청이 나중에 끝나서 최신 결과 위에 옛날 캐시·화면을 덮어쓸 수
+  // 있었어요 — 매번 자기 차례 번호를 받아서, 자기보다 새 요청이 이미 시작됐으면
+  // 캐시에 쓰지도 화면에 그리지도 않아요.
+  let refreshSeq = 0;
   async function refresh() {
+    const mySeq = ++refreshSeq;
     const offset = Number(slider.value);
     const date = hourSlotDate(offset);
     sliderLabel.textContent = formatSlotLabel(date);
     warningEl.textContent = "계산 중…";
     const { cells, warning } = await getCellsForHour(date);
+    if (mySeq !== refreshSeq) return; // 그 사이 더 새 요청이 시작됨 — 이 결과는 버림
     warningEl.textContent = warning ?? "";
     noiseLayer.setCells(cells.filter((c) => c.layer === "noise"), 25);
     exhaustLayer.setCells(cells.filter((c) => c.layer === "exhaust"), 25);
