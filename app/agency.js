@@ -19,7 +19,7 @@ import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
-  buildDemoStageSources,
+  buildDemoStageSources, kstParts,
 } from "./shared.js";
 
 const NUM_HOURS = 72;
@@ -156,18 +156,27 @@ function renderTruckTable(onChange) {
 }
 
 // ---------------------------------------------------------------------------
-// 영향 강습 목록 — data/lessons.json의 강좌 배열을 읽어요. 지금은 빈 배열이라(CLAUDE.md
-// 10번, 강좌정보 수집 전) 항상 "자료 없음"이 나와요. 강좌 1건의 가정한 모양:
-// { name, site(올림픽수영장|올림픽공원 테니스경기장 등 site.geojson 이름), 요일:[0~6, 0=일요일],
-//   시작:"HH:MM", 끝:"HH:MM" } — 실제 자료가 들어오면 이 모양에 맞는지 하린과 다시 확인해야 해요.
+// 영향 강습 목록 — data/lessons.json의 강좌 배열을 읽어요. 하린이 11/24에 실제 자료(수영장
+// 281개+테니스 89개, scripts/build_lessons.py로 생성)를 채워 넣었어요. 강좌 1건의 실제 모양:
+// { name, 종목, site(site.geojson 이름), 요일:[0~6, 0=일요일], 시작:"HH:MM", 끝:"HH:MM",
+//   기간시작:"YYYY-MM-DD", 기간끝:"YYYY-MM-DD"(상시면 "9999-12-31"), 출처, 슬롯수 } — 처음 짐작한
+// 모양(요일·시작·끝)과 거의 같았고, 기간시작·기간끝만 추가로 봐야 했어요.
 // ---------------------------------------------------------------------------
+// 11/25 수정: 하린이 넣은 실제 강좌 자료(data/lessons.json)에 날짜 범위(기간시작·기간끝)가
+// 있는데 처음엔 안 봤어요 — 끝난 강좌도 "진행 중"으로 잘못 떴을 거예요. 요일·시각 판정도
+// date.getDay()/getHours()(브라우저 로컬 시간대)가 아니라 이 프로젝트가 늘 쓰는 KST
+// 명시 변환(kstParts)으로 고쳤어요 — GitHub Pages는 어느 시간대 브라우저에서나 열리니까요.
 function lessonsAtHour(lessons, date) {
-  const dow = date.getDay();
-  const hh = String(date.getHours()).padStart(2, "0");
+  const { y, m, d, h } = kstParts(date);
+  const dateStr = `${y}-${m}-${d}`;
+  const dow = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).getUTCDay();
+  const hh = `${h}:00`;
   return (lessons ?? []).filter((l) => {
     if (!Array.isArray(l.요일) || !l.요일.includes(dow)) return false;
     if (typeof l.시작 !== "string" || typeof l.끝 !== "string") return false;
-    return `${hh}:00` >= l.시작 && `${hh}:00` < l.끝;
+    if (typeof l.기간시작 === "string" && dateStr < l.기간시작) return false;
+    if (typeof l.기간끝 === "string" && dateStr > l.기간끝) return false;
+    return hh >= l.시작 && hh < l.끝;
   });
 }
 

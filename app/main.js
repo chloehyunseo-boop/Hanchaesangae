@@ -29,7 +29,7 @@ const state = {
   siteByName: new Map(),
   selectedVenues: new Set(),
   generatorCount: 0,
-  배출시나리오: "인증", // 발전차 인증등급 가정(v2). "인증" = 시민 지도 기본(하린 11/23 결정), "비인증" = 비교 보기
+  배출시나리오: "인증", // 발전차 인증등급 가정(v2). 시민 화면은 "인증" 고정(하린 11/23 결정) — 비인증 비교는 공단 화면(agency.js)에만(하린 11/24 결정)
   volumePreset: "기본",
   windOverride: null, // {windVecFromDeg, wsd10m} 또는 null(실제 예보 사용)
   cellCache: new Map(), // hourIso -> {cells, warnings}
@@ -211,12 +211,6 @@ async function main() {
   });
   document.getElementById("generator-count").addEventListener("change", (e) => {
     state.generatorCount = Number(e.target.value) || 0;
-    state.cellCache.clear();
-    state.placeSeries = null;
-    refresh();
-  });
-  document.getElementById("generator-grade-unauthorized").addEventListener("change", (e) => {
-    state.배출시나리오 = e.target.checked ? "비인증" : "인증";
     state.cellCache.clear();
     state.placeSeries = null;
     refresh();
