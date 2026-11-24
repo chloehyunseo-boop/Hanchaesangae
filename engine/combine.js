@@ -13,7 +13,7 @@
 // 좌표는 아직 EPSG:5186(미터)이 아니라 위경도 그대로 둬요(common.js 3.5절과 같은 이유,
 // OutputCell.x/y 주석도 11/21에 맞춰 고쳤어요).
 
-import { CALC_GRID, mapDisplayFor } from "./common.js";
+import { CALC_GRID, mapDisplayFor, WIND_FAN_HALF_WIDTH_DEG } from "./common.js";
 import {
   calcNoiseIso9613UpperOctave, indoorFacadeSourcePowerLevel, classifyNoiseLevel,
   stageActiveMinutes, timeWeightDb, calcConcaweBand, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
@@ -231,13 +231,25 @@ export function computeNoiseCell({ source, receiver, weather, hour }) {
  * 지도**(로드맵 §2 표, 11/21에 ISO9613과 역할이 바뀐 걸 확인함). 동시에 여러 공연이
  * 있으면 로드맵 계산 순서(①시간가중 → ②같은 밴드 음원 합산 → ③A가중 → ④밴드 합산)
  * 그대로, 밴드마다 활성 음원들을 먼저 에너지 합산한 뒤 A가중·밴드합을 해요.
+ *
+ * 풍향 부채꼴(11/24 사용자 결정): 로드맵 §2 "공통 조건"이 "풍향 불확실성은 한 방향 선이
+ * 아니라 부채꼴로 그린다"고 해서, 배출가스(plume.js)와 똑같이 예보 풍향 ±22.5°
+ * (common.js WIND_FAN_HALF_WIDTH_DEG) 안에서 2.5° 간격으로 돌려 보고 합계(dB(A))가 가장
+ * 큰 방향을 써요(플래그 '풍향부채꼴최대'). 거리·근거리 제외·스펙트럼 같은 "방향과 무관한"
+ * 판정은 한 번만 하고, 방향에 따라 바뀌는 K4(기상범주)·결과값만 방향마다 다시 계산해요
+ * (거리가 안 바뀌니 어느 음원이 포함/제외되는지는 방향에 안 바뀜 — 11/21 이전엔 예보 풍향
+ * 하나만 썼어요, decisions.md 11/24 기록 참고).
  * @param {{ stageSources: any[], receiver: {lat:number, lon:number}, weather: { windVecFromDeg: number,
- *   wsd10m: number, stability: string, tempC: number, rhPercent: number }, hour: string, concaweData: object }} p
+ *   wsd10m: number, stability: string, tempC: number, rhPercent: number }, hour: string, concaweData: object,
+ *   fanHalfWidthDeg?: number, fanStepDeg?: number }} p
  *   각 stageSources 항목은 lat/lon/time 외에 lwDb(또는 indoor), spectrumRatiosDb(필수 — 없으면
  *   그 음원은 '옥타브스펙트럼필수_모양미확인'으로 빠짐), groundType("hard"|"soft"), dSoftM, hs(음원 높이), hr?.
  * @returns {import("./common.js").OutputCell}
  */
-export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour, concaweData }) {
+export function computeNoiseCellConcawe({
+  stageSources, receiver, weather, hour, concaweData,
+  fanHalfWidthDeg = WIND_FAN_HALF_WIDTH_DEG, fanStepDeg = 2.5,
+}) {
   const scenario = "CONCAWE_전체_시간별추정";
   const baseCell = { x: receiver.lon, y: receiver.lat, hour, layer: "noise" };
 
@@ -252,12 +264,19 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
   if (!finite(weather.windVecFromDeg) || weather.windVecFromDeg < 0 || weather.windVecFromDeg > 360) return { ...baseCell, value: null, level: null, flags: ["계산불가_풍향"], scenario };
   if (!finite(weather.tempC) || weather.tempC < -50 || weather.tempC > 60) return { ...baseCell, value: null, level: null, flags: ["계산불가_기온"], scenario };
   if (!finite(weather.rhPercent) || weather.rhPercent < 0 || weather.rhPercent > 100) return { ...baseCell, value: null, level: null, flags: ["계산불가_습도"], scenario };
+  if (!finite(fanHalfWidthDeg) || fanHalfWidthDeg < 0 || fanHalfWidthDeg > 180) return { ...baseCell, value: null, level: null, flags: ["계산불가"], scenario, reason: `부채꼴 반폭은 0~180°: ${fanHalfWidthDeg}` };
+  if (!finite(fanStepDeg) || fanStepDeg <= 0) return { ...baseCell, value: null, level: null, flags: ["계산불가"], scenario, reason: `부채꼴 간격은 0보다 커야 해요: ${fanStepDeg}` };
+  const MAX_FAN_DIRECTIONS = 1000; // plume.js와 같은 안전장치(11/22 외부 검토 지적)
+  if (fanHalfWidthDeg > 0 && (2 * fanHalfWidthDeg) / fanStepDeg + 3 > MAX_FAN_DIRECTIONS) {
+    return { ...baseCell, value: null, level: null, flags: ["계산불가"], scenario, reason: `부채꼴 방향 수가 너무 많아요(반폭 ${fanHalfWidthDeg}°, 간격 ${fanStepDeg}° → 상한 ${MAX_FAN_DIRECTIONS}개)` };
+  }
 
+  // 1단계: 방향과 무관한 판정(시간 겹침·좌표·음원세기·스펙트럼)을 한 번만 해서 "가동 중이고
+  // 쓸 수 있는" 음원만 추려요. 거리가 안 바뀌니 이 결과는 어느 풍향으로 돌려도 똑같아요.
   const allFlags = new Set();
-  const perBandLevels = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, []]));
   let anyActive = false;
   let excludedCount = 0; // 가동은 했는데 데이터 문제로 합산에서 빠진 음원 수(부분 합계 표시, 외부 검토 지적)
-
+  const usable = [];
   for (const source of stageSources) {
     const { activeMinutes, flags: timeFlags } = stageActiveMinutes(source, hour);
     timeFlags.forEach((f) => allFlags.add(f));
@@ -288,47 +307,72 @@ export function computeNoiseCellConcawe({ stageSources, receiver, weather, hour,
     const weightDb = timeWeightDb(activeMinutes) ?? 0; // ①시간가중: 음원별·밴드별 LW에 미리 더함
     if (activeMinutes < 60) allFlags.add(`시간가중_${Math.round(activeMinutes)}분`);
 
-    const geometry = sourceReceiverGeometry({
-      sourceLat: source.lat, sourceLon: source.lon,
-      receiverLat: receiver.lat, receiverLon: receiver.lon,
-      windVecFromDeg: weather.windVecFromDeg,
-    });
-    const v = weather.wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
-
-    let sourceContributed = false;
-    for (const freqHz of CONCAWE_BANDS_HZ) {
-      const bandLw = lwDb + source.spectrumRatiosDb[freqHz] + weightDb; // validateSpectrum이 이미 확인함
-      const band = calcConcaweBand({
-        concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM,
-        groundType: source.groundType, dSoftM: source.dSoftM,
-        tempC: weather.tempC, rhPercent: weather.rhPercent,
-        stability: weather.stability, v, hs: source.hs, hr: source.hr,
-      });
-      band.flags.forEach((f) => allFlags.add(f));
-      if (band.value !== null && Number.isFinite(band.value)) { // NaN 방어(외부 검토 지적)
-        perBandLevels[freqHz].push(band.value);
-        sourceContributed = true;
-      }
-    }
-    // 3차 외부 검토 지적(11/22): 음원이 "가동 중"으로 셈해졌는데도(anyActive=true) 7밴드
-    // 전부 거리<100m 등의 이유로 null이면 — 예를 들어 30m 앞 큰 무대가 100m 제한에 걸려
-    // 전부 빠지고 먼 무대만 남는 경우 — 그동안 excludedCount에 안 잡혔어요. 그 결과
-    // "일부음원제외" 없이 "전부 합산된 정상 결과"처럼 등급까지 그대로 나왔습니다. 음원이
-    // 활성인데 밴드를 하나도 못 채웠으면 이것도 제외로 셈해요.
-    if (!sourceContributed) excludedCount++;
+    usable.push({ source, lwDb, weightDb });
   }
 
-  if (excludedCount > 0) allFlags.add("일부음원제외"); // 전부 합산된 것과 구분 — 몇 개가 빠졌는지는 다른 flags로 알 수 있음
-  if (!anyActive) return { ...baseCell, value: null, level: null, flags: [...allFlags], scenario };
+  // 2단계: 부채꼴 방향마다(거리는 그대로, 풍향만 바꿔서) 전체를 다시 계산해 dB(A)가 가장
+  // 큰 방향을 찾아요. 음원이 하나도 못 쓰면(usable이 비면) 방향을 돌려도 결과가 안 바뀌니
+  // 한 번만(오프셋 0) 계산해요.
+  const offsets = [];
+  if (fanHalfWidthDeg === 0 || usable.length === 0) offsets.push(0);
+  else {
+    for (let o = -fanHalfWidthDeg; o < fanHalfWidthDeg - 1e-9; o += fanStepDeg) offsets.push(Math.round(o * 1e9) / 1e9);
+    offsets.push(fanHalfWidthDeg);
+    if (!offsets.some((o) => Math.abs(o) < 1e-9)) offsets.push(0); // 예보 방향(중심)은 항상 계산
+    offsets.sort((a, b) => a - b);
+  }
 
-  // ②같은 밴드끼리 음원 에너지 합산 → ③A가중 → ④밴드 로그합
-  const bandLevelsDbA = CONCAWE_BANDS_HZ.map((freqHz) => {
-    const levels = perBandLevels[freqHz];
-    if (levels.length === 0) return null;
-    return logSumDb(levels) + A_WEIGHT_DB[freqHz];
-  });
-  const value = logSumDb(bandLevelsDbA);
-  return { ...baseCell, value, level: classifyNoiseLevel(value), flags: [...allFlags], scenario };
+  let best = null; // { value, flags(Set) }
+  for (const off of offsets) {
+    const vec = (((weather.windVecFromDeg + off) % 360) + 360) % 360;
+    const perBandLevels = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, []]));
+    const dirFlags = new Set();
+    let anyExcludedThisDir = 0;
+    for (const { source, lwDb, weightDb } of usable) {
+      const geometry = sourceReceiverGeometry({
+        sourceLat: source.lat, sourceLon: source.lon,
+        receiverLat: receiver.lat, receiverLon: receiver.lon,
+        windVecFromDeg: vec,
+      });
+      const v = weather.wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
+
+      let sourceContributed = false;
+      for (const freqHz of CONCAWE_BANDS_HZ) {
+        const bandLw = lwDb + source.spectrumRatiosDb[freqHz] + weightDb; // validateSpectrum이 이미 확인함
+        const band = calcConcaweBand({
+          concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM,
+          groundType: source.groundType, dSoftM: source.dSoftM,
+          tempC: weather.tempC, rhPercent: weather.rhPercent,
+          stability: weather.stability, v, hs: source.hs, hr: source.hr,
+        });
+        band.flags.forEach((f) => dirFlags.add(f));
+        if (band.value !== null && Number.isFinite(band.value)) { // NaN 방어(외부 검토 지적)
+          perBandLevels[freqHz].push(band.value);
+          sourceContributed = true;
+        }
+      }
+      // 3차 외부 검토 지적(11/22): 음원이 "가동 중"인데도 7밴드 전부 null이면(예: 거리<100m)
+      // 제외로 셈해요 — 거리는 방향과 무관하니 이 판정은 모든 방향에서 같아요.
+      if (!sourceContributed) anyExcludedThisDir++;
+    }
+
+    const bandLevelsDbA = CONCAWE_BANDS_HZ.map((freqHz) => {
+      const levels = perBandLevels[freqHz];
+      return levels.length === 0 ? null : logSumDb(levels) + A_WEIGHT_DB[freqHz];
+    });
+    const value = usable.length === 0 ? null : logSumDb(bandLevelsDbA);
+    const thisExcludedCount = excludedCount + anyExcludedThisDir;
+    if (best === null || (value !== null && (best.value === null || value > best.value))) {
+      best = { value, flags: dirFlags, excludedCount: thisExcludedCount };
+    }
+  }
+
+  if (best.excludedCount > 0) allFlags.add("일부음원제외"); // 전부 합산된 것과 구분 — 몇 개가 빠졌는지는 다른 flags로 알 수 있음
+  best.flags.forEach((f) => allFlags.add(f));
+  if (!anyActive) return { ...baseCell, value: null, level: null, flags: [...allFlags], scenario };
+  if (best.value === null) return { ...baseCell, value: null, level: null, flags: [...allFlags], scenario };
+  if (fanHalfWidthDeg > 0) allFlags.add("풍향부채꼴최대");
+  return { ...baseCell, value: best.value, level: classifyNoiseLevel(best.value), flags: [...allFlags], scenario };
 }
 
 /**

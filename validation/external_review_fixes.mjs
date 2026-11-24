@@ -399,5 +399,34 @@ const FLAT_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, 0]));
   check("먼 4대 + 가까운 1대 → 하한값은 숫자, value 이하", typeof cell2.하한값 === "number" && cell2.하한값 > 0 && cell2.하한값 <= cell2.value);
 }
 
+// 28) 11/24 사용자 결정: CONCAWE 메인 지도도 배출가스처럼 풍향 ±22.5° 부채꼴(최댓값)을
+// 써요(로드맵 §2 "공통 조건"). 수음점을 음원 정남쪽이 아니라 측풍 쪽(90° 비껴남)에 두면,
+// 예보 방향 하나만 쓸 때보다 부채꼴로 돌려 찾은 최댓값이 더 커야 해요(바람이 정확히
+// 그 수음점 쪽으로 불 수도 있다고 보는 쪽이 더 보수적).
+{
+  const concaweOnlySpectrum = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, -10 * Math.log10(7)]));
+  const source = {
+    lat: 37.5203, lon: 127.1268, lwDb: 100, groundType: "soft", dSoftM: 500, hs: 1.5,
+    spectrumRatiosDb: concaweOnlySpectrum,
+    time: { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00" },
+  };
+  // 수음점: 음원에서 정동쪽 500m(풍향 270°=서풍이면 정확히 풍하), 그런데 풍향은 180°(남풍)로
+  // 줘서 풍하 방향(북쪽)과 수음점 방향(동쪽)이 90° 어긋나게 해요.
+  const receiver = { lat: 37.5203, lon: 127.1268 + 500 / (111320 * Math.cos((37.5203 * Math.PI) / 180)) };
+  const hour = "2026-06-01T19:00:00+09:00";
+  const weather = { windVecFromDeg: 180, wsd10m: 2, stability: "D", tempC: 20, rhPercent: 60 };
+  const single = computeNoiseCellConcawe({ stageSources: [source], receiver, weather, hour, concaweData, fanHalfWidthDeg: 0 });
+  const fan = computeNoiseCellConcawe({ stageSources: [source], receiver, weather, hour, concaweData });
+  check(
+    "CONCAWE 부채꼴 최댓값이 단일 방향보다 크거나 같음(측풍 수음점)",
+    fan.value !== null && single.value !== null && fan.value >= single.value - 1e-9,
+    `단일=${single.value?.toFixed(3)} 부채꼴=${fan.value?.toFixed(3)}`,
+  );
+  check("부채꼴 적용 시 '풍향부채꼴최대' 꼬리표 붙음", fan.flags.includes("풍향부채꼴최대"));
+  check("fanHalfWidthDeg:0이면 꼬리표 없음(옛 방식과 동일)", !single.flags.includes("풍향부채꼴최대"));
+  // 음원·수음점이 안 바뀌니(거리는 방향과 무관) '일부음원제외' 같은 플래그는 두 쪽 다 없어야 해요.
+  check("부채꼴을 켜도 꺼도 음원 포함 여부(일부음원제외)는 동일", single.flags.includes("일부음원제외") === fan.flags.includes("일부음원제외"));
+}
+
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);
 process.exitCode = failCount === 0 ? 0 : 1;
