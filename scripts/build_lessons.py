@@ -5,7 +5,7 @@
 - 스포츠센터 강좌정보(20260601): '테니스'만 써요 → '올림픽공원 테니스경기장' 위치로 봐요(가정). 다른 종목은 장소를 몰라서 뺌.
 - 이미 끝난 강좌는 빼요(실행한 날 기준) — 강좌정보가 갱신되면 다시 실행하세요.
 - 하루 3시간 이상(예: 06:00-21:50)은 강습이 아니라 이용권으로 보고 뺌.
-- 같은 강좌명·시간·요일은 한 줄로 합쳐요(1:1 테니스가 슬롯마다 여러 줄).
+- 1:1 테니스처럼 20~30분 슬롯이 이어지면 한 덩어리(시작~끝)로 합쳐요. "슬롯수"에 몇 칸이었는지 남겨요.
 """
 import csv, json, re, collections, pathlib, datetime
 R = pathlib.Path(__file__).resolve().parent.parent
@@ -44,6 +44,16 @@ for r in csv.DictReader(open(R / "data/raw/스포츠센터_강좌정보_20260601
 TODAY = datetime.date.today().isoformat()
 # 이미 끝난 강좌(기간끝이 오늘 전)는 빼요 — 지도는 오늘부터 3일만 보여줘요
 for k in [k for k, v in out.items() if v["기간끝"] < TODAY]: del out[k]; dropped["이미끝난강좌"] += 1
+# 1:1 테니스처럼 20~30분 슬롯이 이어지는 같은 강좌(이름·요일·기간 같음)는 한 덩어리로 합쳐요
+merged = {}
+for v in sorted(out.values(), key=lambda x: (x["name"], tuple(x["요일"]), x["기간시작"], x["기간끝"], x["시작"])):
+    k = (v["name"], tuple(v["요일"]), v["기간시작"], v["기간끝"])
+    blocks = merged.setdefault(k, [])
+    if blocks and blocks[-1]["끝"] >= v["시작"]:
+        blocks[-1]["끝"] = max(blocks[-1]["끝"], v["끝"]); blocks[-1]["슬롯수"] = blocks[-1].get("슬롯수", 1) + 1
+    else:
+        blocks.append(dict(v))
+out = {i: b for i, b in enumerate(b for bs in merged.values() for b in bs)}
 lessons = sorted(out.values(), key=lambda x: (x["site"], x["기간시작"], x["시작"], x["name"]))
 doc = {
     "_설명": "영향 강습 목록용 강좌 시간표. scripts/build_lessons.py가 data/raw의 공단 CSV로 만들어요. 손으로 고치지 마세요.",
