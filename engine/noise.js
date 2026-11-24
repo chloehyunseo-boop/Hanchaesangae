@@ -612,3 +612,30 @@ export function calcNoiseConcaweHourly({
   if (bandLevelsDbA.length === 0) return { value: null, flags: [...flagsAll], scenario };
   return { value: logSumDb(bandLevelsDbA), flags: [...flagsAll], scenario, category };
 }
+
+/**
+ * CONCAWE 전체 시나리오(시민·공단 메인 지도가 실제로 보는 엔진)에서, 측정 지점에 목표
+ * dB(A)가 정확히 나오는 LW를 역산해요. 11/22 외부 검토 지적(docs/외부검토_1122_최종_분류.md):
+ * 기존 `lwFromTargetDb()`는 ISO9613(1kHz 단일주파수·A가중/지면효과 없음)의 역함수라서,
+ * 그 결과로 역산한 LW를 CONCAWE(7밴드·범주4·A가중·지면효과 K3 포함)로 다시 계산하면
+ * 목표보다 낮게 나와요(실측: 65 목표 → CONCAWE 58.0dB(A)). "정방향과 같은 모델로
+ * 역산"(외부 검토 권고)하도록, CONCAWE 쪽 전용 역산 함수를 새로 만들었어요.
+ *
+ * 원리: `calcConcaweBand`의 Lp = lwDb − (K1+K2+K3+K4+K5)는 lwDb에 대해 기울기 1인 선형
+ * 식이에요(밴드마다 LW를 똑같이 올리면 그 밴드 Lp도 똑같이 오르고, 에너지합·A가중·밴드
+ * 로그합도 상수만큼 그대로 밀려요 — 로그합의 성질). 그래서 LW=0으로 한 번 정방향 계산해
+ * 나온 dB(A)를 보면, 목표와의 차이가 곧 필요한 LW예요(반복 계산 필요 없음).
+ * @param {{ targetDb: number }} p targetDb 외 나머지는 `calcNoiseConcaweHourly`와 같아요(lwDb만 빼고).
+ *   기준 날씨(tempC·rhPercent·stability·windVecFromDeg·wsd10m)는 공연마다 바뀌는 실시간
+ *   예보가 아니라 역산에 쓸 "기준 조건"을 호출하는 쪽이 정해서 넣어야 해요(아직 로드맵에
+ *   합의된 구체적 기준값 없음 — decisions.md 11/21 기록 그대로).
+ * @returns {{ lwDb: number|null, flags: string[], category?: number, reason?: string }}
+ */
+export function lwFromTargetDbConcawe({ targetDb, ...rest }) {
+  if (typeof targetDb !== "number" || !Number.isFinite(targetDb)) {
+    return { lwDb: null, flags: ["계산불가"], reason: `목표 dB가 숫자가 아님: ${targetDb}` };
+  }
+  const probe = calcNoiseConcaweHourly({ ...rest, lwDb: 0 });
+  if (probe.value === null) return { lwDb: null, flags: probe.flags, reason: probe.reason ?? "해당 거리·조건에서는 계산할 수 없어요(근거리·범위 밖 등)" };
+  return { lwDb: targetDb - probe.value, flags: probe.flags, category: probe.category };
+}

@@ -9,6 +9,9 @@
 // 보는 게 목적이에요.
 
 import { skyCodeToName, stabilityFromForecast } from "../engine/plume.js";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { buildPlaceTimeline } from "../engine/place_view.js";
+import { renderPlaceTimeline } from "./place_view_ui.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
@@ -30,7 +33,22 @@ const state = {
   volumePreset: "기본",
   windOverride: null, // {windVecFromDeg, wsd10m} 또는 null(실제 예보 사용)
   cellCache: new Map(), // hourIso -> {cells, warnings}
+  placeSeries: null, // 장소별 보기·문장 예보가 같이 쓰는 72시간 치 8장소 시리즈(설정 바뀌면 null로 비움)
 };
+let placesCache = null;
+
+/** 문장 예보·장소별 보기 표준 장소 8곳의 좌표(site.geojson 기준, 한 번만 계산해 재사용). */
+function getPlaces() {
+  if (!placesCache) {
+    placesCache = DEFAULT_PLACE_NAMES.map((name) => {
+      const f = state.siteByName.get(name);
+      if (!f) return null;
+      const [lon, lat] = f.geometry.coordinates;
+      return { name, lat, lon };
+    }).filter(Boolean);
+  }
+  return placesCache;
+}
 
 const computeHourInWorker = createGridWorker();
 
@@ -62,11 +80,11 @@ function buildGeneratorSources() {
 // 화면에 "그리는 것"은 refresh()의 refreshSeq로 막아뒀지만(최신 요청이 아니면 안 그림),
 // 아주 드물게 늦게 끝난 옛 요청이 캐시"값"을 새 값 뒤에 다시 덮어쓸 수 있어요(그 시각으로
 // 나중에 다시 돌아오면 잠깐 옛 값이 보일 수 있음). 동결 전 급한 문제는 아니라고 봐서 보류.
-async function getCellsForHour(date) {
+/** 그 시각 엔진 입력 날씨 — 실제 예보 또는 사용자가 직접 설정한 값. 지도 격자 계산과
+ * 장소별 보기·문장 예보 시리즈(buildPlaceSeries)가 똑같이 이 함수를 써요(하린 11/24
+ * 요청의 전제 — 지도·장소별 보기·문장 예보가 항상 같은 답을 내야 해요). */
+function resolveWeather(date) {
   const hourIso = hourSlotIso(date);
-  if (state.cellCache.has(hourIso)) return state.cellCache.get(hourIso);
-
-  let weather;
   if (state.windOverride) {
     const base = state.weatherByHour.get(weatherKey(date));
     const sky = base?.SKY ?? "1";
@@ -77,11 +95,16 @@ async function getCellsForHour(date) {
         lat: PARK_CENTER.lat, lon: PARK_CENTER.lon, dateUtc: new Date(hourIso),
       }).stability;
     } catch { /* 기본값 D 유지 */ }
-    weather = { tempC: 10, rhPercent: 60, ...state.windOverride, stability, tmp: 10 };
-  } else {
-    weather = toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourIso);
+    return { tempC: 10, rhPercent: 60, ...state.windOverride, stability, tmp: 10 };
   }
+  return toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourIso);
+}
 
+async function getCellsForHour(date) {
+  const hourIso = hourSlotIso(date);
+  if (state.cellCache.has(hourIso)) return state.cellCache.get(hourIso);
+
+  const weather = resolveWeather(date);
   if (!weather) {
     const result = { cells: [], warning: "이 시각은 기상 자료가 없어 계산하지 않았어요(자료 부족)." };
     state.cellCache.set(hourIso, result);
@@ -99,6 +122,35 @@ async function getCellsForHour(date) {
   return result;
 }
 
+// 장소별 보기(app/place_view_ui.js)·문장 예보(engine/forecast_text.js)가 같이 쓰는 72시간
+// 치 시리즈예요. 표준 장소 8곳만 계산해서(24,178칸짜리 지도 격자보다 훨씬 가벼움) Web
+// Worker 없이 메인 스레드에서 바로 돌려요. 설정이 바뀌면 state.placeSeries를 null로
+// 비워서 다음에 쓸 때 다시 계산하게 해요(지도 캐시 비우는 자리마다 같이 비워요).
+function buildPlaceSeries() {
+  const places = getPlaces();
+  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset);
+  const generatorSources = buildGeneratorSources();
+  const series = [];
+  for (let offset = 0; offset < NUM_HOURS; offset++) {
+    const date = hourSlotDate(offset);
+    const weather = resolveWeather(date);
+    if (!weather) continue;
+    const hourIso = hourSlotIso(date);
+    series.push({
+      hour: hourIso, weather,
+      cellsByPlace: placeCellsForHour({
+        places, stageSources, generatorSources, weather, hour: hourIso, concaweData: state.concaweData,
+        배출시나리오: state.배출시나리오,
+      }),
+    });
+  }
+  return series;
+}
+function getPlaceSeries() {
+  if (!state.placeSeries) state.placeSeries = buildPlaceSeries();
+  return state.placeSeries;
+}
+
 // ---------------------------------------------------------------------------
 // 지도 + UI
 // ---------------------------------------------------------------------------
@@ -114,6 +166,22 @@ async function main() {
   const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
   const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
+  // 장소별 보기(하린 11/24 요청) — 표준 장소 8곳에 점을 찍고, 누르면 그 장소의 72시간
+  // 소음·배출가스 시간표를 보여줘요(app/place_view_ui.js의 renderPlaceTimeline 그대로 재사용).
+  const placeViewPanel = document.getElementById("place-view");
+  const placeMarkersLayer = L.layerGroup().addTo(map);
+  for (const p of getPlaces()) {
+    const marker = L.circleMarker([p.lat, p.lon], {
+      radius: 6, color: "#1565c0", weight: 2, fillColor: "#64b5f6", fillOpacity: 0.9,
+    }).addTo(placeMarkersLayer);
+    marker.bindTooltip(p.name, { direction: "top" });
+    marker.on("click", () => {
+      const timeline = buildPlaceTimeline({ series: getPlaceSeries(), placeName: p.name });
+      placeViewPanel.hidden = false;
+      renderPlaceTimeline(placeViewPanel, timeline, { onClose: () => { placeViewPanel.hidden = true; } });
+    });
+  }
+
   // 음원 체크박스(데모) — 기본안_계산대상 중 소음_포함:true인 장소만
   const venueBox = document.getElementById("venue-checkboxes");
   for (const v of assumptions.기본안_계산대상.venues) {
@@ -126,6 +194,7 @@ async function main() {
       if (input.checked) state.selectedVenues.add(v.site);
       else state.selectedVenues.delete(v.site);
       state.cellCache.clear();
+      state.placeSeries = null;
       refresh();
     });
     label.appendChild(input);
@@ -137,16 +206,19 @@ async function main() {
   document.getElementById("volume-preset").addEventListener("change", (e) => {
     state.volumePreset = e.target.value;
     state.cellCache.clear();
+    state.placeSeries = null;
     refresh();
   });
   document.getElementById("generator-count").addEventListener("change", (e) => {
     state.generatorCount = Number(e.target.value) || 0;
     state.cellCache.clear();
+    state.placeSeries = null;
     refresh();
   });
   document.getElementById("generator-grade-unauthorized").addEventListener("change", (e) => {
     state.배출시나리오 = e.target.checked ? "비인증" : "인증";
     state.cellCache.clear();
+    state.placeSeries = null;
     refresh();
   });
   const windOverrideToggle = document.getElementById("wind-override-toggle");
@@ -162,6 +234,7 @@ async function main() {
       windOverrideFields.style.display = "none";
     }
     state.cellCache.clear();
+    state.placeSeries = null;
     refresh();
   }
   windOverrideToggle.addEventListener("change", syncWindOverride);
@@ -199,6 +272,18 @@ async function main() {
     warningEl.textContent = warning ?? "";
     noiseLayer.setCells(cells.filter((c) => c.layer === "noise"), 25);
     exhaustLayer.setCells(cells.filter((c) => c.layer === "exhaust"), 25);
+    refreshForecastSentences();
+  }
+
+  // 문장 예보(하린 11/24 요청) — 지도 아래에 최대 5줄, buildForecastSentences 그대로 재사용.
+  // 장소별 보기와 같은 placeSeries를 쓰니까 지도·장소별 보기·문장 예보가 항상 같은 답이에요.
+  const sentencesEl = document.getElementById("forecast-sentences");
+  function refreshForecastSentences() {
+    const series = getPlaceSeries();
+    const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)) });
+    sentencesEl.innerHTML = lines.length
+      ? lines.map((l, i) => `<div>${i + 1}. ${l}</div>`).join("")
+      : "<div>주요 장소 8곳에 '약' 이상으로 예보된 소음·배출가스가 없어요.</div>";
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));

@@ -105,9 +105,17 @@ function dayLabel(date, nowIso) {
 }
 function spanText(startIso, hoursLong, nowIso) {
   const s = kstParts(startIso);
-  const endHour = s.hour + hoursLong; // 24를 넘으면 다음 날 시각
-  if (endHour > 24) return `${dayLabel(s.date, nowIso)}${s.hour}시~다음 날 ${endHour - 24}시`;
-  return `${dayLabel(s.date, nowIso)}${s.hour}~${endHour}시`;
+  const endHour = s.hour + hoursLong; // 24를 넘으면 다음 날(또는 그 뒤) 시각
+  if (endHour <= 24) return `${dayLabel(s.date, nowIso)}${s.hour}~${endHour}시`;
+  // 11/24 수정(실제 72시간 시리즈 연결 중 발견): 옛 코드는 "endHour - 24"만 해서, 범위가
+  // 하루를 넘게(예: 발전차·공연이 아예 없는 3일치) 이어지면 "54시" 같은 잘못된 시각이
+  // 나왔어요(24를 한 번만 빼서) — 날짜 자체를 며칠 뒤로 넘겨서 다시 24로 나눠요.
+  const daysForward = Math.floor(endHour / 24);
+  const endHourOfDay = endHour % 24;
+  const endDate = new Date(Date.parse(`${s.date}T00:00:00Z`) + daysForward * 86400000);
+  const endDateStr = `${endDate.getUTCFullYear()}-${pad(endDate.getUTCMonth() + 1)}-${pad(endDate.getUTCDate())}`;
+  const endLabel = daysForward === 1 ? "다음 날" : dayLabel(endDateStr, nowIso).trim() || `${Number(endDateStr.slice(5, 7))}/${Number(endDateStr.slice(8, 10))}`;
+  return `${dayLabel(s.date, nowIso)}${s.hour}시~${endLabel} ${endHourOfDay}시`;
 }
 const hasJong = (word) => {
   const c = word.charCodeAt(word.length - 1);

@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import {
   concaweK1, concaweK2, concaweK3, concaweK4, concaweK5, concaweCategory,
-  calcConcaweBand, calcNoiseConcaweHourly, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
+  calcConcaweBand, calcNoiseConcaweHourly, lwFromTargetDb, lwFromTargetDbConcawe, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
 } from "../engine/noise.js";
 
 const concaweData = JSON.parse(fs.readFileSync(new URL("../data/concawe_4_81.json", import.meta.url), "utf8"));
@@ -115,6 +115,58 @@ check("범주4 ⇒ K4=0", concaweK4(concaweData, 1000, 4, 500) === 0);
   const withSpectrum = calcNoiseConcaweHourly({ ...common, spectrumRatiosDb });
   const bandOnly = calcConcaweBand({ concaweData, freqHz: 1000, lwDb: 118, d: 500, groundType: "soft", dSoftM: 500, tempC: 10, rhPercent: 75, stability: "D", v: 2, hs: 1.5 });
   check("1000Hz 집중 스펙트럼 ≈ 그 밴드 단독 계산(A가중 0)", Math.abs(withSpectrum.value - bandOnly.value) < 0.01, `${withSpectrum.value?.toFixed(3)} vs ${bandOnly.value?.toFixed(3)}`);
+}
+
+// lwFromTargetDbConcawe — 11/24 외부 검토 지적(docs/외부검토_1122_최종_분류.md): 기존
+// lwFromTargetDb(ISO 역산)로 구한 LW를 CONCAWE로 다시 계산하면 목표보다 낮게 나오는 걸
+// 재현하고, 새 함수로는 왕복이 정확히 맞는지 확인해요.
+{
+  const spectrumRatiosDb = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, -10 * Math.log10(7)]));
+  const common = {
+    concaweData, spectrumRatiosDb,
+    sourceLat: 37.5203, sourceLon: 127.1268,
+    receiverLat: 37.5203 - 0.0054, receiverLon: 127.1268, // 약 600m 남쪽
+    windVecFromDeg: 0, wsd10m: 2, stability: "D", // 음원→수음점 정풍
+    groundType: "soft", dSoftM: 500, tempC: 10, rhPercent: 75, hs: 1.5,
+  };
+
+  // 재현: ISO 역산 LW를 CONCAWE에 넣으면 목표(65)보다 낮게 나와요(외부 검토가 실측한
+  // 65→58과 같은 종류의 과소추정 — 거리·스펙트럼이 달라 숫자 자체는 다를 수 있어요).
+  const isoLw = lwFromTargetDb({
+    sourceLat: common.sourceLat, sourceLon: common.sourceLon,
+    measureLat: common.receiverLat, measureLon: common.receiverLon,
+    targetDb: 65, tempC: common.tempC, rhPercent: common.rhPercent,
+  });
+  const concaweWithIsoLw = calcNoiseConcaweHourly({ ...common, lwDb: isoLw.lwDb });
+  check(
+    "재현: ISO 역산 LW를 CONCAWE로 계산하면 목표(65)보다 낮게 나옴(엔진이 달라서 생기는 과소추정)",
+    concaweWithIsoLw.value !== null && concaweWithIsoLw.value < 65,
+    `ISO역산 LW=${isoLw.lwDb.toFixed(2)} → CONCAWE=${concaweWithIsoLw.value?.toFixed(2)}dB(A)`,
+  );
+
+  // 고침: 같은 모델(CONCAWE)로 역산하면 왕복이 정확히 맞아요(선형 구조 — 반복 계산 불필요).
+  const targetDb = 65;
+  const result = lwFromTargetDbConcawe({ targetDb, ...common });
+  const roundTrip = calcNoiseConcaweHourly({ ...common, lwDb: result.lwDb });
+  check(
+    "CONCAWE 역산 왕복: 65 목표 → 역산 LW → 같은 조건으로 재계산하면 65.0000",
+    result.lwDb !== null && Math.abs(roundTrip.value - targetDb) < 0.0001,
+    `역산 LW=${result.lwDb?.toFixed(4)} → 재계산=${roundTrip.value?.toFixed(4)}dB(A)`,
+  );
+
+  // 다른 거리·날씨에서도 똑같이 왕복이 맞는지(선형 가정이 특정 조건에서만 우연히 맞는 게 아닌지)
+  const common2 = { ...common, receiverLat: common.sourceLat - 0.009, wsd10m: 5, stability: "F", tempC: 25, rhPercent: 40 };
+  const result2 = lwFromTargetDbConcawe({ targetDb: 55, ...common2 });
+  const roundTrip2 = calcNoiseConcaweHourly({ ...common2, lwDb: result2.lwDb });
+  check(
+    "다른 거리·풍속·안정도·기온·습도에서도 왕복 정확 (55 목표)",
+    result2.lwDb !== null && Math.abs(roundTrip2.value - 55) < 0.0001,
+    `역산 LW=${result2.lwDb?.toFixed(4)} → 재계산=${roundTrip2.value?.toFixed(4)}dB(A)`,
+  );
+
+  // 계산 불가 조건(100m 미만)은 조용히 숫자를 내지 않고 명확히 실패로 알려줘요.
+  const tooClose = lwFromTargetDbConcawe({ targetDb: 65, ...common, receiverLat: common.sourceLat - 0.0003 });
+  check("100m 미만이면 역산도 계산 불가(null)", tooClose.lwDb === null && tooClose.flags.includes("근거리100m미만_계산안함"));
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

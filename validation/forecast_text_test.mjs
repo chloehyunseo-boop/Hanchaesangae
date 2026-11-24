@@ -59,5 +59,15 @@ ok(cellState({ layer: "exhaust", value: null, level: null, flags: ["발전차시
   ok(out[0].startsWith("23시~다음 날 1시"), "자정 넘기는 시간대 표기", out[0]);
 }
 
+// 11/24 수정: 사흘치(72시간) 연속으로 "없음" 상태가 이어지면(예: 발전차·공연 아예 선택
+// 안 한 시민 화면) 하루를 한 번만 빼는 옛 코드가 "54시" 같은 잘못된 시각을 냈어요.
+{
+  const hours = [];
+  for (let d = 24; d <= 26; d++) for (let h = 0; h < 24; h++) hours.push(H(d, h));
+  const series = hours.slice(16, 16 + 60).map((hour) => ({ hour, weather: { windVecFromDeg: 0 }, cellsByPlace: {} })); // 24일 16시부터 60시간
+  const out = buildForecastSentences({ series, now: H(24, 15) });
+  ok(out[0].startsWith("16시~11/27 0시") && !out[0].includes("54시"), "사흘치 연속 구간도 24시 넘는 엉뚱한 시각이 안 나옴", out[0]);
+}
+
 console.log(fails ? `\n실패 ${fails}건` : "\n전부 통과");
 if (fails) process.exitCode = 1;

@@ -17,6 +17,9 @@
     #venue-checkboxes label { display: inline-block; margin-right: 10px; font-size: 0.9rem; }
     #slider-label { font-weight: bold; }
     #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
+    #forecast-sentences { font-size: 0.9rem; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; }
+    #forecast-sentences div { margin: 2px 0; }
+    #place-view { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 10px 14px; margin: 8px 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
   </style>
 </head>
 <body>
@@ -42,6 +45,7 @@
       <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
       &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급")
       &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>점 무늬 = <b>모름</b>(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음)
+      &nbsp;&nbsp;<span class="legend-chip" style="background:#64b5f6;border:1.5px solid #1565c0;border-radius:50%"></span>파란 점 = 장소별 보기(눌러보세요)
     </div>
 
     <fieldset>
@@ -75,6 +79,15 @@
   </div>
 
   <div id="map"></div>
+
+  <div id="place-view" hidden></div>
+
+  <div id="panel">
+    <fieldset>
+      <legend>문장 예보 (최대 5줄)</legend>
+      <div id="forecast-sentences"></div>
+    </fieldset>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./app/main.js"></script>

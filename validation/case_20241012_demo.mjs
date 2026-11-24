@@ -17,10 +17,14 @@
 //    근사예요(엔진 코드가 아니라 이 데모 파일에만 있는 가정이라 engine/는 안 건드렸어요).
 //  - 발전차(배출가스)는 이 사례가 소음 간섭 제보라 넣지 않았어요(발전차 민원은 2024-05
 //    체조경기장 건으로 다른 사례예요, docs/민원_정리.md).
+//  - (11/24 수정, 하린 지적) 초판은 KSPO DOME 자신까지 수음점으로 써서 자기 음원과 거리
+//    0m 때문에 계산이 안 됐어요. 이 사례는 "공연장끼리 소리가 넘어간 일"이라, KSPO DOME을
+//    수음점으로 두되 KSPO DOME 자신의 공연은 음원에서 빼고 다른 두 공연장 소리만 계산해요.
 
 import { readFileSync } from "node:fs";
 import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
 import { placeCellState } from "../engine/place_view.js";
+import { computeNoiseCellConcawe } from "../engine/combine.js";
 import { stabilityFromForecast, skyCodeToName } from "../engine/plume.js";
 
 const site = JSON.parse(readFileSync(new URL("../data/site.geojson", import.meta.url)));
@@ -76,8 +80,15 @@ const stageSources = [
   stage("88잔디마당 무대", t(18, 0), t(19, 20)), // Lucky Daye(공식 타임테이블)
 ];
 
-// 재현 창의 수음점: 8개 표준 장소 + 사건 당사자(투란도트 관객)가 있던 KSPO DOME 자체.
-const places = [...DEFAULT_PLACE_NAMES, "KSPO DOME"].map((name) => ({ name, ...pt(name) }));
+// 재현 창의 수음점: 8개 표준 장소.
+// 하린 11/24 지적: "사건 당사자(투란도트 관객)가 있던 KSPO DOME"을 그대로 수음점으로 쓰면
+// KSPO DOME 자신의 음원과 거리 0m라 '근거리라 계산 안 함'에 걸려요. 이 사례는 "공연장끼리
+// 소리가 넘어간 일"이라, KSPO DOME 자신의 공연은 빼고 "다른 두 공연장(핸드볼경기장·
+// 88잔디마당) 소리가 KSPO DOME까지 얼마나 넘어오나"만 따로 계산해요(수음점은 그대로 KSPO
+// DOME 좌표, 음원만 바꿈).
+const places = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) }));
+const kspoDomeReceiver = pt("KSPO DOME");
+const externalSourcesForKspoDome = stageSources.filter((s) => s.lat !== kspoDomeReceiver.lat || s.lon !== kspoDomeReceiver.lon);
 
 const series = [];
 for (let h = 17; h <= 20; h++) {
@@ -87,6 +98,7 @@ for (let h = 17; h <= 20; h++) {
   series.push({
     hour: hourIso, weather,
     cellsByPlace: placeCellsForHour({ places, stageSources, generatorSources: [], weather, hour: hourIso, concaweData }),
+    kspoDomeExternal: computeNoiseCellConcawe({ stageSources: externalSourcesForKspoDome, receiver: kspoDomeReceiver, weather, hour: hourIso, concaweData }),
   });
 }
 
@@ -95,10 +107,11 @@ console.log("가정값: 음원 세기 100dB·7밴드 균등분배(실제 공연 
 
 for (const s of series) {
   console.log(`## ${s.hour.slice(11, 13)}시 — 바람 ${s.weather.windVecFromDeg}°에서 ${s.weather.wsd10m}m/s, 기온 ${s.weather.tempC}℃, 습도 ${s.weather.rhPercent}%, 안정도 ${s.weather.stability}`);
-  for (const name of [...DEFAULT_PLACE_NAMES, "KSPO DOME"]) {
+  for (const name of DEFAULT_PLACE_NAMES) {
     const st = placeCellState(s.cellsByPlace[name]?.noise);
     console.log(`   ${name}: ${st.text}`);
   }
+  console.log(`   KSPO DOME(투란도트 관객석, 핸드볼경기장·88잔디마당 소리만): ${placeCellState(s.kspoDomeExternal).text}`);
 }
 
 console.log("\n## 문장 예보 형식으로 보면:");
@@ -107,5 +120,5 @@ buildForecastSentences({ series, now: "2024-10-12T15:00:00+09:00" }).forEach((l,
 console.log("\n## 읽는 법");
 console.log("- 노컷뉴스 보도대로면 18시 무렵부터 KSPO DOME 근처에서 외부 소음이 들렸다는 뜻이에요 — 위 'KSPO DOME' 줄의 18~19시 상태와 비교해 보세요.");
 console.log("- '기준 미만'은 계산은 했지만 '약' 단계도 안 될 만큼 낮다는 뜻이에요(CLAUDE.md 2번) — 이 네 시간은 바람이 올림픽공원 밖 아파트 쪽(서·서북서풍 270~290°)이 아니라 다른 쪽으로 불어서, 표준 장소 8곳에서는 전부 '기준 미만'이 나왔어요.");
-console.log("- KSPO DOME 줄이 17~18시 '계산 못 함'/'일부 정보 빠짐'인 이유: 수음점을 KSPO DOME 좌표 그대로 써서, KSPO DOME 음원 자체와 거리가 0m(100m 미만)이라 '근거리 계산 안 함' 규칙에 걸려요 — 모델이 '음원 바로 앞'은 신뢰 못 한다고 정직하게 비우는 거예요(CLAUDE.md 2번), 버그 아니에요.");
+console.log("- 'KSPO DOME(투란도트 관객석, ...)' 줄은 KSPO DOME 자신의 공연 소리는 빼고 핸드볼경기장·88잔디마당 소리만 계산한 값이에요(하린 11/24 지적 — 자기 음원과 거리 0m면 '근거리라 계산 안 함'에 걸려서 의미 없는 결과가 나와요, 이 사례는 '남의 공연장 소리가 넘어온 일'이라 외부 소음만 봐야 해요).");
 console.log("- 이 결과는 통과/실패를 정하지 않고 그대로 기록만 해요(CLAUDE.md §8 검증방침).");
