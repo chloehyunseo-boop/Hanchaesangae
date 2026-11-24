@@ -15,7 +15,7 @@ import { renderPlaceTimeline } from "./place_view_ui.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
-  buildDemoStageSources,
+  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage,
 } from "./shared.js";
 
 const NUM_HOURS = 72; // 로드맵: 지금부터 6시간(초단기)+3일(단기), 1시간 단위
@@ -213,6 +213,7 @@ async function main() {
     state.generatorCount = Number(e.target.value) || 0;
     state.cellCache.clear();
     state.placeSeries = null;
+    refreshSliderBand();
     refresh();
   });
   const windOverrideToggle = document.getElementById("wind-override-toggle");
@@ -229,6 +230,7 @@ async function main() {
     }
     state.cellCache.clear();
     state.placeSeries = null;
+    refreshSliderBand();
     refresh();
   }
   windOverrideToggle.addEventListener("change", syncWindOverride);
@@ -254,6 +256,20 @@ async function main() {
   // 먼저 시작한 낡은 요청이 나중에 끝나서 최신 결과 위에 옛날 캐시·화면을 덮어쓸 수
   // 있었어요 — 매번 자기 차례 번호를 받아서, 자기보다 새 요청이 이미 시작됐으면
   // 캐시에 쓰지도 화면에 그리지도 않아요.
+  // 11/25 하린 결정: 그 시각 한 레이어가 "전부" 모름(예: 약풍이라 발전차 확산을 계산
+  // 못 함)이면 칸을 회색 점무늬로 칠하는 대신 지도 위 띠로 "왜 못 그렸는지" 말해줘요 —
+  // 지도 전체가 고장처럼 회색으로 덮이는 걸 막으면서도, "모름≠빈칸"(5차 외부 검토) 원칙은
+  // 띠 문구로 그대로 지켜요. 일부만 모름이거나(시간미확인 등) 빗금(근거리)은 그대로 칸으로 보여줘요.
+  const layerWarningEl = document.getElementById("layer-warning");
+  function renderLayerWarnings(cells, weather) {
+    const lines = [];
+    for (const [key, label] of [["exhaust", "exhaust"], ["noise", "noise"]]) {
+      const layerCells = cells.filter((c) => c.layer === key);
+      if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
+    }
+    layerWarningEl.innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
+  }
+
   let refreshSeq = 0;
   async function refresh() {
     const mySeq = ++refreshSeq;
@@ -264,9 +280,28 @@ async function main() {
     const { cells, warning } = await getCellsForHour(date);
     if (mySeq !== refreshSeq) return; // 그 사이 더 새 요청이 시작됨 — 이 결과는 버림
     warningEl.textContent = warning ?? "";
-    noiseLayer.setCells(cells.filter((c) => c.layer === "noise"), 25);
-    exhaustLayer.setCells(cells.filter((c) => c.layer === "exhaust"), 25);
+    const noiseCells = cells.filter((c) => c.layer === "noise");
+    const exhaustCells = cells.filter((c) => c.layer === "exhaust");
+    const weather = resolveWeather(date);
+    renderLayerWarnings(cells, weather);
+    noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
+    exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
     refreshForecastSentences();
+  }
+
+  // 슬라이더 위 회색 구간 — 어느 시간이 "매연을 계산 못 하는 시간"(발전차는 있는데 바람이
+  // 1m/s 미만)인지 미리 보여줘요. 격자 전체를 72번 돌릴 필요 없이, 그 조건(약풍미표시는
+  // plume.js가 바람 자체로 판정)을 날씨만 보고 미리 알 수 있어요(지금 엔진에서 소음이
+  // 똑같이 "전부 모름"이 되는 경우는 없어요 — 생기면 이 자리에 조건을 더 추가하면 돼요).
+  const sliderBandEl = document.getElementById("slider-band");
+  function refreshSliderBand() {
+    const segs = [];
+    for (let offset = 0; offset < NUM_HOURS; offset++) {
+      const weather = resolveWeather(hourSlotDate(offset));
+      const impossible = state.generatorCount > 0 && weather && weather.wsd10m < 1.0;
+      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
+    }
+    sliderBandEl.innerHTML = segs.join("");
   }
 
   // 문장 예보(하린 11/24 요청) — 지도 아래에 최대 5줄, buildForecastSentences 그대로 재사용.
@@ -284,6 +319,7 @@ async function main() {
   slider.addEventListener("change", refresh); // 로드맵 권고: 슬라이더를 "놓았을 때"만 계산
   slider.addEventListener("input", (e) => { sliderLabel.textContent = formatSlotLabel(hourSlotDate(Number(e.target.value))); });
 
+  refreshSliderBand();
   refresh();
 }
 

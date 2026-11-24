@@ -20,6 +20,11 @@
     #forecast-sentences { font-size: 0.9rem; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; }
     #forecast-sentences div { margin: 2px 0; }
     #place-view { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 10px 14px; margin: 8px 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+    #layer-warning:not(:empty) { background: #424242; color: #fff; font-size: 0.9rem; padding: 8px 16px; }
+    #layer-warning div { margin: 2px 0; }
+    #slider-band { display: flex; height: 6px; margin-top: 2px; }
+    #slider-band .slider-seg { flex: 1; }
+    #slider-band .slider-seg.impossible { background: #9e9e9e; }
   </style>
 </head>
 <body>
@@ -46,6 +51,7 @@
       &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급")
       &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>점 무늬 = <b>모름</b>(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음)
       &nbsp;&nbsp;<span class="legend-chip" style="background:#64b5f6;border:1.5px solid #1565c0;border-radius:50%"></span>파란 점 = 장소별 보기(눌러보세요)
+      &nbsp;&nbsp;<span class="legend-chip" style="background:#9e9e9e"></span>슬라이더 아래 회색 구간 = 그 시간은 바람이 거의 없어 배출가스를 계산 못 해요
     </div>
 
     <fieldset>
@@ -71,9 +77,12 @@
     <div class="row">
       시간: <span id="slider-label"></span>
       <input type="range" id="time-slider" style="width:100%" />
+      <div id="slider-band"></div>
       <div id="slider-warning"></div>
     </div>
   </div>
+
+  <div id="layer-warning"></div>
 
   <div id="map"></div>
 

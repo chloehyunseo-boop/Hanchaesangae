@@ -19,7 +19,7 @@ import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
-  buildDemoStageSources, kstParts,
+  buildDemoStageSources, kstParts, allCellsUnknown, uniformUnknownMessage,
 } from "./shared.js";
 
 const NUM_HOURS = 72;
@@ -68,12 +68,9 @@ function buildGeneratorSourcesFromTrucks() {
   return out;
 }
 
-async function getCellsForHour(date, computeHourInWorker) {
+/** 그 시각 엔진 입력 날씨. 시민 화면(main.js)의 resolveWeather와 같은 구조예요. */
+function resolveWeather(date) {
   const hourIso = hourSlotIso(date);
-  const cacheKey = `${hourIso}|${state.배출시나리오_기본값}`;
-  if (state.cellCache.has(cacheKey)) return state.cellCache.get(cacheKey);
-
-  let weather;
   if (state.windOverride) {
     const base = state.weatherByHour.get(weatherKey(date));
     const sky = base?.SKY ?? "1";
@@ -84,11 +81,17 @@ async function getCellsForHour(date, computeHourInWorker) {
         lat: PARK_CENTER.lat, lon: PARK_CENTER.lon, dateUtc: new Date(hourIso),
       }).stability;
     } catch { /* 기본값 D 유지 */ }
-    weather = { tempC: 10, rhPercent: 60, ...state.windOverride, stability, tmp: 10 };
-  } else {
-    weather = toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourIso);
+    return { tempC: 10, rhPercent: 60, ...state.windOverride, stability, tmp: 10 };
   }
+  return toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourIso);
+}
 
+async function getCellsForHour(date, computeHourInWorker) {
+  const hourIso = hourSlotIso(date);
+  const cacheKey = `${hourIso}|${state.배출시나리오_기본값}`;
+  if (state.cellCache.has(cacheKey)) return state.cellCache.get(cacheKey);
+
+  const weather = resolveWeather(date);
   if (!weather) {
     const result = { cells: [], warning: "이 시각은 기상 자료가 없어 계산하지 않았어요(자료 부족)." };
     state.cellCache.set(cacheKey, result);
@@ -226,7 +229,7 @@ async function buildForecastCsv() {
   for (let offset = 0; offset < NUM_HOURS; offset++) {
     const date = hourSlotDate(offset);
     const hourIso = hourSlotIso(date);
-    const weather = toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourIso);
+    const weather = resolveWeather(date);
     if (!weather) continue;
     const cellsByPlace = placeCellsForHour({
       places, stageSources, generatorSources, weather, hour: hourIso, concaweData: state.concaweData,
@@ -291,6 +294,7 @@ async function main() {
   function onTruckChange() {
     saveTrucks();
     state.cellCache.clear();
+    refreshSliderBand();
     refresh();
   }
   renderTruckTable(onTruckChange);
@@ -314,6 +318,7 @@ async function main() {
       windOverrideFields.style.display = "none";
     }
     state.cellCache.clear();
+    refreshSliderBand();
     refresh();
   }
   windOverrideToggle.addEventListener("change", syncWindOverride);
@@ -354,6 +359,33 @@ async function main() {
   const sliderLabel = document.getElementById("slider-label");
   const warningEl = document.getElementById("slider-warning");
 
+  // 11/25 하린 결정: 그 시각 한 레이어가 "전부" 모름이면(약풍이라 발전차 확산을 계산 못
+  // 하는 경우 등) 칸을 회색 점무늬로 칠하는 대신 지도 위 띠로 알려줘요(시민 화면 main.js와
+  // 같은 방식, app/shared.js의 함수 재사용).
+  const layerWarningEl = document.getElementById("layer-warning");
+  function renderLayerWarnings(cells, weather) {
+    const lines = [];
+    for (const key of ["exhaust", "noise"]) {
+      const layerCells = cells.filter((c) => c.layer === key);
+      if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
+    }
+    layerWarningEl.innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
+  }
+
+  // 슬라이더 위 회색 구간 — 입력한 발전차가 하나라도 있는데 바람이 1m/s 미만인 시간을
+  // 미리 보여줘요(시민 화면과 같은 방식).
+  const sliderBandEl = document.getElementById("slider-band");
+  function refreshSliderBand() {
+    const hasTrucks = buildGeneratorSourcesFromTrucks().length > 0;
+    const segs = [];
+    for (let offset = 0; offset < NUM_HOURS; offset++) {
+      const weather = resolveWeather(hourSlotDate(offset));
+      const impossible = hasTrucks && weather && weather.wsd10m < 1.0;
+      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
+    }
+    sliderBandEl.innerHTML = segs.join("");
+  }
+
   let refreshSeq = 0;
   async function refresh() {
     const mySeq = ++refreshSeq;
@@ -364,17 +396,19 @@ async function main() {
     const { cells, warning } = await getCellsForHour(date, computeHourInWorker);
     if (mySeq !== refreshSeq) return;
     warningEl.textContent = warning ?? "";
-    noiseLayer.setCells(cells.filter((c) => c.layer === "noise"), 25);
-    exhaustLayer.setCells(cells.filter((c) => c.layer === "exhaust"), 25);
+    const weatherForWarning = resolveWeather(date);
+    renderLayerWarnings(cells, weatherForWarning);
+    const noiseCells = cells.filter((c) => c.layer === "noise");
+    const exhaustCells = cells.filter((c) => c.layer === "exhaust");
+    noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
+    exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
 
     // 영향 강습 목록은 8개 표준 장소 셀로 판단해요(지도 격자 전체가 아니라 장소별 보기와
     // 같은 수음점 — forecast_text.js의 placeCellsForHour, 11/24).
     const places = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) })).filter((p) => p.lat !== undefined);
     let placeCells = {};
     if (!warning) {
-      const weather = state.windOverride
-        ? { tempC: 10, rhPercent: 60, ...state.windOverride, stability: "D", tmp: 10 }
-        : toEngineWeather(state.weatherByHour.get(weatherKey(date)), hourSlotIso(date));
+      const weather = resolveWeather(date);
       if (weather) {
         placeCells = placeCellsForHour({
           places,
@@ -391,6 +425,7 @@ async function main() {
   slider.addEventListener("change", refresh);
   slider.addEventListener("input", (e) => { sliderLabel.textContent = formatSlotLabel(hourSlotDate(Number(e.target.value))); });
 
+  refreshSliderBand();
   refresh();
 }
 

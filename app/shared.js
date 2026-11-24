@@ -87,6 +87,28 @@ export function toEngineWeather(rec, hourIso) {
   return { tempC, rhPercent, windVecFromDeg, wsd10m, stability, tmp: tempC };
 }
 
+// 11/25 하린 결정: 그 시각 한 레이어의 칸이 "전부" 모름(unknown, 예: 약풍이라 발전차
+// 확산을 계산 못 함)이면 지도 전체가 회색 점무늬로 덮여 고장처럼 보여요 — 칸을 칠하지
+// 말고 띠(배너)로 "왜 못 그렸는지"를 말로 알려줘요. 일부만 모름인 경우(시간미확인 등)는
+// 지금처럼 칸으로 보여줘요(이건 전체가 모름일 때만 — 5차 외부 검토의 "모름≠빈칸" 원칙은
+// 띠 문구로 그대로 지켜져요).
+export function allCellsUnknown(cells) {
+  return Array.isArray(cells) && cells.length > 0 && cells.every((c) => mapDisplayFor(c).mode === "unknown");
+}
+
+const UNIFORM_UNKNOWN_LAYER_LABEL = { exhaust: "배출가스가", noise: "소음이" };
+
+/** 전체-모름 띠에 넣을 문구. 원인이 약풍이면 그 시각 실제 풍속을 넣어서 말해요. */
+export function uniformUnknownMessage(layerKey, cells, weather) {
+  const label = UNIFORM_UNKNOWN_LAYER_LABEL[layerKey] ?? `${layerKey}가`;
+  const flags = cells[0]?.flags ?? [];
+  if (flags.includes("약풍미표시")) {
+    const wsd = typeof weather?.wsd10m === "number" ? `${weather.wsd10m}m/s` : "거의 없음";
+    return `이 시간은 바람이 거의 없어(풍속 ${wsd}) ${label} 어디로 퍼질지 계산할 수 없어요. 이런 때는 발전차 주변에 고일 수 있어요. 안전하다는 뜻은 아니에요.`;
+  }
+  return `이 시간은 ${label} 계산할 수 없어요. 안전하다는 뜻은 아니에요.`;
+}
+
 export function hourSlotDate(offsetHours) {
   const d = new Date();
   d.setMinutes(0, 0, 0);
