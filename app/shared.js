@@ -153,30 +153,55 @@ export const CanvasCellLayer = L.Layer.extend({
     this._canvas.height = size.y;
     this._redraw();
   },
+  // 칸(fill) 색은 흐리게 섞어서 "자연스럽게 퍼지는" 느낌을 주되, 빗금·점무늬(불확실·모름
+  // 표시)는 흐리면 신호 자체가 흐려져 버려서(이 프로젝트에서 가장 중요한 "모름과 빈칸을
+  // 구분" 규칙과 충돌) 또렷하게 따로 그려요 — 색은 분위기, 무늬는 사실이라고 생각하면 돼요.
   _redraw() {
     if (!this._map || !this._canvas) return;
+    const w = this._canvas.width, h = this._canvas.height;
     const ctx = this._canvas.getContext("2d");
-    ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+    ctx.clearRect(0, 0, w, h);
+    if (!this._buffer) this._buffer = document.createElement("canvas");
+    this._buffer.width = w;
+    this._buffer.height = h;
+    const bctx = this._buffer.getContext("2d");
+    bctx.clearRect(0, 0, w, h);
+
+    const overlays = [];
+    let cellPx = 25;
     for (const cell of this._cells) {
       const style = this._styleFor(cell);
       if (!style) continue;
       const nw = this._map.latLngToContainerPoint([cell.y + this._halfLatDeg, cell.x - this._halfLonDeg]);
       const se = this._map.latLngToContainerPoint([cell.y - this._halfLatDeg, cell.x + this._halfLonDeg]);
-      const w = Math.max(1, se.x - nw.x);
-      const h = Math.max(1, se.y - nw.y);
-      ctx.fillStyle = style.fill;
-      ctx.fillRect(nw.x, nw.y, w, h);
+      const cw = Math.max(1, se.x - nw.x);
+      const ch = Math.max(1, se.y - nw.y);
+      cellPx = cw;
+      bctx.fillStyle = style.fill;
+      bctx.fillRect(nw.x, nw.y, cw, ch);
+      if (style.hatch || style.dotted) overlays.push({ nw, se, w: cw, h: ch, style });
+    }
+
+    // 흐림 반경은 칸 크기(줌 배율)에 맞춰요 — 너무 흐리면 등급 경계가 안 보이고,
+    // 너무 또렷하면 예전처럼 네모가 그대로 보여요.
+    const blurPx = Math.max(2, Math.min(14, cellPx * 0.6));
+    ctx.save();
+    ctx.filter = `blur(${blurPx}px)`;
+    ctx.drawImage(this._buffer, 0, 0);
+    ctx.restore();
+
+    for (const { nw, se, w: cw, h: ch, style } of overlays) {
       if (style.hatch) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(nw.x, nw.y, w, h);
+        ctx.rect(nw.x, nw.y, cw, ch);
         ctx.clip();
         ctx.strokeStyle = style.hatchColor ?? "rgba(60,60,60,0.55)";
         ctx.lineWidth = 1;
-        for (let off = -Math.max(w, h); off < Math.max(w, h); off += 5) {
+        for (let off = -Math.max(cw, ch); off < Math.max(cw, ch); off += 5) {
           ctx.beginPath();
           ctx.moveTo(nw.x + off, nw.y);
-          ctx.lineTo(nw.x + off + h, nw.y + h);
+          ctx.lineTo(nw.x + off + ch, nw.y + ch);
           ctx.stroke();
         }
         ctx.restore();
@@ -184,7 +209,7 @@ export const CanvasCellLayer = L.Layer.extend({
       if (style.dotted) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(nw.x, nw.y, w, h);
+        ctx.rect(nw.x, nw.y, cw, ch);
         ctx.clip();
         ctx.fillStyle = "rgba(60,60,60,0.6)";
         for (let yy = nw.y + 3; yy < se.y; yy += 6) {
