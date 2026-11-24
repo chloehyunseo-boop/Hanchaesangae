@@ -24,14 +24,16 @@ import {
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_agency_trucks_v1";
+const EVENTS_STORAGE_KEY = "olpak_agency_manual_events_v1";
 const ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
 const GRADE_LABEL = { 모름: "모름", 인증: "인증", 비인증: "비인증" };
 
 const state = {
-  weatherByHour: null, siteByName: null, assumptions: null, concaweData: null, lessons: null,
+  weatherByHour: null, siteByName: null, assumptions: null, concaweData: null, lessons: null, events: null,
   selectedVenues: new Set(),
   volumePreset: "기본",
   trucks: loadTrucks(), // [{id, site, 발전기수:number|null, 인증등급:"모름"|"인증"|"비인증", 엔진출력_kW:number|null}]
+  manualEvents: loadManualEvents(), // [{id, title, site, 날짜, 시작, 소요분}] — 공단 화면에서 직접 입력(11/25)
   배출시나리오_기본값: "인증", // 트럭의 인증등급이 "모름"일 때 쓰는 값(하린 11/24 지시: 비인증 비교 보기)
   windOverride: null,
   cellCache: new Map(),
@@ -47,6 +49,18 @@ function loadTrucks() {
 }
 function saveTrucks() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.trucks)); } catch { /* 저장 안 돼도 화면은 그대로 동작 */ }
+}
+
+function loadManualEvents() {
+  try {
+    const raw = localStorage.getItem(EVENTS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return parsed;
+  } catch { /* 저장된 값이 깨졌으면 빈 목록으로 시작 */ }
+  return [];
+}
+function saveManualEvents() {
+  try { localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(state.manualEvents)); } catch { /* 저장 안 돼도 화면은 그대로 동작 */ }
 }
 
 // 트럭 입력 → combine.js가 받는 generatorSources(발전차 목록). 공란은 undefined로 보내서
@@ -159,6 +173,76 @@ function renderTruckTable(onChange) {
 }
 
 // ---------------------------------------------------------------------------
+// 공연 일정 — 로드맵 11/23 몫("공연 일정 자동(공단 API)+수동 입력", 11/24까지 놓쳤던 걸
+// 11/25에 추가). 자동 수집(scripts/update-events.mjs → data/events.json)은 읽기 전용으로
+// 보여주고, 시작 시각·장소가 안 잡힌 것(CLAUDE.md 5번 "시작 시각 없으면 수동 입력")은
+// 발전차 입력과 같은 방식(localStorage)으로 사람이 채워 넣을 수 있게 해요.
+// ⚠️ 지금은 "보기+입력"만 동작해요 — 이 목록이 실제 지도 계산(소음·배출가스)에 들어가는
+// 연결까지는 아직 안 했어요(계산은 여전히 위쪽 "공연 중이라고 가정할 장소" 데모 체크박스를
+// 써요) — 그 연결은 범위가 더 커서 따로 처리해요.
+function renderAutoEvents(events) {
+  const el = document.getElementById("auto-events");
+  const list = events?.공연 ?? [];
+  if (list.length === 0) {
+    el.textContent = events?.실패기록?.length
+      ? `자동 수집에 실패했어요 — ${events.실패기록[events.실패기록.length - 1].사유}`
+      : "아직 자동 수집된 공연이 없어요(KCISA_SERVICE_KEY 미등록이거나 그 시각 공연 없음).";
+    return;
+  }
+  el.innerHTML = list.map((e) => {
+    const flagsText = e.flags?.length ? ` — ${e.flags.join("·")}(확인 필요)` : "";
+    return `<div>${e.title} · ${e.site ?? "장소 미확인"} · ${e.날짜 ?? "날짜 미확인"} ${e.시작 ?? "시작시각 미확인"}${flagsText}</div>`;
+  }).join("");
+}
+
+function renderManualEventsTable(onChange) {
+  const tbody = document.getElementById("event-rows");
+  tbody.innerHTML = "";
+  const venueNames = [...state.siteByName.keys()];
+  for (const ev of state.manualEvents) {
+    const tr = document.createElement("tr");
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text"; titleInput.style.width = "8em"; titleInput.placeholder = "공연명";
+    titleInput.value = ev.title ?? "";
+    titleInput.addEventListener("change", () => { ev.title = titleInput.value || null; onChange(); });
+
+    const siteSel = document.createElement("select");
+    siteSel.innerHTML = `<option value="">위치 고르기</option>` + venueNames.map((n) => `<option value="${n}">${n}</option>`).join("");
+    siteSel.value = ev.site ?? "";
+    siteSel.addEventListener("change", () => { ev.site = siteSel.value || null; onChange(); });
+
+    const dateInput = document.createElement("input");
+    dateInput.type = "date"; dateInput.value = ev.날짜 ?? "";
+    dateInput.addEventListener("change", () => { ev.날짜 = dateInput.value || null; onChange(); });
+
+    const startInput = document.createElement("input");
+    startInput.type = "time"; startInput.value = ev.시작 ?? "";
+    startInput.addEventListener("change", () => { ev.시작 = startInput.value || null; onChange(); });
+
+    const durInput = document.createElement("input");
+    durInput.type = "number"; durInput.min = "1"; durInput.style.width = "4.5em"; durInput.placeholder = "분";
+    durInput.value = ev.소요분 ?? "";
+    durInput.addEventListener("change", () => { const v = Number(durInput.value); ev.소요분 = durInput.value === "" ? null : (Number.isFinite(v) ? v : null); onChange(); });
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button"; delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => {
+      state.manualEvents = state.manualEvents.filter((x) => x.id !== ev.id);
+      renderManualEventsTable(onChange);
+      onChange();
+    });
+
+    for (const el of [titleInput, siteSel, dateInput, startInput, durInput, delBtn]) {
+      const td = document.createElement("td");
+      td.appendChild(el);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 영향 강습 목록 — data/lessons.json의 강좌 배열을 읽어요. 하린이 11/24에 실제 자료(수영장
 // 281개+테니스 89개, scripts/build_lessons.py로 생성)를 채워 넣었어요. 강좌 1건의 실제 모양:
 // { name, 종목, site(site.geojson 이름), 요일:[0~6, 0=일요일], 시작:"HH:MM", 끝:"HH:MM",
@@ -245,12 +329,14 @@ async function buildForecastCsv() {
 
 // ---------------------------------------------------------------------------
 async function main() {
-  const { weatherByHour, siteByName, assumptions, concaweData, lessons } = await loadCommonData();
+  const { weatherByHour, siteByName, assumptions, concaweData, lessons, events } = await loadCommonData();
   state.weatherByHour = weatherByHour;
   state.siteByName = siteByName;
   state.assumptions = assumptions;
   state.concaweData = concaweData;
   state.lessons = lessons;
+  state.events = events;
+  renderAutoEvents(events);
 
   const computeHourInWorker = createGridWorker();
 
@@ -298,6 +384,16 @@ async function main() {
     refresh();
   }
   renderTruckTable(onTruckChange);
+
+  document.getElementById("add-event").addEventListener("click", () => {
+    state.manualEvents.push({ id: `e${Date.now()}${Math.random().toString(36).slice(2, 6)}`, title: null, site: null, 날짜: null, 시작: null, 소요분: null });
+    saveManualEvents();
+    renderManualEventsTable(onEventChange);
+  });
+  function onEventChange() {
+    saveManualEvents();
+  }
+  renderManualEventsTable(onEventChange);
 
   document.getElementById("scenario-default").addEventListener("change", (e) => {
     state.배출시나리오_기본값 = e.target.value;

@@ -75,6 +75,21 @@
     </fieldset>
 
     <fieldset>
+      <legend>공연 일정 — 자동 수집(공단 API)</legend>
+      <div id="auto-events" style="font-size:0.9rem"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>공연 일정 — 수동 입력 (자동 수집에 없거나 시작 시각이 안 잡힌 공연)</legend>
+      <table id="event-table">
+        <thead><tr><th>공연명</th><th>위치</th><th>날짜</th><th>시작시각</th><th>소요(분)</th><th></th></tr></thead>
+        <tbody id="event-rows"></tbody>
+      </table>
+      <button type="button" id="add-event">공연 추가</button>
+      <p style="font-size:0.8rem;color:#555">이 입력은 지도 계산에는 아직 안 쓰여요(위쪽 "공연 중이라고 가정할 장소" 데모로 계산해요) — 지금은 일정을 기록·확인하는 용도예요.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>풍향·풍속 직접 설정(선택)</legend>
       <div class="row">
         <label><input type="checkbox" id="wind-override-toggle" /> 실제 예보 대신 직접 설정</label>

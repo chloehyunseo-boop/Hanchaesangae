@@ -181,6 +181,7 @@ export const CanvasCellLayer = L.Layer.extend({
   _redraw() {
     if (!this._map || !this._canvas) return;
     const w = this._canvas.width, h = this._canvas.height;
+    if (w === 0 || h === 0) return; // 지도가 아직 자리를 못 잡았을 때(폭·높이 0) — drawImage가 던짐(11/25 발견)
     const ctx = this._canvas.getContext("2d");
     ctx.clearRect(0, 0, w, h);
     if (!this._buffer) this._buffer = document.createElement("canvas");

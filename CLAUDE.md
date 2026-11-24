@@ -47,7 +47,7 @@
 | 계산 | 브라우저 JavaScript |
 | 격자 | 25m (EPSG:5186), 기상청 조회는 5km 격자 nx=62, ny=126 (engine/common.js) |
 | 기상 | 기상청 단기예보 조회서비스(15084084), 과거 검증은 API허브 연계(15139470) |
-| **공연 일정** | **공단 '올림픽공원 공연정보' API** (공공데이터포털). KOPIS는 공연시설·기획제작사만 가입 가능해 쓰지 않아요. 시작 시각 없으면 '시간 미확인'+수동 입력, 종료는 런타임 추정. 11/19 실제 호출로 확인: 실제 엔드포인트는 `https://api.kcisa.kr/openapi/service/rest/meta/KSCperf`(문화공공데이터광장 경유, data.go.kr은 LINK만 걺). `temporalCoverage`(시작시각, "19:00" 등)와 `extent`(소요시간, "120분" 등) 필드가 대부분 있음 — 단 일부 항목은 형식이 지저분함(예: "2015년 4월5일(일) 오후4시"), 파싱 시 예외처리 필요. 대관정보는 `https://api.kcisa.kr/openapi/service/rest/meta12/getKSCD0803` — `temporalCoverage`·`extent` 전부 비어있음(title·spatial·url만 있음), 그래서 시간 정보는 애초에 기대 안 함(아래 표대로 행사 이력 용도로만 씀) |
+| **공연 일정** | **공단 '올림픽공원 공연정보' API** (공공데이터포털). KOPIS는 공연시설·기획제작사만 가입 가능해 쓰지 않아요. 시작 시각 없으면 '시간 미확인'+수동 입력, 종료는 런타임 추정. 11/19 실제 호출로 확인: 실제 엔드포인트는 `https://api.kcisa.kr/openapi/service/rest/meta/KSCperf`(문화공공데이터광장 경유, data.go.kr은 LINK만 걺). `temporalCoverage`(시작시각, "19:00" 등)와 `extent`(소요시간, "120분" 등) 필드가 대부분 있음 — 단 일부 항목은 형식이 지저분함(예: "2015년 4월5일(일) 오후4시"), 파싱 시 예외처리 필요. 대관정보는 `https://api.kcisa.kr/openapi/service/rest/meta12/getKSCD0803` — `temporalCoverage`·`extent` 전부 비어있음(title·spatial·url만 있음), 그래서 시간 정보는 애초에 기대 안 함(아래 표대로 행사 이력 용도로만 씀). **구현(11/25)**: `engine/events.js`+`scripts/update-events.mjs`가 매시 50분 자동 수집(`data/events.json`), 인증키는 `secrets.KCISA_SERVICE_KEY`(KMA와 다른 키, 아직 미등록 — 등록 전까지는 실패기록만 쌓임). 수동 입력은 공단 화면(`agency.html`)에 발전차 입력과 같은 방식(localStorage)으로 넣었어요. ⚠️ 아직 지도 계산(소음·배출가스)에는 안 이어져 있어요 — "보기+입력"까지만 동작, 실제 계산 연결은 더 큰 작업이라 남겨둠. |
 
 **공단 데이터 6종** (공모전 "공단 개방 데이터 1종 이상" 조건 충족):
 

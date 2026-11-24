@@ -1,7 +1,8 @@
-# 매시 50분에 기상청 데이터를 받아 data/weather.json을 갱신하는 워크플로.
-# 공단 데이터(공연정보·대관정보 등) 연동은 11/16 이후, 공단 답변을 보고 추가해요.
+# 매시 50분에 기상청 데이터·공단 공연 일정을 받아 data/weather.json·data/events.json을
+# 갱신하는 워크플로(11/25, 공연 일정은 로드맵 11/23 몫을 뒤늦게 추가).
 # 인증키는 여기(코드)에 절대 쓰지 않고, 저장소 Settings > Secrets and variables > Actions에
-# KMA_SERVICE_KEY 이름으로 넣어요. 공개 저장소의 스케줄 Actions는 60일 동안 커밋이 없으면
+# KMA_SERVICE_KEY(기상청)·KCISA_SERVICE_KEY(공단 공연정보, 문화공공데이터광장 발급 — KMA와
+# 다른 키예요) 이름으로 넣어요. 공개 저장소의 스케줄 Actions는 60일 동안 커밋이 없으면
 # 자동으로 꺼져요 — 기획서에 이 대책을 적어 둬야 해요(로드맵 8번, 변경사항 01).
 
 name: update-data
@@ -31,10 +32,19 @@ jobs:
           TZ: Asia/Seoul
         run: node scripts/update-weather.mjs
 
+      # KCISA_SERVICE_KEY가 아직 없으면 이 단계는 실패기록만 남기고 넘어가요(날씨 갱신을
+      # 막으면 안 돼서 continue-on-error). 키가 등록되면 자동으로 실제 데이터가 들어와요.
+      - name: 공단 공연 일정 갱신
+        continue-on-error: true
+        env:
+          KCISA_SERVICE_KEY: ${{ secrets.KCISA_SERVICE_KEY }}
+          TZ: Asia/Seoul
+        run: node scripts/update-events.mjs
+
       - name: 바뀐 데이터만 커밋
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/weather.json
-          git diff --cached --quiet || git commit -m "auto: 기상 데이터 갱신 ($(date -u +%Y-%m-%dT%H:%MZ))"
+          git add data/weather.json data/events.json
+          git diff --cached --quiet || git commit -m "auto: 기상·공연 데이터 갱신 ($(date -u +%Y-%m-%dT%H:%MZ))"
           git push
