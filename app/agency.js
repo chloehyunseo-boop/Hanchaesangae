@@ -191,7 +191,12 @@ function renderAutoEvents(events) {
   }
   el.innerHTML = list.map((e) => {
     const flagsText = e.flags?.length ? ` — ${e.flags.join("·")}(확인 필요)` : "";
-    return `<div>${e.title} · ${e.site ?? "장소 미확인"} · ${e.날짜 ?? "날짜 미확인"} ${e.시작 ?? "시작시각 미확인"}${flagsText}</div>`;
+    // 출처가 둘이에요(11/25) — "공단API"(과거 기록)는 날짜 하루+시작시각, "공단일정페이지"
+    // (앞으로 있을 공연, 공단 홈페이지에서 긁어옴)는 날짜 범위+원문 시간 텍스트예요.
+    const whenText = e.출처 === "공단일정페이지"
+      ? `${e.기간시작 ?? "날짜 미확인"}~${e.기간끝 ?? "?"} (${e.원본시간텍스트 ?? "시간 미확인"})`
+      : `${e.날짜 ?? "날짜 미확인"} ${e.시작 ?? "시작시각 미확인"}`;
+    return `<div>[${e.출처}] ${e.title} · ${e.site ?? "장소 미확인"} · ${whenText}${flagsText}</div>`;
   }).join("");
 }
 

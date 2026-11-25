@@ -5,7 +5,7 @@
 // response.body.items 경로)는 문화공공데이터광장의 다른 meta/ API들과 같은 공통 틀이라고
 // 가정한 거예요 — 실제 키가 생기면 이 가정이 맞는지 꼭 다시 확인해야 해요(engine/events.js
 // 하단 "확인할 것" 참고).
-import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText, parseEventDate } from "../engine/events.js";
+import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText, parseEventDate, parseDateRange, parseUpcomingScheduleHtml } from "../engine/events.js";
 
 let failCount = 0;
 function check(name, condition, detail) {
@@ -126,6 +126,87 @@ check("null 입력 → null", parseEventDate(null) === null);
   const parsed = parsePerformanceResponse(realShapeRaw);
   check("날짜 정보가 전혀 없으면 날짜:null + 날짜미확인 플래그", parsed[0].날짜 === null && parsed[0].flags.includes("날짜미확인"));
   check("그래도 시작시각·소요시간·장소는 정상 추출", parsed[0].시작 === "17:00" && parsed[0].소요분 === 270 && parsed[0].site === "올림픽홀");
+}
+
+// 날짜 범위 파싱(일정안내 페이지의 "YYYY-MM-DD ~ YYYY-MM-DD")
+check("날짜 범위 파싱", JSON.stringify(parseDateRange("2026-11-28 ~ 2027-01-03")) === JSON.stringify({ 기간시작: "2026-11-28", 기간끝: "2027-01-03" }));
+check("하루짜리는 시작=끝", JSON.stringify(parseDateRange("2026-11-27")) === JSON.stringify({ 기간시작: "2026-11-27", 기간끝: "2026-11-27" }));
+check("못 읽으면 둘 다 null", JSON.stringify(parseDateRange("미정")) === JSON.stringify({ 기간시작: null, 기간끝: null }));
+
+// 일정안내 페이지 스크래핑 — 11/25 실제 페이지 구조로 만든 모의 HTML. <head>의 <script>
+// 안에 똑같은 HTML 조각(AJAX 템플릿 문자열)이 들어있는 것까지 재현해요 — 처음엔 이것
+//때문에 전체 페이지에서 찾으면 스크립트 템플릿까지 걸려서 "place"가 수만 자짜리 엉뚱한
+// 값으로 깨지는 버그가 있었어요(실제로 겪음) — "rowSpace" 섹션 안에서만 찾게 고쳐서
+// 이 테스트로 고정해요.
+{
+  const mockHtml = `<!DOCTYPE html><html><head>
+<script>
+function f(){
+  var htmls = '';
+  $.each(result[0], function (index,item){
+    htmls += '<div class="col-sm-6">';
+    htmls += '    <a href="x" class="item">';
+    htmls += '        <div class="info">';
+    htmls += '            <em class="place">'+item.plc+'</em>';
+    htmls += '            <strong class="title">'+item.title+'</strong>';
+    htmls += '            <span class="date">'+item.beginDt+'~'+item.endDt+'</span>';
+    htmls += '            <small class="time" >'+item.tm+'</small>';
+    htmls += '        </div>';
+    htmls += '    </a>';
+    htmls += '</div>';
+  });
+}
+</script>
+</head><body>
+<div class="schedule_list thumb">
+  <div class="row" id="rowSpace">
+    <div class="col-sm-6">
+      <a href="/view?evtSeq=1" class="item">
+        <div class="info">
+          <em class="place">KSPO DOME</em>
+          <strong class="title">모의 콘서트</strong>
+          <!-- <span class="date" th:text="|가짜|"></span> -->
+          <span class="date">2026-11-27 ~ 2026-11-29</span>
+          <small class="time">2026년 11월 27일(금) 오후 7시</small>
+        </div>
+      </a>
+    </div>
+    <div class="col-sm-6">
+      <a href="/view?evtSeq=2" class="item">
+        <div class="info">
+          <em class="place">모르는장소</em>
+          <strong class="title">장소 미확인 공연</strong>
+          <span class="date">2026-12-01</span>
+          <small class="time">저녁</small>
+        </div>
+      </a>
+    </div>
+  </div>
+  <div class="last">
+    <div class="box"><p>지난 공연은 아래에서 확인하실 수 있습니다.</p></div>
+    <div class="schedule_list thumb last">
+      <div class="row" id="rowSpacePass">
+        <div class="col-sm-6">
+          <a href="/view?evtSeq=999" class="item">
+            <div class="info">
+              <em class="place">KSPO DOME</em>
+              <strong class="title">지난 공연(안 들어가야 함)</strong>
+              <span class="date">2020-01-01</span>
+              <small class="time">과거</small>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>`;
+  const events = parseUpcomingScheduleHtml(mockHtml);
+  check("스크립트 템플릿은 안 걸리고 실제 항목 2건만 파싱됨", events.length === 2);
+  check("첫 항목: 장소·날짜·시간 정상(place 값이 스크립트 내용으로 안 깨짐)", events[0]?.site === "KSPO DOME" && events[0]?.기간시작 === "2026-11-27" && events[0]?.기간끝 === "2026-11-29" && events[0]?.원본시간텍스트.includes("오후 7시"));
+  check("둘째 항목: 모르는 장소는 추측 안 하고 장소미확인", events[1]?.site === null && events[1]?.flags.includes("장소미확인"));
+  check("'지난 공연'(class=last) 구간은 안 읽음", !events.some((e) => e.title.includes("지난 공연")));
+  check("모든 항목 출처가 '공단일정페이지'", events.every((e) => e.출처 === "공단일정페이지"));
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

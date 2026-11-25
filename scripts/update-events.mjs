@@ -1,49 +1,41 @@
 // scripts/update-events.mjs
 // GitHub Actions가 매시 50분에 실행해요(.github/workflows/update-data.yml).
-// 공단 '올림픽공원 공연정보' API(KSCperf)를 받아 data/events.json을 갱신해요.
+// 공단 데이터 2곳을 받아 data/events.json을 갱신해요.
 // 인증키는 환경변수(KCISA_SERVICE_KEY)로만 받아요 — 코드·커밋에는 절대 안 넣어요.
 
 import { writeFile } from "node:fs/promises";
-import { fetchPerformances, parsePerformanceResponse } from "../engine/events.js";
+import { fetchPerformances, parsePerformanceResponse, fetchUpcomingSchedulePage, parseUpcomingScheduleHtml } from "../engine/events.js";
 
 // 수동 입력은 이 파일이 아니라 agency.html(공단 화면)의 localStorage에 있어요(발전차 입력과
 // 같은 방식 — "공단 화면 입력은 그 브라우저에만 저장되는 시연 기능", 로드맵 문서).
-// 이 스크립트는 공단 API로 자동 수집한 것만 다뤄요.
+// 이 스크립트는 공단이 내놓는 자동 자료 2가지만 다뤄요:
+//  ① KSCperf API(과거 공연 기록, 2013~2019 — 11/25 확인) — 사례 재현·검증용으로 쓸모 있음.
+//  ② 공단 '일정안내' 홈페이지(앞으로 있을 공연, 로그인·키 필요 없음) — 실제 예보에 쓸 자료.
+// ①은 "확실히 과거"라서 범위 밖인 미래 공연은 안 섞여요, ②는 키 없이 긁는 거라 사이트가
+// 바뀌면 깨질 수 있어요(engine/events.js의 fetchUpcomingSchedulePage 주석 참고).
 
 async function main() {
   const serviceKey = process.env.KCISA_SERVICE_KEY;
   const now = new Date();
   const 실패기록 = [];
-
   let 공연 = [];
-  const res = await fetchPerformances({ serviceKey });
-  if (res.ok) {
-    공연 = parsePerformanceResponse(res.raw);
+
+  const apiRes = await fetchPerformances({ serviceKey });
+  if (apiRes.ok) {
+    공연.push(...parsePerformanceResponse(apiRes.raw));
   } else {
-    실패기록.push({ 시각: now.toISOString(), 사유: res.사유 });
+    실패기록.push({ 시각: now.toISOString(), 사유: `공단API: ${apiRes.사유}` });
   }
 
-  // 11/25 진단용(한시적): 1페이지(100건)가 전부 2013~2019년 과거 기록이었어요 — "최근
-  // 등록된 공연"도 이 API에 있는지 보려고 마지막 페이지도 한 번 받아서 로그만 남겨요
-  // (레포엔 저장 안 함 — 1페이지 결과가 어떻게 바뀌는지 확인되면 이 블록은 지울게요).
-  if (res.ok && res.totalCount) {
-    const numOfRows = 100;
-    const lastPage = Math.ceil(res.totalCount / numOfRows);
-    console.log(`[진단] 전체 ${res.totalCount}건, 마지막 페이지 ${lastPage}`);
-    if (lastPage > 1) {
-      const lastRes = await fetchPerformances({ serviceKey, numOfRows, pageNo: lastPage });
-      if (lastRes.ok) {
-        const lastEvents = parsePerformanceResponse(lastRes.raw);
-        const dates = lastEvents.map((e) => e.날짜).filter(Boolean).sort();
-        console.log(`[진단] 마지막 페이지(${lastPage}) 날짜 있는 항목 ${dates.length}/${lastEvents.length}건, 범위: ${dates[0] ?? "없음"} ~ ${dates[dates.length - 1] ?? "없음"}`);
-      } else {
-        console.log(`[진단] 마지막 페이지 호출 실패: ${lastRes.사유}`);
-      }
-    }
+  const scheduleRes = await fetchUpcomingSchedulePage();
+  if (scheduleRes.ok) {
+    공연.push(...parseUpcomingScheduleHtml(scheduleRes.html));
+  } else {
+    실패기록.push({ 시각: now.toISOString(), 사유: `일정안내 페이지: ${scheduleRes.사유}` });
   }
 
   const record = {
-    _설명: "GitHub Actions가 매시 50분에 갱신해요(공단 공연정보 API 자동 수집만). 수동 입력은 agency.html의 이 브라우저 저장소(localStorage)에 따로 있어요.",
+    _설명: "GitHub Actions가 매시 50분에 갱신해요. 출처 '공단API'는 과거 공연 기록(사례 재현용), '공단일정페이지'는 앞으로 있을 공연(공단 홈페이지 일정안내를 긁어옴)이에요. 수동 입력은 agency.html의 이 브라우저 저장소(localStorage)에 따로 있어요.",
     저장시각: now.toISOString(),
     공연,
     실패기록,
@@ -55,7 +47,7 @@ async function main() {
     console.error("공연 일정을 하나도 못 받았어요:", 실패기록);
     process.exitCode = 1;
   } else {
-    console.log(`공연 ${공연.length}건 자동 수집, 실패 ${실패기록.length}건`);
+    console.log(`공연 ${공연.length}건 자동 수집(공단API+일정페이지 합계), 실패 ${실패기록.length}건`);
   }
 }
 

@@ -249,5 +249,74 @@ export function parsePerformanceResponse(raw) {
 //    SITE_KEYWORDS에 없는 곳도 있었어요(올림픽공원 안 다른 시설이거나 공단 관할 밖일 수
 //    있음 — 장소미확인으로 정직하게 남겨요. 나중에 자주 나오는 미확인 장소가 있으면
 //    SITE_KEYWORDS에 추가하면 돼요).
-// --- 남은 할 일 ---
-// scripts/update-events.mjs의 진단 로그("[진단] 첫 항목 필드 이름")는 이제 필요 없으니 지워도 됨.
+
+// ---------------------------------------------------------------------------
+// 공단 '일정안내' 페이지 스크래핑 (11/25 추가) — KSCperf API는 과거 기록(2013~2019)만
+// 줘서(위에서 확인), 실제 "앞으로 있을 공연"은 API가 아니라 공단이 직접 운영하는 홈페이지
+// 일정표에서만 볼 수 있어요. 로그인·키 없이 보이는 일반 공개 페이지라 바로 읽어요.
+// ⚠️ 이건 공식 API가 아니라 페이지 구조를 그대로 읽는 거라, 공단이 사이트를 바꾸면
+// 깨질 수 있어요(공식 데이터 계약이 아님 — API보다 약한 근거).
+// ---------------------------------------------------------------------------
+const SCHEDULE_PAGE_URL = "https://www.ksponco.or.kr/olympicpark/eventInfo/eventInfoList?mid=a20301010100";
+
+/** 일정안내 페이지의 HTML을 그대로 가져와요(가공 없이). */
+export async function fetchUpcomingSchedulePage() {
+  try {
+    const res = await fetch(SCHEDULE_PAGE_URL);
+    if (!res.ok) return { ok: false, 사유: `HTTP ${res.status}` };
+    const html = await res.text();
+    if (!html.includes('id="rowSpace"')) {
+      return { ok: false, 사유: "페이지 구조가 바뀐 것 같아요('rowSpace' 영역을 못 찾음) — 스크래핑 코드를 다시 봐야 해요" };
+    }
+    return { ok: true, html };
+  } catch (err) {
+    return { ok: false, 사유: `호출 실패: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/**
+ * "2026-11-28 ~ 2027-01-03" → {기간시작, 기간끝}. 하루짜리("2026-11-27")만 있으면 둘 다
+ * 같은 날짜예요. 못 읽으면 둘 다 null(지어내지 않음).
+ */
+export function parseDateRange(text) {
+  if (typeof text !== "string") return { 기간시작: null, 기간끝: null };
+  const dates = [...text.matchAll(/(\d{4})-(\d{2})-(\d{2})/g)].map((m) => m[0]);
+  if (dates.length === 0) return { 기간시작: null, 기간끝: null };
+  return { 기간시작: dates[0], 기간끝: dates[dates.length - 1] ?? dates[0] };
+}
+
+/**
+ * 일정안내 페이지 HTML → EventRecord[]로 바꿔요(11/25 실제 페이지로 구조 확인). 맨 위
+ * "앞으로 있을 공연" 영역(id="rowSpace")만 읽고, 그 아래 "지난 공연"(class="last") 구간은
+ * 안 읽어요. 공연마다 요일별 시간이 다르게 적혀 있어서(예: "수목금 19시30분/토 15시,19시")
+ * 그 전부를 안전하게 구조화하긴 어려워요 — 날짜 범위(기간시작·기간끝)만 뽑고, 시간
+ * 원문은 그대로(`원본시간텍스트`) 남겨서 지어내지 않아요.
+ * ⚠️ <head>의 <script> 안에도 똑같은 HTML 조각(AJAX 템플릿 문자열)이 들어있어서, 반드시
+ * "rowSpace" 섹션 범위 안에서만 찾아야 해요 — 전체 페이지에서 찾으면 스크립트 템플릿까지
+ * 걸려서 완전히 엉뚱한 값이 나와요(11/25 실제로 겪은 버그, 테스트로 남겨둠).
+ * @returns {{title:string, site:string|null, 날짜:null, 기간시작:string|null, 기간끝:string|null,
+ *   시작:null, 소요분:null, 출처:"공단일정페이지", flags:string[], 원본장소텍스트:string|null, 원본시간텍스트:string|null}[]}
+ */
+export function parseUpcomingScheduleHtml(html) {
+  const startIdx = html.indexOf('id="rowSpace"');
+  if (startIdx === -1) return [];
+  const lastIdx = html.indexOf('<div class="last">');
+  const section = lastIdx === -1 ? html.slice(startIdx) : html.slice(startIdx, lastIdx);
+
+  const itemRe = /<em class="place">([\s\S]*?)<\/em>\s*<strong class="title">([\s\S]*?)<\/strong>[\s\S]*?<span class="date">([\s\S]*?)<\/span>\s*<small class="time"\s*>?([\s\S]*?)<\/small>/g;
+  const out = [];
+  for (const m of section.matchAll(itemRe)) {
+    const spatial = decodeXmlEntities(m[1]);
+    const title = decodeXmlEntities(m[2]);
+    const dateText = decodeXmlEntities(m[3]);
+    const timeText = decodeXmlEntities(m[4]);
+    const { site, flags } = matchSite(spatial);
+    const { 기간시작, 기간끝 } = parseDateRange(dateText);
+    if (!기간시작) flags.push("날짜미확인");
+    out.push({
+      title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null,
+      출처: "공단일정페이지", flags, 원본장소텍스트: spatial, 원본시간텍스트: timeText || null,
+    });
+  }
+  return out;
+}
