@@ -19,6 +19,12 @@ async function main() {
   const res = await fetchPerformances({ serviceKey });
   if (res.ok) {
     공연 = parsePerformanceResponse(res.raw);
+    // 11/25 진단용(한시적): 날짜 필드 이름을 아직 몰라서(CLAUDE.md 5번 미확인), 첫 항목의
+    // 실제 필드 이름을 Actions 로그에만 남겨요(공개 공연 정보라 민감하지 않음, 레포에는
+    // 저장 안 함) — 이름을 확인하면 engine/events.js의 parsePerformanceResponse를 고치고
+    // 이 로그는 지울게요.
+    const firstRaw = res.raw?.response?.body?.items?.item?.[0];
+    if (firstRaw) console.log("[진단] 첫 항목 필드 이름:", Object.keys(firstRaw).join(", "));
   } else {
     실패기록.push({ 시각: now.toISOString(), 사유: res.사유 });
   }
