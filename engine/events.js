@@ -46,7 +46,7 @@ export async function fetchPerformances({ serviceKey, numOfRows = 100, pageNo = 
     if (!parsed.ok) return parsed;
     const items = extractItems(parsed.body);
     if (items === null) return { ok: false, 사유: "응답 형식을 못 알아봤어요(items 자리를 못 찾음)" };
-    return { ok: true, raw: parsed.body };
+    return { ok: true, raw: parsed.body, totalCount: parsed.totalCount ?? null };
   } catch (err) {
     return { ok: false, 사유: `호출 실패: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -68,14 +68,17 @@ const ERROR_LIKE_RESULT_MSG = /error|오류|실패|invalid|not\s*valid|등록되
 export function parseApiResponseText(text) {
   const trimmed = text.trim();
   if (trimmed.startsWith("<")) {
+    // 전체 몇 건 중 몇 번째 페이지인지 알아야 "최근 등록분"쪽 페이지로 점프해 볼 수 있어요
+    // (11/25 발견: 1페이지가 전부 2013~2019년 과거 기록이라 최근 공연이 있는지 확인용).
+    const totalCount = Number(trimmed.match(/<totalCount>(\d+)<\/totalCount>/)?.[1]) || null;
     const items = parseXmlItems(trimmed);
-    if (items.length > 0) return { ok: true, body: { response: { body: { items: { item: items } } } } };
+    if (items.length > 0) return { ok: true, body: { response: { body: { items: { item: items } } } }, totalCount };
     // 항목이 하나도 없을 때만 resultMsg를 봐요 — 진짜 오류인지, 그냥 "지금 해당 공연 없음"인지.
     const resultMsg = trimmed.match(/<resultMsg>([\s\S]*?)<\/resultMsg>/)?.[1]?.trim();
     if (resultMsg && ERROR_LIKE_RESULT_MSG.test(resultMsg)) {
       return { ok: false, 사유: `공단 API 오류 응답: ${resultMsg}` };
     }
-    return { ok: true, body: { response: { body: { items: { item: [] } } } } }; // 정상이지만 0건
+    return { ok: true, body: { response: { body: { items: { item: [] } } } }, totalCount }; // 정상이지만 0건
   }
   try {
     return { ok: true, body: JSON.parse(trimmed) };

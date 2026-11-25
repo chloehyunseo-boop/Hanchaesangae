@@ -23,6 +23,25 @@ async function main() {
     실패기록.push({ 시각: now.toISOString(), 사유: res.사유 });
   }
 
+  // 11/25 진단용(한시적): 1페이지(100건)가 전부 2013~2019년 과거 기록이었어요 — "최근
+  // 등록된 공연"도 이 API에 있는지 보려고 마지막 페이지도 한 번 받아서 로그만 남겨요
+  // (레포엔 저장 안 함 — 1페이지 결과가 어떻게 바뀌는지 확인되면 이 블록은 지울게요).
+  if (res.ok && res.totalCount) {
+    const numOfRows = 100;
+    const lastPage = Math.ceil(res.totalCount / numOfRows);
+    console.log(`[진단] 전체 ${res.totalCount}건, 마지막 페이지 ${lastPage}`);
+    if (lastPage > 1) {
+      const lastRes = await fetchPerformances({ serviceKey, numOfRows, pageNo: lastPage });
+      if (lastRes.ok) {
+        const lastEvents = parsePerformanceResponse(lastRes.raw);
+        const dates = lastEvents.map((e) => e.날짜).filter(Boolean).sort();
+        console.log(`[진단] 마지막 페이지(${lastPage}) 날짜 있는 항목 ${dates.length}/${lastEvents.length}건, 범위: ${dates[0] ?? "없음"} ~ ${dates[dates.length - 1] ?? "없음"}`);
+      } else {
+        console.log(`[진단] 마지막 페이지 호출 실패: ${lastRes.사유}`);
+      }
+    }
+  }
+
   const record = {
     _설명: "GitHub Actions가 매시 50분에 갱신해요(공단 공연정보 API 자동 수집만). 수동 입력은 agency.html의 이 브라우저 저장소(localStorage)에 따로 있어요.",
     저장시각: now.toISOString(),
