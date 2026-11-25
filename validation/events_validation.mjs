@@ -5,7 +5,7 @@
 // response.body.items 경로)는 문화공공데이터광장의 다른 meta/ API들과 같은 공통 틀이라고
 // 가정한 거예요 — 실제 키가 생기면 이 가정이 맞는지 꼭 다시 확인해야 해요(engine/events.js
 // 하단 "확인할 것" 참고).
-import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText } from "../engine/events.js";
+import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText, parseEventDate } from "../engine/events.js";
 
 let failCount = 0;
 function check(name, condition, detail) {
@@ -58,7 +58,7 @@ check("장소 텍스트가 없음(null) → 장소미확인", matchSite(null).fl
   };
   const parsed = parsePerformanceResponse(mockRaw);
   check("3건 전부 파싱됨", parsed.length === 3);
-  check("A: 장소·시각·소요시간 전부 정상", parsed[0].site === "KSPO DOME" && parsed[0].시작 === "19:00" && parsed[0].소요분 === 120 && parsed[0].flags.length === 0);
+  check("A: 장소·시각·소요시간 전부 정상(날짜 정보는 없어서 날짜미확인 플래그만 붙음)", parsed[0].site === "KSPO DOME" && parsed[0].시작 === "19:00" && parsed[0].소요분 === 120 && parsed[0].flags.length === 1 && parsed[0].flags[0] === "날짜미확인");
   check("B: 시각은 읽었지만(오후7시→19:00) 소요시간 없음 → 시작시각없음 플래그 안 붙고 소요시간 관련은 없음(정상)", parsed[1].시작 === "19:00" && parsed[1].소요분 === null);
   check("C: 장소 모름 + 시작시각없음 플래그", parsed[2].site === null && parsed[2].flags.includes("장소미확인") && parsed[2].flags.includes("시작시각없음"));
 }
@@ -104,6 +104,28 @@ check("장소 텍스트가 없음(null) → 장소미확인", matchSite(null).fl
   const garbage = "이것도 저것도 아님";
   const parsed = parseApiResponseText(garbage);
   check("JSON도 XML도 아니면 실패로 처리(지어내지 않음)", parsed.ok === false);
+}
+
+// 날짜 파싱 — 11/25 실제 응답 확인: 날짜 전용 필드가 없어서 temporalCoverage나 description
+// 문장 속에서 찾아야 해요.
+check("YYYY-MM-DD", parseEventDate("2026-11-25") === "2026-11-25");
+check("YYYY.MM.DD", parseEventDate("2026.11.5") === "2026-11-05");
+check("한글 날짜(2026년 11월 25일)", parseEventDate("2026년 11월 25일") === "2026-11-25");
+check("문장 속에 섞여 있어도 찾음", parseEventDate("2026년 11월 25일(수) 19:00 공연") === "2026-11-25");
+check("못 찾으면 null(지어내지 않음)", parseEventDate("날짜 미정") === null);
+check("null 입력 → null", parseEventDate(null) === null);
+
+// 실제 재현된 사례(11/25, 100건 응답 중 하나): temporalCoverage가 시각만이면 날짜는 못
+// 찾고 '날짜미확인' 플래그가 붙어야 해요(지어내지 않음).
+{
+  const realShapeRaw = {
+    response: { body: { items: { item: [
+      { title: "TOP FC8 : 하트오브어 챔피언", spatial: "올림픽홀", temporalCoverage: "17:00", extent: "270분", description: "" },
+    ] } } },
+  };
+  const parsed = parsePerformanceResponse(realShapeRaw);
+  check("날짜 정보가 전혀 없으면 날짜:null + 날짜미확인 플래그", parsed[0].날짜 === null && parsed[0].flags.includes("날짜미확인"));
+  check("그래도 시작시각·소요시간·장소는 정상 추출", parsed[0].시작 === "17:00" && parsed[0].소요분 === 270 && parsed[0].site === "올림픽홀");
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

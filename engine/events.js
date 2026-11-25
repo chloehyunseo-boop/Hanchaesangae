@@ -9,11 +9,13 @@
 // 호출하는 쪽(Actions 환경변수)에서 넘겨받기만 해요. Secrets 이름은 KCISA_SERVICE_KEY
 // (KMA_SERVICE_KEY와 다른 키 — 문화공공데이터광장은 공공데이터포털과 발급처가 달라요).
 //
-// ⚠️ 11/19 호출로 temporalCoverage(시작시각)·extent(소요시간) 필드가 있다는 것만 확인했고,
-// 전체 응답 구조(공연명·장소 필드 이름)까지는 저장해 둔 샘플이 없어요 — 문화공공데이터광장
-// 표준 메타데이터(title·description·spatial·temporalCoverage·extent·url)를 그대로 가정했는데,
-// 이건 KCISA의 다른 meta/ API들과 같은 공통 스키마라 추정이지 확인된 사실은 아니에요.
-// Secrets 등록 후 실제 응답으로 한 번 더 확인해야 해요(이 파일 하단 "확인할 것" 참고).
+// 11/25 KCISA_SERVICE_KEY 등록 후 실제 호출로 전체 필드를 확인했어요(100건 수신, 실패 0건):
+// title, alternativeTitle, creator, regDate, collectionDb, subjectCategory, subjectKeyword,
+// extent, description, spatial, temporalCoverage, person, language, sourceTitle, rights,
+// copyrightOthers, uci, contributor — 표준 메타데이터(Dublin Core류) 그대로였어요. 날짜
+// 전용 필드는 없어요(regDate는 "DB 등록일"이라 공연 날짜가 아니에요, parseEventDate 참고).
+// 응답은 type=json을 줘도 XML로 와요(parseApiResponseText가 처리). items 자리는
+// response.body.items.item 확인됨.
 
 const BASE_URL = "https://api.kcisa.kr/openapi/service/rest/meta";
 
@@ -164,6 +166,24 @@ export function parseDurationMinutes(raw) {
   return matched && total > 0 ? total : null;
 }
 
+/**
+ * "2026-11-25", "2026.11.25", "2026년 11월 25일" 같은 날짜를 "YYYY-MM-DD"로 바꿔요.
+ * 11/25 실제 응답으로 확인: 이 API엔 날짜 전용 필드가 없어요(진단 로그로 필드를 전부
+ * 봤더니 title·creator·regDate·spatial·temporalCoverage·extent·description 등 표준
+ * 메타데이터뿐 — regDate는 "DB에 등록한 날짜"라 공연 날짜가 아니에요, 안 써요). 날짜는
+ * temporalCoverage나 description 문장 속에 섞여 있을 때만 여기서 뽑아내요 — 못 찾으면
+ * null이에요(지어내지 않음, CLAUDE.md 2번).
+ * @returns {string|null}
+ */
+export function parseEventDate(raw) {
+  if (typeof raw !== "string") return null;
+  let m = raw.match(/(\d{4})[.\-](\d{1,2})[.\-](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = raw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  return null;
+}
+
 /** 공연 장소 텍스트(API spatial)를 site.geojson 이름으로 매칭해요. 애매하면(평화의광장처럼
  * 무대 A/B 선택이 필요한 곳 등) 확인용 플래그만 붙이고 추측하지 않아요(CLAUDE.md 2번). */
 const SITE_KEYWORDS = [
@@ -207,9 +227,10 @@ export function parsePerformanceResponse(raw) {
     if (temporalCoverage && !startTime) flags.push("시작시각형식미확인");
     if (extent && !durationMin) flags.push("소요시간형식미확인");
     if (!temporalCoverage) flags.push("시작시각없음");
-    // 날짜는 흔히 title이나 별도 필드에 있는데, 11/19 확인 때 날짜 전용 필드 이름은 못
-    // 봤어요 — eventStartDate가 있으면 쓰고, 없으면 null(지어내지 않음, 확인 필요).
-    const 날짜 = it.eventStartDate ?? null;
+    // 날짜 전용 필드가 없어서(위 parseEventDate 설명 참고) temporalCoverage → description
+    // 순서로 날짜를 찾아봐요. 둘 다 없으면 null + 플래그.
+    const 날짜 = parseEventDate(temporalCoverage) ?? parseEventDate(it.description ?? null);
+    if (!날짜) flags.push("날짜미확인");
     return {
       title: it.title ?? "(제목 없음)",
       site, 날짜, 시작: startTime, 소요분: durationMin,
@@ -218,7 +239,12 @@ export function parsePerformanceResponse(raw) {
   });
 }
 
-// --- 확인할 것 (KCISA_SERVICE_KEY 등록 후 실제 응답으로 다시 봐야 함) ---
-// 1) items가 실제로 어느 자리에 있는지(extractItems의 후보 중 맞는 것).
-// 2) 날짜 필드 이름(eventStartDate는 추정 — 다른 이름일 수 있음).
-// 3) spatial 필드가 실제로 장소를 어떻게 적는지(SITE_KEYWORDS 키워드가 실제 표기와 맞는지).
+// --- 확인 끝(11/25, 실제 100건 응답으로) ---
+// 1) items 자리: response.body.items.item 맞음.
+// 2) 날짜 전용 필드 없음 — temporalCoverage/description에서 직접 찾아야 함(parseEventDate).
+// 3) spatial 표기: "올림픽홀"처럼 site.geojson 이름과 겹치는 경우도, "뮤즈라이브"처럼
+//    SITE_KEYWORDS에 없는 곳도 있었어요(올림픽공원 안 다른 시설이거나 공단 관할 밖일 수
+//    있음 — 장소미확인으로 정직하게 남겨요. 나중에 자주 나오는 미확인 장소가 있으면
+//    SITE_KEYWORDS에 추가하면 돼요).
+// --- 남은 할 일 ---
+// scripts/update-events.mjs의 진단 로그("[진단] 첫 항목 필드 이름")는 이제 필요 없으니 지워도 됨.
