@@ -93,6 +93,13 @@ check("장소 텍스트가 없음(null) → 장소미확인", matchSite(null).fl
   const parsed = parseApiResponseText(errorXml);
   check("XML 에러 응답(resultCode≠00)은 실패로 처리", parsed.ok === false && parsed.사유.includes("SERVICE_KEY_IS_NOT_REGISTERED_ERROR"));
 }
+// 11/25 실제 재현된 버그: resultCode가 "00"이 아니어도 resultMsg가 "OK"면 진짜 성공이에요
+// (그 시각 공연이 0건일 뿐). "00"만 성공으로 치던 첫 수정이 이걸 오류로 잘못 판정했었어요.
+{
+  const okButNonZeroCode = `<response><header><resultCode>200</resultCode><resultMsg>OK</resultMsg></header><body><items></items></body></response>`;
+  const parsed = parseApiResponseText(okButNonZeroCode);
+  check("resultCode≠00이어도 resultMsg가 'OK'면 성공(0건)으로 처리", parsed.ok === true && parsed.body.response.body.items.item.length === 0);
+}
 {
   const garbage = "이것도 저것도 아님";
   const parsed = parseApiResponseText(garbage);

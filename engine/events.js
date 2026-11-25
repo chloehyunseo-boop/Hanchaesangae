@@ -56,15 +56,24 @@ export async function fetchPerformances({ serviceKey, numOfRows = 100, pageNo = 
  * 기본으로 없어서, 이 API 응답처럼 안에 다른 태그가 없는 단순한 <item>태그들만 직접 읽어요
  * (CDATA·& 이스케이프 정도만 풀어줘요. 더 복잡한 XML이 오면 그때 제대로 된 파서로 바꿔야 해요).
  */
+// 11/25 실제 호출로 확인: resultCode가 "00"이 아니어도(이 API는 성공할 때 다른 코드를
+// 쓰는 듯) resultMsg가 "OK"로 성공을 알려 주는 걸 보고서야 알았어요 — "00"만 성공으로
+// 치던 첫 수정이 진짜 성공 응답을 에러로 잘못 판정했어요(사유: "공단 API 오류 응답: OK"로
+// 재현됨). resultCode 값 자체(기관마다 성공 코드가 다름, "00"·"0000"·"200" 등 추정)에
+// 기대지 않고, resultMsg가 실제로 오류처럼 보이는 단어를 담고 있을 때만 실패로 쳐요.
+const ERROR_LIKE_RESULT_MSG = /error|오류|실패|invalid|not\s*valid|등록되지|거부|fail/i;
+
 export function parseApiResponseText(text) {
   const trimmed = text.trim();
   if (trimmed.startsWith("<")) {
-    const resultCode = trimmed.match(/<resultCode>(.*?)<\/resultCode>/)?.[1];
-    if (resultCode && resultCode !== "00") {
-      const msg = trimmed.match(/<resultMsg>([\s\S]*?)<\/resultMsg>/)?.[1] ?? "resultCode가 00이 아님";
-      return { ok: false, 사유: `공단 API 오류 응답: ${msg.trim()}` };
+    const items = parseXmlItems(trimmed);
+    if (items.length > 0) return { ok: true, body: { response: { body: { items: { item: items } } } } };
+    // 항목이 하나도 없을 때만 resultMsg를 봐요 — 진짜 오류인지, 그냥 "지금 해당 공연 없음"인지.
+    const resultMsg = trimmed.match(/<resultMsg>([\s\S]*?)<\/resultMsg>/)?.[1]?.trim();
+    if (resultMsg && ERROR_LIKE_RESULT_MSG.test(resultMsg)) {
+      return { ok: false, 사유: `공단 API 오류 응답: ${resultMsg}` };
     }
-    return { ok: true, body: { response: { body: { items: { item: parseXmlItems(trimmed) } } } } };
+    return { ok: true, body: { response: { body: { items: { item: [] } } } } }; // 정상이지만 0건
   }
   try {
     return { ok: true, body: JSON.parse(trimmed) };
