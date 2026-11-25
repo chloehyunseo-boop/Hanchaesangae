@@ -30,18 +30,70 @@ export async function fetchPerformances({ serviceKey, numOfRows = 100, pageNo = 
   url.searchParams.set("serviceKey", serviceKey);
   url.searchParams.set("numOfRows", String(numOfRows));
   url.searchParams.set("pageNo", String(pageNo));
+  // 11/25 실제 키로 호출해 확인: "type=json"을 줘도 XML을 그대로 돌려줘요. 공공 표준
+  // 메타데이터 API들이 흔히 쓰는 파라미터 이름 "resultType"도 같이 보내 보지만(둘 다 안
+  // 먹혀도 무해함), 그래도 XML이 오면 아래에서 직접 파싱해서 어느 쪽이든 안 깨지게 해요.
   url.searchParams.set("type", "json");
+  url.searchParams.set("resultType", "json");
 
   try {
     const res = await fetch(url.toString());
     if (!res.ok) return { ok: false, 사유: `HTTP ${res.status}` };
-    const body = await res.json();
-    const items = extractItems(body);
+    const text = await res.text();
+    const parsed = parseApiResponseText(text);
+    if (!parsed.ok) return parsed;
+    const items = extractItems(parsed.body);
     if (items === null) return { ok: false, 사유: "응답 형식을 못 알아봤어요(items 자리를 못 찾음)" };
-    return { ok: true, raw: body };
+    return { ok: true, raw: parsed.body };
   } catch (err) {
     return { ok: false, 사유: `호출 실패: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/**
+ * 응답 본문(JSON 또는 XML 문자열)을 공통 모양({response:{body:{items:{item:[...]}}}})으로 바꿔요.
+ * 11/25에 실제 키로 호출해 보니 이 API는 JSON을 요청해도 XML을 줘요 — Node엔 XML 파서가
+ * 기본으로 없어서, 이 API 응답처럼 안에 다른 태그가 없는 단순한 <item>태그들만 직접 읽어요
+ * (CDATA·& 이스케이프 정도만 풀어줘요. 더 복잡한 XML이 오면 그때 제대로 된 파서로 바꿔야 해요).
+ */
+export function parseApiResponseText(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("<")) {
+    const resultCode = trimmed.match(/<resultCode>(.*?)<\/resultCode>/)?.[1];
+    if (resultCode && resultCode !== "00") {
+      const msg = trimmed.match(/<resultMsg>([\s\S]*?)<\/resultMsg>/)?.[1] ?? "resultCode가 00이 아님";
+      return { ok: false, 사유: `공단 API 오류 응답: ${msg.trim()}` };
+    }
+    return { ok: true, body: { response: { body: { items: { item: parseXmlItems(trimmed) } } } } };
+  }
+  try {
+    return { ok: true, body: JSON.parse(trimmed) };
+  } catch {
+    return { ok: false, 사유: `JSON도 XML도 아닌 응답이에요(앞부분: ${trimmed.slice(0, 80)})` };
+  }
+}
+
+function decodeXmlEntities(s) {
+  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&")
+    .trim();
+}
+
+/** <item>...</item>가 반복되는 단순 구조만 읽어요(이 API가 그렇게 와요, 11/25 확인). */
+function parseXmlItems(xmlText) {
+  const items = [];
+  // .match(/g)는 <item>…</item> 전체(바깥 태그 포함)를 돌려줘서, 그 안에서 필드를 다시
+  // 찾으면 바깥 <item> 태그 자체가 "item"이라는 한 필드로 통째로 잡혀버려요(11/25 발견,
+  // 테스트로 확인) — 캡처 그룹(안쪽 내용만)을 쓰는 matchAll로 고쳐요.
+  for (const itemMatch of xmlText.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const inner = itemMatch[1];
+    const obj = {};
+    for (const fieldMatch of inner.matchAll(/<(\w+)>([\s\S]*?)<\/\1>/g)) {
+      obj[fieldMatch[1]] = decodeXmlEntities(fieldMatch[2]);
+    }
+    items.push(obj);
+  }
+  return items;
 }
 
 /** KCISA 응답은 공공데이터포털과 바깥 틀이 달라요 — 몇 가지 흔한 자리를 순서대로 찾아봐요. */

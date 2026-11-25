@@ -5,7 +5,7 @@
 // response.body.items 경로)는 문화공공데이터광장의 다른 meta/ API들과 같은 공통 틀이라고
 // 가정한 거예요 — 실제 키가 생기면 이 가정이 맞는지 꼭 다시 확인해야 해요(engine/events.js
 // 하단 "확인할 것" 참고).
-import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse } from "../engine/events.js";
+import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText } from "../engine/events.js";
 
 let failCount = 0;
 function check(name, condition, detail) {
@@ -72,6 +72,31 @@ check("장소 텍스트가 없음(null) → 장소미확인", matchSite(null).fl
 {
   const emptyRaw = {};
   check("빈 응답 → 빈 배열(에러 안 던짐)", parsePerformanceResponse(emptyRaw).length === 0);
+}
+
+// 11/25 실제 키로 호출해 확인: type=json을 줘도 XML이 와요 — JSON 파서가 "Unexpected
+// token '<'"로 깨지던 것(실제 실패기록으로 재현)을 고쳤어요. XML도 읽을 수 있는지 확인.
+{
+  const xml = `<response><header><resultCode>00</resultCode><resultMsg>NORMAL SERVICE</resultMsg></header><body><items><item><title>모의 공연 XML</title><spatial>KSPO DOME</spatial><temporalCoverage>19:00</temporalCoverage><extent>120분</extent></item><item><title>CDATA &amp; 특수문자 테스트</title><spatial><![CDATA[장미광장]]></spatial><temporalCoverage>오후4시</temporalCoverage><extent></extent></item></items></body></response>`;
+  const parsed = parseApiResponseText(xml);
+  check("XML 응답도 파싱됨(에러 안 던짐)", parsed.ok === true);
+  const items = parsed.ok ? parsed.body.response.body.items.item : [];
+  check("XML에서 2건 추출", items.length === 2);
+  check("XML 필드값 그대로 읽힘", items[0]?.title === "모의 공연 XML" && items[0]?.spatial === "KSPO DOME" && items[0]?.extent === "120분");
+  check("CDATA·& 이스케이프 풀림", items[1]?.title === "CDATA & 특수문자 테스트" && items[1]?.spatial === "장미광장");
+  // parsePerformanceResponse까지 그대로 이어지는지(실제 fetchPerformances가 쓰는 경로)
+  const records = parsePerformanceResponse(parsed.body);
+  check("XML → parsePerformanceResponse까지 끝까지 연결됨", records.length === 2 && records[0].site === "KSPO DOME" && records[0].시작 === "19:00");
+}
+{
+  const errorXml = `<response><header><resultCode>30</resultCode><resultMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</resultMsg></header></response>`;
+  const parsed = parseApiResponseText(errorXml);
+  check("XML 에러 응답(resultCode≠00)은 실패로 처리", parsed.ok === false && parsed.사유.includes("SERVICE_KEY_IS_NOT_REGISTERED_ERROR"));
+}
+{
+  const garbage = "이것도 저것도 아님";
+  const parsed = parseApiResponseText(garbage);
+  check("JSON도 XML도 아니면 실패로 처리(지어내지 않음)", parsed.ok === false);
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);
