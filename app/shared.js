@@ -150,6 +150,61 @@ export function listTodaysRealEvents(events, hourIso, excludeVenues = new Set())
   return out;
 }
 
+// <input type="datetime-local"> 값("YYYY-MM-DDTHH:mm", 시간대 정보 없음)을 KST로 못박아
+// ISO로 바꿔요(agency.js에 있던 걸 11/26에 여기로 옮김 — 시민 화면도 같은 변환이 필요해서).
+export function localInputToIso(value) {
+  return value ? `${value}:00+09:00` : null;
+}
+
+/** 공단 화면(agency.html)에서 입력한 트럭 레코드 → combine.js가 받는 generatorSources.
+ * agency.js·citizen.js가 공통으로 써요(11/26, agency.js에 있던 buildGeneratorSourcesFromTrucks를
+ * 여기로 옮겨 파라미터화함 — 로직은 안 바꿨어요). 공란은 undefined로 보내서 plume_v2.js가
+ * 대표모델 가정값을 쓰고 '가정' 꼬리표를 붙이게 해요. */
+const TRUCK_ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
+export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName) {
+  const out = [];
+  for (const t of trucks ?? []) {
+    const feature = siteByName.get(t.site);
+    if (!feature) continue; // 위치를 아직 안 고른 트럭은 계산에서 빼요
+    const [lon, lat] = feature.geometry.coordinates;
+    out.push({
+      lat, lon,
+      ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
+      ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
+      ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
+      time: t.시작시각
+        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}), 출처: "공단화면입력" }
+        : TRUCK_ALWAYS_ON_TIME,
+    });
+  }
+  return out;
+}
+
+// 11/26 친구 요청: 공단이 agency.html에서 발전차를 입력해 "내보내기"한 파일
+// (data/generator_inputs.json)이 있으면 시민 화면도 실제 값을 그대로 써요. 아직 입력이
+// 안 된 공연(공단이 깜빡했거나 막 스크래핑돼서 처리 전인 경우)은 숫자를 지어내지 않고,
+// "발전차가 있는 건 확실한데(11/26 공단 답변: 모든 공연장에서 사용) 대수·시간은 모른다"는
+// 표시만 넣어요(시간 출처를 "미확인"으로 둬서 엔진이 자동으로 "발전차시간미확인"으로 처리 —
+// combine.js generatorActivityAtHour가 이미 하는 구분, 새 로직 아님). 매연_포함:false인
+// 장소(예: K아트홀, 로드맵이 범위를 좁힌 곳)는 이 안전장치 대상에서 빼요. */
+export function buildCitizenGeneratorSources({ events, truckRecords, siteByName, assumptions, hourIso }) {
+  const realTrucks = buildGeneratorSourcesFromTruckRecords(truckRecords, siteByName);
+  const truckSites = new Set((truckRecords ?? []).map((t) => t.site).filter(Boolean));
+  const venueFlags = new Map((assumptions?.기본안_계산대상?.venues ?? []).map((v) => [v.site, v.매연_포함]));
+  const eventSites = new Set(listTodaysRealEvents(events, hourIso).map((e) => e.site));
+
+  const placeholders = [];
+  for (const site of eventSites) {
+    if (truckSites.has(site)) continue; // 실제 입력이 이미 있어요
+    if (venueFlags.get(site) !== true) continue; // 이 장소는 발전차 사용 자체가 확인 안 됐거나 범위 밖
+    const feature = siteByName.get(site);
+    if (!feature) continue;
+    const [lon, lat] = feature.geometry.coordinates;
+    placeholders.push({ lat, lon, time: { start: null, end: null, 출처: "미확인" } });
+  }
+  return [...realTrucks, ...placeholders];
+}
+
 export const NOISE_PALETTE = { 강: "rgba(198,40,40,0.72)", 중: "rgba(251,140,0,0.62)", 약: "rgba(253,216,53,0.5)", uncertain: "rgba(120,120,120,0.45)" };
 export const EXHAUST_PALETTE = { 강: "rgba(106,27,154,0.72)", 중: "rgba(171,71,188,0.6)", 약: "rgba(206,147,216,0.48)", uncertain: "rgba(120,120,120,0.45)" };
 

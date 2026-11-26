@@ -20,19 +20,12 @@ import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildDemoStageSources, kstParts, allCellsUnknown, uniformUnknownMessage,
+  buildGeneratorSourcesFromTruckRecords, localInputToIso,
 } from "./shared.js";
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_agency_trucks_v1";
 const EVENTS_STORAGE_KEY = "olpak_agency_manual_events_v1";
-const ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
-
-// <input type="datetime-local"> 값("YYYY-MM-DDTHH:mm", 시간대 정보 없음)을 KST로 못박아
-// ISO로 바꿔요 — 안 그러면 브라우저가 돌아가는 컴퓨터의 로컬 시간대로 해석해서, GitHub
-// Pages를 다른 시간대 사람이 열면 발전차 가동 시각이 틀어질 수 있어요.
-function localInputToIso(value) {
-  return value ? `${value}:00+09:00` : null;
-}
 const GRADE_LABEL = { 모름: "모름", 인증: "인증", 비인증: "비인증" };
 
 const state = {
@@ -70,25 +63,10 @@ function saveManualEvents() {
   try { localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(state.manualEvents)); } catch { /* 저장 안 돼도 화면은 그대로 동작 */ }
 }
 
-// 트럭 입력 → combine.js가 받는 generatorSources(발전차 목록). 공란은 undefined로 보내서
-// plume_v2.js가 대표모델 가정값을 쓰고 '가정' 꼬리표를 붙이게 해요(engine/plume_v2.js 참고).
+// 트럭 입력 → combine.js가 받는 generatorSources(발전차 목록). 11/26: 시민 화면(citizen.js)도
+// 같은 변환이 필요해서 shared.js로 옮기고 여기서는 그대로 불러요(로직 안 바뀜).
 function buildGeneratorSourcesFromTrucks() {
-  const out = [];
-  for (const t of state.trucks) {
-    const feature = state.siteByName.get(t.site);
-    if (!feature) continue; // 위치를 아직 안 고른 트럭은 계산에서 빼요
-    const [lon, lat] = feature.geometry.coordinates;
-    out.push({
-      lat, lon,
-      ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
-      ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
-      ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
-      time: t.시작시각
-        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}), 출처: "공단화면입력" }
-        : ALWAYS_ON_TIME,
-    });
-  }
-  return out;
+  return buildGeneratorSourcesFromTruckRecords(state.trucks, state.siteByName);
 }
 
 /** 그 시각 엔진 입력 날씨. 시민 화면(main.js)의 resolveWeather와 같은 구조예요. */
@@ -411,6 +389,20 @@ async function main() {
     state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null, 시작시각: null, 셋업시작: null });
     saveTrucks();
     renderTruckTable(onTruckChange);
+  });
+
+  // 11/26 친구 요청: 서버가 없어서 agency.html 입력(localStorage)을 시민 화면이 직접 못 읽어요
+  // — 대신 이 버튼으로 파일을 다운로드해서, 사람이 data/generator_inputs.json 자리에 덮어쓰고
+  // 커밋하면 시민 화면(citizen.js)이 그 파일을 읽어요.
+  document.getElementById("export-trucks").addEventListener("click", () => {
+    const payload = { _설명: "agency.html에서 내보낸 발전차 입력값 — data/generator_inputs.json 자리에 덮어써서 커밋하면 시민 화면에 반영돼요.", 내보낸시각: new Date().toISOString(), trucks: state.trucks };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "generator_inputs.json";
+    a.click();
+    URL.revokeObjectURL(url);
   });
   function onTruckChange() {
     saveTrucks();
