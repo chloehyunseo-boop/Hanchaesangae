@@ -32,7 +32,13 @@ import { calcExhaustAtReceiverV2 } from "./plume_v2.js";
 const DEG_PER_M_LAT = 1 / 111320;
 
 /**
- * CALC_GRID.bounds 안을 cellSizeM 간격의 격자점으로 채워요(위경도 근사).
+ * CALC_GRID.bounds 안을 cellSizeM 간격의 격자점으로 채워요(위경도 근사) — 네모 범위에
+ * 꽉 채우지 않고, 그 안에 내접하는 타원(가로/세로 반지름이 네모 반폭과 같음) 안의 점만
+ * 남겨요(11/26 친구 요청). 칸 하나하나의 계산 방식은 전혀 안 바꾸고 "이 칸을 만들지
+ * 말지"만 거르는 거라 남는 칸의 값은 그대로예요 — 대신 네모보다 넓이가 약 π/4(≈78.5%)만
+ * 돼서 칸 수가 그만큼 줄고(계산도 그만큼 빨라짐), 가장자리가 사각형 모서리 대신 둥글게
+ * 잘려서 "이 사각형 영역만 어떤 dB"처럼 보이는 오해도 줄어요(두 경우 다 "계산 범위
+ * 가장자리"일 뿐 실제 경계는 아니에요 — 완전히 없애려면 범위 자체를 넓혀야 함, 보류 중).
  * @param {number} [cellSizeM]
  * @returns {{lat: number, lon: number}[]}
  */
@@ -40,11 +46,17 @@ export function generateGridPoints(cellSizeM = CALC_GRID.cellSizeM) {
   if (!(cellSizeM > 0)) throw new Error(`격자 간격은 0보다 커야 해요(무한 반복 방지, 외부 검토 지적): ${cellSizeM}`);
   const { minLat, maxLat, minLon, maxLon } = CALC_GRID.bounds;
   const midLat = (minLat + maxLat) / 2;
+  const midLon = (minLon + maxLon) / 2;
+  const latRadius = (maxLat - minLat) / 2;
+  const lonRadius = (maxLon - minLon) / 2;
   const latStep = cellSizeM * DEG_PER_M_LAT;
   const lonStep = cellSizeM * DEG_PER_M_LAT / Math.cos((midLat * Math.PI) / 180);
   const points = [];
   for (let lat = minLat; lat <= maxLat; lat += latStep) {
     for (let lon = minLon; lon <= maxLon; lon += lonStep) {
+      const normLat = (lat - midLat) / latRadius;
+      const normLon = (lon - midLon) / lonRadius;
+      if (normLat * normLat + normLon * normLon > 1) continue; // 타원 바깥 — 안 만듦
       points.push({ lat, lon });
     }
   }
