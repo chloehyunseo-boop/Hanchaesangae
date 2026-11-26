@@ -52,12 +52,18 @@ export function generateGridPoints(cellSizeM = CALC_GRID.cellSizeM) {
 }
 
 /**
- * 발전차 하나가 그 시각에 가동 중인지 — 연결된 공연 시작 2시간 전부터 종료까지예요.
+ * 발전차 하나가 그 시각에 가동 중인지 — time.setupStart(무대 셋업 시작, 선택)가 있으면 그때부터,
+ * 없으면 연결된 공연 시작 2시간 전부터 종료까지예요.
+ * 11/26 하린: 공단 답변("발전차는 무대가 설치됨과 동시에 사용, 셋업 일정에 따라 상이")으로
+ * '2시간 전'은 발전차 가동 시간의 근거가 아님이 확인됐어요(대관운영 시행세칙 제20조 ④의
+ * 공연당일 진행 시작 시각을 빌린 값). 셋업 기간 숫자는 공개 근거가 없어 만들지 않고, 공단이
+ * 셋업 시작 시각을 입력하면 그때부터 계산해요. 입력이 없으면 '최소 가동 시간'(과소 추정)이에요.
+ * 근거: docs/발전차_배출가스_가정값과_근거.md "가동 시간 (11/26 공단 답변 반영)".
  * "가동 안 함(확실)"과 "시간을 몰라서 못 판단함"을 구분해요(하린 11/22 요청) —
  * 둘 다 예전엔 똑같이 false였는데, 매연은 "모르면 발전차 하나 때문에 전체를 비운다"는
  * 설계(calcExhaustAtReceiver의 all-or-nothing 방식과 같은 원칙, 하린 11/22 확인)라서
  * computeExhaustCell이 이 둘을 다르게 처리해야 해요.
- * @param {{time?: {start: string|null, end: string|null, 출처: string}}} generator
+ * @param {{time?: {start: string|null, end: string|null, setupStart?: string|null, 출처: string}}} generator
  * @param {string} hourIso
  * @returns {"active"|"inactive"|"unknown"}
  */
@@ -77,7 +83,15 @@ export function generatorActivityAtHour(generator, hourIso) {
   // 것과 똑같은 버그가 combine.js에도 있었음). 파싱 실패는 "모름"으로 둬요(값은 있는데
   // 못 믿는 거라, "가동 안 함"이라고 확신할 수 없음).
   if (!Number.isFinite(startMs)) return "unknown";
-  const activeFromMs = startMs - 2 * 3600 * 1000;
+  let activeFromMs = startMs - 2 * 3600 * 1000;
+  // 11/26 하린: 셋업 시작 시각(선택). 있으면 그때부터 가동. 못 읽히거나 공연 시작보다 늦으면
+  // 입력 실수라 "모름"으로 둬요(start 파싱 실패와 같은 원칙 — 조용히 2시간 전으로 바꾸지 않음).
+  // 셋업이 '공연 2시간 전'보다 늦게(예: 1시간 전) 입력돼도 그 시각부터예요 — 입력값이 우선이에요.
+  if (time.setupStart !== undefined && time.setupStart !== null && time.setupStart !== "") {
+    const setupMs = new Date(time.setupStart).getTime();
+    if (!Number.isFinite(setupMs) || setupMs > startMs) return "unknown";
+    activeFromMs = setupMs;
+  }
   let endMs = null;
   if (time.end) {
     endMs = new Date(time.end).getTime();
