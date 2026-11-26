@@ -6,14 +6,16 @@
 
 import { computeHourOutputCells, generateGridPoints } from "../engine/combine.js";
 
-let grid = null;
+let fallbackGrid = null; // grid를 안 보내준 옛 호출(없음)에 대비한 안전망
 
 self.onmessage = (ev) => {
-  const { requestId, stageSources, generatorSources, weather, hour, noiseScenario, concaweData, cellSizeM, 배출시나리오 } = ev.data;
+  const { requestId, stageSources, generatorSources, weather, hour, noiseScenario, concaweData, cellSizeM, 배출시나리오, grid } = ev.data;
   try {
-    if (!grid) grid = generateGridPoints(cellSizeM);
+    // 11/26: 이제 메인 스레드(shared.js createGridWorker)가 격자를 Worker 개수만큼 미리
+    // 나눠서 보내요(병렬 계산) — grid가 오면 그 조각만, 안 오면(옛 호출 호환) 전체를 써요.
+    if (!grid && !fallbackGrid) fallbackGrid = generateGridPoints(cellSizeM);
     const cells = computeHourOutputCells({
-      stageSources, generatorSources, weather, hour, grid, noiseScenario, concaweData, 배출시나리오,
+      stageSources, generatorSources, weather, hour, grid: grid ?? fallbackGrid, noiseScenario, concaweData, 배출시나리오,
     });
     self.postMessage({ requestId, ok: true, cells });
   } catch (err) {

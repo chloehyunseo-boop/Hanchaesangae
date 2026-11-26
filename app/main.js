@@ -166,6 +166,54 @@ async function main() {
   const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
   const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
+  // 11/26 친구 요청: 지도 위에서 바로 "색이 뭘 뜻하는지·거리가 얼마인지"를 보여 달라고 해서
+  // (위에 글로 쓴 범례와 별개로) 지도 코너에 떠 있는 범례 상자 + 축척 막대를 추가해요.
+  L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+
+  const MapLegend = L.Control.extend({
+    options: { position: "topright" },
+    onAdd() {
+      const box = L.DomUtil.create("div", "olpak-map-legend");
+      box.style.cssText = "background:#fff;padding:8px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.4);font-size:0.78rem;line-height:1.5;max-width:180px;";
+      const row = (color, label) => `<div><span style="display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle;background:${color}"></span>${label}</div>`;
+      box.innerHTML = `
+        <div style="font-weight:bold;margin-bottom:2px;">소음</div>
+        ${row(NOISE_PALETTE.강, "강(65dB↑)")}
+        ${row(NOISE_PALETTE.중, "중(55~65)")}
+        ${row(NOISE_PALETTE.약, "약(45~55)")}
+        <div style="font-weight:bold;margin:6px 0 2px;">배출가스</div>
+        ${row(EXHAUST_PALETTE.강, "강")}
+        ${row(EXHAUST_PALETTE.중, "중")}
+        ${row(EXHAUST_PALETTE.약, "약")}
+        ${row(NOISE_PALETTE.uncertain, "모름/불확실")}
+      `;
+      L.DomEvent.disableClickPropagation(box);
+      return box;
+    },
+  });
+  new MapLegend().addTo(map);
+
+  // 11/26 친구 요청: 사용자 위치(GPS)를 지도에 표시 — 브라우저가 위치 접근을 물어보고,
+  // 허용하면 파란 점으로 띄워요(Leaflet map.locate 내장 기능, watch:true라 움직이면 따라와요).
+  // 거절하거나 지원 안 하면 조용히 넘어가요(필수 기능이 아니라서 에러로 방해하지 않아요).
+  let gpsMarker = null;
+  let gpsAccuracyCircle = null;
+  map.on("locationfound", (e) => {
+    if (!gpsMarker) {
+      gpsMarker = L.circleMarker(e.latlng, { radius: 7, color: "#fff", weight: 2, fillColor: "#1a73e8", fillOpacity: 1 }).addTo(map);
+      gpsMarker.bindTooltip("내 위치(GPS)", { direction: "top" });
+    } else {
+      gpsMarker.setLatLng(e.latlng);
+    }
+    if (!gpsAccuracyCircle) {
+      gpsAccuracyCircle = L.circle(e.latlng, { radius: e.accuracy, color: "#1a73e8", weight: 1, fillOpacity: 0.08 }).addTo(map);
+    } else {
+      gpsAccuracyCircle.setLatLng(e.latlng).setRadius(e.accuracy);
+    }
+  });
+  map.on("locationerror", () => { /* 위치 접근 거절/실패 — 지도 기능엔 필수가 아니라 조용히 넘어가요 */ });
+  map.locate({ watch: true, setView: false, enableHighAccuracy: true });
+
   // 장소별 보기(하린 11/24 요청) — 표준 장소 8곳에 점을 찍고, 누르면 그 장소의 72시간
   // 소음·배출가스 시간표를 보여줘요(app/place_view_ui.js의 renderPlaceTimeline 그대로 재사용).
   const placeViewPanel = document.getElementById("place-view");
@@ -196,6 +244,7 @@ async function main() {
       state.cellCache.clear();
       state.placeSeries = null;
       refresh();
+      restartPrefetch();
     });
     label.appendChild(input);
     label.append(` ${v.site}`);
@@ -208,6 +257,7 @@ async function main() {
     state.cellCache.clear();
     state.placeSeries = null;
     refresh();
+    restartPrefetch();
   });
   document.getElementById("generator-count").addEventListener("change", (e) => {
     state.generatorCount = Number(e.target.value) || 0;
@@ -215,6 +265,7 @@ async function main() {
     state.placeSeries = null;
     refreshSliderBand();
     refresh();
+    restartPrefetch();
   });
   const windOverrideToggle = document.getElementById("wind-override-toggle");
   const windOverrideFields = document.getElementById("wind-override-fields");
@@ -232,6 +283,7 @@ async function main() {
     state.placeSeries = null;
     refreshSliderBand();
     refresh();
+    restartPrefetch();
   }
   windOverrideToggle.addEventListener("change", syncWindOverride);
   windDirInput.addEventListener("input", syncWindOverride);
@@ -271,14 +323,9 @@ async function main() {
   }
 
   let refreshSeq = 0;
-  async function refresh() {
-    const mySeq = ++refreshSeq;
-    const offset = Number(slider.value);
-    const date = hourSlotDate(offset);
-    sliderLabel.textContent = formatSlotLabel(date);
-    warningEl.textContent = "계산 중…";
-    const { cells, warning } = await getCellsForHour(date);
-    if (mySeq !== refreshSeq) return; // 그 사이 더 새 요청이 시작됨 — 이 결과는 버림
+  // refresh()·드래그 중 캐시-즉시표시(renderCachedIfAvailable) 둘 다 결국 "이 칸들을 그려라"로
+  // 끝나서 그리는 부분만 따로 뽑았어요.
+  function renderCells(cells, warning, date) {
     warningEl.textContent = warning ?? "";
     const noiseCells = cells.filter((c) => c.layer === "noise");
     const exhaustCells = cells.filter((c) => c.layer === "exhaust");
@@ -287,6 +334,45 @@ async function main() {
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
     exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
     refreshForecastSentences();
+  }
+  async function refresh() {
+    const mySeq = ++refreshSeq;
+    const offset = Number(slider.value);
+    const date = hourSlotDate(offset);
+    const hourIso = hourSlotIso(date);
+    sliderLabel.textContent = formatSlotLabel(date);
+    if (!state.cellCache.has(hourIso)) warningEl.textContent = "계산 중…"; // 이미 캐시돼 있으면 끊김 없이 그대로 보여요
+    const { cells, warning } = await getCellsForHour(date);
+    if (mySeq !== refreshSeq) return; // 그 사이 더 새 요청이 시작됨 — 이 결과는 버림
+    renderCells(cells, warning, date);
+  }
+  // 11/26 친구 요청("날씨누리 레이더"처럼 슬라이더를 끌 때 끊기지 않게): 이미 계산해 둔
+  // 시각이면 기다릴 것 없이 그 자리에서 바로 그려요. 아직 캐시에 없는 시각은(곧 prefetchAllHours가
+  // 채워 줄 거라) 화면을 비우거나 "계산 중"으로 덮지 않고 직전 화면을 그대로 둬요 — 마우스를
+  // 놓으면(change 이벤트) 그 시각을 정식으로 계산해서 보여줘요.
+  function renderCachedIfAvailable(offset) {
+    const date = hourSlotDate(offset);
+    const hourIso = hourSlotIso(date);
+    const cached = state.cellCache.get(hourIso);
+    if (!cached) return;
+    refreshSeq++; // 진행 중이던 refresh()가 늦게 끝나도 이 화면을 덮어쓰지 않게
+    renderCells(cached.cells, cached.warning, date);
+  }
+  // 11/26 친구 요청(계산 속도): 지금 설정 그대로 72시간 전체를 쉬는 시간에 미리 계산해
+  // cellCache를 채워요 — 사용자가 슬라이더를 어디로 끌어도 대부분 이미 계산돼 있어서
+  // 바로 보여요. 설정이 바뀌면(체크박스·음량·발전차·풍향 등) 토큰을 올려서 이 루프가
+  // 스스로 멈추고 새 설정으로 다시 시작해요.
+  let prefetchToken = 0;
+  async function prefetchAllHours() {
+    const myToken = ++prefetchToken;
+    for (let offset = 0; offset < NUM_HOURS; offset++) {
+      if (myToken !== prefetchToken) return; // 설정이 바뀌어 새로 시작됨
+      await getCellsForHour(hourSlotDate(offset));
+    }
+  }
+  function restartPrefetch() {
+    prefetchToken++; // 진행 중이던 루프를 멈추고
+    prefetchAllHours(); // 새 설정으로 다시 시작
   }
 
   // 슬라이더 위 회색 구간 — 어느 시간이 "매연을 계산 못 하는 시간"(발전차는 있는데 바람이
@@ -316,11 +402,16 @@ async function main() {
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
-  slider.addEventListener("change", refresh); // 로드맵 권고: 슬라이더를 "놓았을 때"만 계산
-  slider.addEventListener("input", (e) => { sliderLabel.textContent = formatSlotLabel(hourSlotDate(Number(e.target.value))); });
+  slider.addEventListener("change", refresh); // 마우스를 놓으면 그 시각을 정식으로(캐시 없으면 계산해서) 보여줘요
+  slider.addEventListener("input", (e) => {
+    const offset = Number(e.target.value);
+    sliderLabel.textContent = formatSlotLabel(hourSlotDate(offset));
+    renderCachedIfAvailable(offset); // 끄는 중에도 이미 계산된 시각이면 바로바로 이어서 보여요
+  });
 
   refreshSliderBand();
   refresh();
+  restartPrefetch();
 }
 
 main().catch((err) => {
