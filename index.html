@@ -24,14 +24,20 @@
     #slider-band { display: flex; height: 6px; margin-top: 2px; }
     #slider-band .slider-seg { flex: 1; }
     #slider-band .slider-seg.impossible { background: #9e9e9e; }
+    #auto-events { font-size: 0.9rem; }
+    #auto-events div { margin: 2px 0; }
   </style>
 </head>
 <body>
   <div id="panel">
     <h1>올팍 바람지도 — 시민 화면 (데모)</h1>
     <p class="disclaimer">
-      ⚠️ 지금은 <b>엔진 연결 데모 화면</b>이에요. 실제 공연 일정은 아직 자동으로 안 불러오고,
-      아래 체크박스로 "공연 중이라고 가정"하는 음원을 직접 켜고 끌 수 있어요.
+      ⚠️ 아래 "자동으로 반영된 실제 공연 일정"은 공단 올림픽공원 홈페이지 일정안내 페이지를
+      긁어온 거예요 — 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은 날은 "모름"으로
+      표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(또는 옥외 무대는 21:30 중 먼저
+      오는 쪽)으로 가정</b>했어요(실측 아님). 공식 API 계약이 아니라 페이지를 그대로 읽는
+      방식이라 공단이 사이트를 바꾸면 깨질 수 있어요. 그 아래 체크박스로는 실제 일정에 없는
+      공연도 "공연 중이라고 가정"해서 추가로 켜고 끌 수 있어요(엔진 확인용).
       음원 세기(음량)는 공단이 음향장비 사양을 못 준다고 해서(11/26 답변) 여전히 <b>가정값</b>이에요(실제 숫자 아님) —
       다만 아무 숫자가 아니라 <b>공단 기준(옥외 행사 소음 65dB(A) 상한)을 역산</b>한 값이에요: 편익동 쪽으로 부는
       순풍(풍속 3m/s, 중립 대기) 조건에서 이 기준을 넘지 않는 음량을 "기본"으로 두고, "조용한·큰공연"은 실제
@@ -56,7 +62,12 @@
     </div>
 
     <fieldset>
-      <legend>데모: 공연 중이라고 가정할 장소(복수 선택)</legend>
+      <legend>자동으로 반영된 실제 공연 일정(지금 시각 기준)</legend>
+      <div id="auto-events"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>데모: 공연 중이라고 가정할 장소 추가(복수 선택, 실제 일정에 없는 공연도 켜볼 수 있어요)</legend>
       <div id="venue-checkboxes"></div>
     </fieldset>
 

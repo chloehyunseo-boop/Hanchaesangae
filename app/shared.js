@@ -49,25 +49,105 @@ const INDOOR_VENUE_NAMES = new Set([
   "KSPO DOME", "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)", "올림픽홀", "우리금융아트홀", "올림픽공원 K아트홀",
 ]);
 
+/** 장소 이름 하나를 "그 장소라면 쓸 음원 세기·스펙트럼·지면"(time 제외)으로 바꿔요 — 데모
+ * 체크박스(buildDemoStageSources)·실제 공연 일정(buildRealEventStageSources)이 공통으로
+ * 써요(11/26, 둘 다 "장소당 LW를 정하는 규칙"은 같고 "언제 가동하나"만 다름). */
+function venueSourceParams(name, siteByName, volumePreset, assumptions) {
+  const feature = siteByName.get(name);
+  if (!feature) return null;
+  const [lon, lat] = feature.geometry.coordinates;
+  if (INDOOR_VENUE_NAMES.has(name)) {
+    const confirmed = assumptions?.실내공연장_외피?.공연장?.[name];
+    const lwDb = Number.isFinite(confirmed?.엔진입력_lwDb) ? confirmed.엔진입력_lwDb : undefined;
+    return { lat, lon, lwDb, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM };
+  }
+  const lwDb = applyVolumePreset(DEMO_BASE_LW_DB, volumePreset);
+  return { lat, lon, lwDb, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM };
+}
+
 /** 고른 장소들을 데모 음원(가정 음량·스펙트럼)으로 바꿔요. assumptions가 있으면 실내
  * 공연장은 preset 대신 하린이 확정한 엔진입력_lwDb를 그대로 써요. */
 export function buildDemoStageSources(selectedVenues, siteByName, volumePreset, assumptions) {
-  const indoorEnvelope = assumptions?.실내공연장_외피;
   const sources = [];
   for (const name of selectedVenues) {
-    const feature = siteByName.get(name);
-    if (!feature) continue;
-    const [lon, lat] = feature.geometry.coordinates;
-    if (INDOOR_VENUE_NAMES.has(name)) {
-      const confirmed = indoorEnvelope?.공연장?.[name];
-      const lwDb = Number.isFinite(confirmed?.엔진입력_lwDb) ? confirmed.엔진입력_lwDb : undefined;
-      sources.push({ lat, lon, lwDb, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM, time: ALWAYS_ON_TIME });
-      continue;
-    }
-    const lwDb = applyVolumePreset(DEMO_BASE_LW_DB, volumePreset);
-    sources.push({ lat, lon, lwDb, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM, time: ALWAYS_ON_TIME });
+    const params = venueSourceParams(name, siteByName, volumePreset, assumptions);
+    if (!params) continue;
+    sources.push({ ...params, time: ALWAYS_ON_TIME });
   }
   return sources;
+}
+
+// 11/26 친구 요청: "데모 체크박스 말고 실제 배포 화면"을 보고 싶다고 해서, 스크래핑한 공단
+// 일정 페이지(data/events.json의 "공단일정페이지" 항목, engine/events.js)로 그 시각에 실제
+// 열리는 공연을 찾아 자동으로 음원에 반영해요. 공연 일정 자체(언제·어디서 하는지)는 확인된
+// 사실이지만, 공식 API가 시작 시각·소요시간을 늘 안 줘서(요일마다 다른 자유문장, CLAUDE.md
+// §5) 몇 겹의 가정이 더 필요해요 — 전부 아래에 적어요.
+// 소요시간(끝나는 시각)은 공공데이터에 없어서(소요분 항상 null) "평균 공연 3시간"을 가정값으로
+// 써요(CLAUDE.md §5가 이미 "종료는 런타임 추정"이라고 정해둔 설계). 옥외 무대(88잔디마당 등)는
+// 공단 11/26 공식 답변의 "21:30 종료(옥외 무대만)" 규정이 있어서, 3시간 가정보다 21:30이
+// 먼저 오면 21:30에서 끊어요(실내는 이 규정이 없어서 3시간 그대로).
+const PERFORMANCE_ASSUMED_DURATION_MS = 3 * 3600 * 1000;
+const OUTDOOR_CUTOFF_HHMM = "21:30:00";
+
+/** 그 시각(hourIso)에 실제로 열리는 공연을 data/events.json에서 찾아 음원으로 바꿔요.
+ * 날짜는 맞는데 그날 시작 시각을 "일자별시작"에서 못 찾으면(원문이 요일별 자유문장이라 파싱이
+ * 안 된 날) 상시가동으로 보거나 조용히 빼지 않고 time.출처:"미확인"으로 넣어요 — 엔진이
+ * 이걸 자동으로 "일부음원제외"(일부만 모름)로 표시해요(noise.js stageActiveMinutes, 새로
+ * 만든 로직 없음). excludeVenues에 있는 장소는 건너뛰어요(데모 체크박스로 이미 켜둔 장소와
+ * 음원이 두 번 겹쳐 들어가지 않게). */
+export function buildRealEventStageSources(events, siteByName, volumePreset, assumptions, hourIso, excludeVenues = new Set()) {
+  const sources = [];
+  if (!events?.공연) return sources;
+  const { y, m, d } = kstParts(new Date(hourIso));
+  const dateStr = `${y}-${m}-${d}`;
+  for (const ev of events.공연) {
+    if (ev.출처 !== "공단일정페이지") continue; // 공단API(과거 기록)는 예보에 안 씀(CLAUDE.md §5)
+    if (!ev.기간시작 || !ev.기간끝) continue;
+    if (dateStr < ev.기간시작 || dateStr > ev.기간끝) continue; // 이 날짜엔 안 하는 공연
+    if (excludeVenues.has(ev.site)) continue;
+    const params = venueSourceParams(ev.site, siteByName, volumePreset, assumptions);
+    if (!params) continue; // 장소를 모르거나(매칭 실패) site.geojson에 없음 — 지어내지 않음
+
+    const startTimeStr = ev.일자별시작?.[dateStr];
+    const startMs = startTimeStr ? new Date(`${dateStr}T${startTimeStr}:00+09:00`).getTime() : NaN;
+    if (!startTimeStr || !Number.isFinite(startMs)) {
+      // 그날 하는 건 맞는데 몇 시에 하는지 몰라요 — "모름"으로 넣어요(상시가동 아님, 빼지도 않음)
+      sources.push({ ...params, time: { start: null, end: null, 출처: "미확인" } });
+      continue;
+    }
+    let endMs = startMs + PERFORMANCE_ASSUMED_DURATION_MS;
+    if (!INDOOR_VENUE_NAMES.has(ev.site)) {
+      const cutoffMs = new Date(`${dateStr}T${OUTDOOR_CUTOFF_HHMM}+09:00`).getTime();
+      if (Number.isFinite(cutoffMs)) endMs = Math.min(endMs, cutoffMs);
+    }
+    sources.push({
+      ...params,
+      time: {
+        start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(),
+        출처: "공단일정페이지_종료시각가정(3시간 또는 21:30 중 먼저)",
+      },
+    });
+  }
+  return sources;
+}
+
+/** 화면에 "자동으로 반영된 실제 공연 일정"을 보여줄 목록(제목·장소·그날 상태)을 만들어요 —
+ * buildRealEventStageSources와 같은 날짜·제외 규칙을 쓰지만, 엔진 입력이 아니라 사람이 읽을
+ * 텍스트만 돌려줘요(11/26). */
+export function listTodaysRealEvents(events, hourIso, excludeVenues = new Set()) {
+  if (!events?.공연) return [];
+  const { y, m, d } = kstParts(new Date(hourIso));
+  const dateStr = `${y}-${m}-${d}`;
+  const out = [];
+  for (const ev of events.공연) {
+    if (ev.출처 !== "공단일정페이지") continue;
+    if (!ev.기간시작 || !ev.기간끝) continue;
+    if (dateStr < ev.기간시작 || dateStr > ev.기간끝) continue;
+    if (excludeVenues.has(ev.site)) continue;
+    const startTimeStr = ev.일자별시작?.[dateStr];
+    out.push({ title: ev.title, site: ev.site, startTimeStr: startTimeStr ?? null });
+  }
+  return out;
 }
 
 export const NOISE_PALETTE = { 강: "rgba(198,40,40,0.72)", 중: "rgba(251,140,0,0.62)", 약: "rgba(253,216,53,0.5)", uncertain: "rgba(120,120,120,0.45)" };

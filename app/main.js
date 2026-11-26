@@ -13,7 +13,7 @@ import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
-  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage,
+  buildDemoStageSources, buildRealEventStageSources, listTodaysRealEvents, allCellsUnknown, uniformUnknownMessage,
 } from "./shared.js";
 
 const NUM_HOURS = 72; // 로드맵: 지금부터 6시간(초단기)+3일(단기), 1시간 단위
@@ -51,12 +51,25 @@ function getPlaces() {
 const computeHourInWorker = createGridWorker();
 
 async function loadData() {
-  const { weatherByHour, siteByName, assumptions, concaweData } = await loadCommonData();
+  const { weatherByHour, siteByName, assumptions, concaweData, events } = await loadCommonData();
   state.weatherByHour = weatherByHour;
   state.siteByName = siteByName;
   state.assumptions = assumptions;
   state.concaweData = concaweData;
+  state.events = events;
   return { assumptions };
+}
+
+// 11/26 친구 요청("데모 화면 말고 실제 배포 화면"): 데모 체크박스(state.selectedVenues)로
+// 켠 장소 + 그 시각 실제로 열리는 공연(data/events.json)을 합쳐서 음원을 만들어요. 같은
+// 장소가 체크박스로도 켜져 있고 실제 일정에도 있으면 중복으로 두 번 안 더하게, 실제 일정
+// 쪽에서 체크박스로 이미 켠 장소는 빼요(buildRealEventStageSources의 excludeVenues).
+function buildStageSources(hourIso) {
+  const demo = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
+  const real = buildRealEventStageSources(
+    state.events, state.siteByName, state.volumePreset, state.assumptions, hourIso, state.selectedVenues,
+  );
+  return [...demo, ...real];
 }
 
 // 11/24 하린 지시(배출가스 v2, 커밋 813eef1): "발전차 대수"는 이제 발전차(트럭) 수예요 —
@@ -109,7 +122,7 @@ async function getCellsForHour(date) {
     return result;
   }
 
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
+  const stageSources = buildStageSources(hourIso);
   const generatorSources = buildGeneratorSources();
   const { cells, error } = await computeHourInWorker({
     stageSources, generatorSources, weather, hour: hourIso, noiseScenario: "concawe", concaweData: state.concaweData,
@@ -126,7 +139,6 @@ async function getCellsForHour(date) {
 // 비워서 다음에 쓸 때 다시 계산하게 해요(지도 캐시 비우는 자리마다 같이 비워요).
 function buildPlaceSeries() {
   const places = getPlaces();
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
   const generatorSources = buildGeneratorSources();
   const series = [];
   for (let offset = 0; offset < NUM_HOURS; offset++) {
@@ -134,6 +146,7 @@ function buildPlaceSeries() {
     const weather = resolveWeather(date);
     if (!weather) continue;
     const hourIso = hourSlotIso(date);
+    const stageSources = buildStageSources(hourIso); // 실제 일정이 시간마다 달라서 이제 매번 다시 만들어요
     series.push({
       hour: hourIso, weather,
       cellsByPlace: placeCellsForHour({
@@ -307,6 +320,13 @@ async function main() {
   let refreshSeq = 0;
   // refresh()·드래그 중 캐시-즉시표시(renderCachedIfAvailable) 둘 다 결국 "이 칸들을 그려라"로
   // 끝나서 그리는 부분만 따로 뽑았어요.
+  const autoEventsEl = document.getElementById("auto-events");
+  function renderAutoEvents(hourIso) {
+    const items = listTodaysRealEvents(state.events, hourIso, state.selectedVenues);
+    autoEventsEl.innerHTML = items.length
+      ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})</div>`).join("")
+      : "<div>오늘 자동으로 찾은 실제 공연 일정이 없어요.</div>";
+  }
   function renderCells(cells, warning, date) {
     warningEl.textContent = warning ?? "";
     const noiseCells = cells.filter((c) => c.layer === "noise");
@@ -315,6 +335,7 @@ async function main() {
     renderLayerWarnings(cells, weather);
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
     exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
+    renderAutoEvents(hourSlotIso(date));
     refreshForecastSentences();
   }
   async function refresh() {
