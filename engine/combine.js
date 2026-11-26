@@ -13,11 +13,11 @@
 // 좌표는 아직 EPSG:5186(미터)이 아니라 위경도 그대로 둬요(common.js 3.5절과 같은 이유,
 // OutputCell.x/y 주석도 11/21에 맞춰 고쳤어요).
 
-import { CALC_GRID, mapDisplayFor, WIND_FAN_HALF_WIDTH_DEG } from "./common.js";
+import { CALC_GRID, mapDisplayFor, WIND_FAN_HALF_WIDTH_DEG, haversineDistanceM, bearingDeg, windComponentTowardReceiver } from "./common.js";
 import {
   calcNoiseIso9613UpperOctave, indoorFacadeSourcePowerLevel, classifyNoiseLevel,
   stageActiveMinutes, timeWeightDb, calcConcaweBand, CONCAWE_BANDS_HZ, logSumDb, A_WEIGHT_DB,
-  sourceReceiverGeometry, validateSpectrum,
+  validateSpectrum, concaweCategory,
 } from "./noise.js";
 
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
@@ -321,7 +321,13 @@ export function computeNoiseCellConcawe({
     const weightDb = timeWeightDb(activeMinutes) ?? 0; // ①시간가중: 음원별·밴드별 LW에 미리 더함
     if (activeMinutes < 60) allFlags.add(`시간가중_${Math.round(activeMinutes)}분`);
 
-    usable.push({ source, lwDb, weightDb });
+    // 11/26 성능 개선: 거리·방위각은 풍향(vec)과 무관해요(sourceReceiverGeometry 안에서도
+    // haversine/bearing 부분은 안 바뀌고 alignment만 vec에 따라 달라져요) — 부채꼴 19방향마다
+    // 똑같은 haversine·방위각을 다시 계산하지 않게 여기서 한 번만 구해둬요.
+    const distanceM = haversineDistanceM(source.lat, source.lon, receiver.lat, receiver.lon);
+    const bearingDegSR = bearingDeg(source.lat, source.lon, receiver.lat, receiver.lon);
+
+    usable.push({ source, lwDb, weightDb, distanceM, bearingDegSR });
   }
 
   // 2단계: 부채꼴 방향마다(거리는 그대로, 풍향만 바꿔서) 전체를 다시 계산해 dB(A)가 가장
@@ -336,29 +342,38 @@ export function computeNoiseCellConcawe({
     offsets.sort((a, b) => a - b);
   }
 
+  // 11/26 성능 개선: calcConcaweBand의 K1(거리감쇠)·K2(공기흡수)·K3(지면효과)는 풍향과
+  // 무관해요(v·stability를 안 받음) — v는 category(기상 범주 1~6, concaweCategory)를 거쳐서만
+  // 결과에 영향을 줘요. 그래서 음원·밴드가 같으면 category가 같은 두 방향은 calcConcaweBand
+  // 결과도 완전히 똑같아요(출력은 그대로, 중복 계산만 줄여요). 부채꼴 19방향이 보통 category
+  // 1~3개로만 흩어져서(경계값 ±0.5·±3.0 m/s를 한참 넘게 벌어지지 않는 한) 실제로는 많이
+  // 줄어요. 셀 하나(이 함수 호출 한 번) 안에서만 쓰고 버리는 캐시예요.
+  const bandCache = new Map();
   let best = null; // { value, flags(Set) }
   for (const off of offsets) {
     const vec = (((weather.windVecFromDeg + off) % 360) + 360) % 360;
     const perBandLevels = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, []]));
     const dirFlags = new Set();
     let anyExcludedThisDir = 0;
-    for (const { source, lwDb, weightDb } of usable) {
-      const geometry = sourceReceiverGeometry({
-        sourceLat: source.lat, sourceLon: source.lon,
-        receiverLat: receiver.lat, receiverLon: receiver.lon,
-        windVecFromDeg: vec,
-      });
-      const v = weather.wsd10m * geometry.alignment; // 음원→수음점 쪽 벡터 풍속(+)
+    usable.forEach(({ source, lwDb, weightDb, distanceM, bearingDegSR }, sourceIdx) => {
+      const wind = windComponentTowardReceiver(vec, bearingDegSR);
+      const v = weather.wsd10m * wind.alignment; // 음원→수음점 쪽 벡터 풍속(+)
+      const category = concaweCategory(weather.stability, v);
 
       let sourceContributed = false;
       for (const freqHz of CONCAWE_BANDS_HZ) {
         const bandLw = lwDb + source.spectrumRatiosDb[freqHz] + weightDb; // validateSpectrum이 이미 확인함
-        const band = calcConcaweBand({
-          concaweData, freqHz, lwDb: bandLw, d: geometry.distanceM,
-          groundType: source.groundType, dSoftM: source.dSoftM,
-          tempC: weather.tempC, rhPercent: weather.rhPercent,
-          stability: weather.stability, v, hs: source.hs, hr: source.hr,
-        });
+        const cacheKey = `${sourceIdx}:${freqHz}:${category}`;
+        let band = bandCache.get(cacheKey);
+        if (band === undefined) {
+          band = calcConcaweBand({
+            concaweData, freqHz, lwDb: bandLw, d: distanceM,
+            groundType: source.groundType, dSoftM: source.dSoftM,
+            tempC: weather.tempC, rhPercent: weather.rhPercent,
+            stability: weather.stability, v, hs: source.hs, hr: source.hr,
+          });
+          bandCache.set(cacheKey, band);
+        }
         band.flags.forEach((f) => dirFlags.add(f));
         if (band.value !== null && Number.isFinite(band.value)) { // NaN 방어(외부 검토 지적)
           perBandLevels[freqHz].push(band.value);
@@ -368,7 +383,7 @@ export function computeNoiseCellConcawe({
       // 3차 외부 검토 지적(11/22): 음원이 "가동 중"인데도 7밴드 전부 null이면(예: 거리<100m)
       // 제외로 셈해요 — 거리는 방향과 무관하니 이 판정은 모든 방향에서 같아요.
       if (!sourceContributed) anyExcludedThisDir++;
-    }
+    });
 
     const bandLevelsDbA = CONCAWE_BANDS_HZ.map((freqHz) => {
       const levels = perBandLevels[freqHz];

@@ -142,7 +142,11 @@ export function mergeForecasts(ultraItems, vilageItems, now) {
   const merged = new Map();
   for (const it of vilageItems) merged.set(key(it), it);
   for (const it of ultraItems) {
-    const fcstKey = `${it.fcstDate}${it.fcstTime}00`;
+    // fcstDate+fcstTime이 이미 YYYYMMDDHHmm(12자리)이라 cutoff와 길이가 같아야
+    // 문자열 비교가 자릿수 오차 없이 맞아요. 전에는 여기 "00"을 더 붙여서(14자리)
+    // 정확히 6시간째 정각(날짜+시가 cutoff와 같은 시각)일 때만 길이 차이 때문에
+    // fcstKey > cutoff로 잘못 나와 그 시각만 초단기예보가 안 덮어써지는 버그가 있었어요.
+    const fcstKey = `${it.fcstDate}${it.fcstTime}`;
     if (fcstKey <= cutoff) merged.set(key(it), it); // 0~6시간 구간은 초단기예보가 덮어써요
   }
   return Array.from(merged.values());

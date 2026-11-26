@@ -286,6 +286,32 @@ export function parseDateRange(text) {
 }
 
 /**
+ * "2026년 11월 27일(금) 오후 7시 2026년 11월 28일(토) 오후 6시 2026년 11월 29일(일) 오후 5시"
+ * 같은 요일별 자유문장에서, "YYYY년 M월 D일 (오전|오후) H시(분?)" 패턴만 뽑아 날짜별
+ * 시작시각(24시간, "HH:MM")으로 바꿔요(11/26, "공연 일정 → 지도 연결" 1단계). 이 패턴에
+ * 안 맞는 부분(예: "수목금 19시 30분"처럼 요일 묶음+시각만 있고 날짜가 없는 표현)은 그냥
+ * 건너뛰어요 — 날짜가 명시된 부분만 믿을 수 있어서, 지어내지 않아요(CLAUDE.md 2번).
+ * @param {string|null} timeText
+ * @returns {Record<string,string>} {"YYYY-MM-DD": "HH:MM"} — 못 읽으면 빈 객체.
+ */
+export function parseDailyStartTimes(timeText) {
+  if (typeof timeText !== "string") return {};
+  const re = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\([^)]*\))?\s*(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
+  const out = {};
+  for (const m of timeText.matchAll(re)) {
+    const [, y, mo, d, ampm, hRaw, minRaw] = m;
+    let h = Number(hRaw);
+    if (ampm === "오후" && h !== 12) h += 12;
+    if (ampm === "오전" && h === 12) h = 0;
+    if (h < 0 || h > 23) continue; // 시각이 말이 안 되면(파싱 실수) 그 날짜는 건너뛰어요
+    const min = minRaw ? Number(minRaw) : 0;
+    const dateKey = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    out[dateKey] = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  }
+  return out;
+}
+
+/**
  * 일정안내 페이지 HTML → EventRecord[]로 바꿔요(11/25 실제 페이지로 구조 확인). 맨 위
  * "앞으로 있을 공연" 영역(id="rowSpace")만 읽고, 그 아래 "지난 공연"(class="last") 구간은
  * 안 읽어요. 공연마다 요일별 시간이 다르게 적혀 있어서(예: "수목금 19시30분/토 15시,19시")
@@ -295,7 +321,8 @@ export function parseDateRange(text) {
  * "rowSpace" 섹션 범위 안에서만 찾아야 해요 — 전체 페이지에서 찾으면 스크립트 템플릿까지
  * 걸려서 완전히 엉뚱한 값이 나와요(11/25 실제로 겪은 버그, 테스트로 남겨둠).
  * @returns {{title:string, site:string|null, 날짜:null, 기간시작:string|null, 기간끝:string|null,
- *   시작:null, 소요분:null, 출처:"공단일정페이지", flags:string[], 원본장소텍스트:string|null, 원본시간텍스트:string|null}[]}
+ *   시작:null, 소요분:null, 일자별시작:Record<string,string>, 출처:"공단일정페이지", flags:string[],
+ *   원본장소텍스트:string|null, 원본시간텍스트:string|null}[]}
  */
 export function parseUpcomingScheduleHtml(html) {
   const startIdx = html.indexOf('id="rowSpace"');
@@ -313,8 +340,10 @@ export function parseUpcomingScheduleHtml(html) {
     const { site, flags } = matchSite(spatial);
     const { 기간시작, 기간끝 } = parseDateRange(dateText);
     if (!기간시작) flags.push("날짜미확인");
+    const 일자별시작 = parseDailyStartTimes(timeText);
+    if (Object.keys(일자별시작).length === 0) flags.push("시작시각미확인");
     out.push({
-      title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null,
+      title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null, 일자별시작,
       출처: "공단일정페이지", flags, 원본장소텍스트: spatial, 원본시간텍스트: timeText || null,
     });
   }

@@ -5,7 +5,7 @@
 // response.body.items 경로)는 문화공공데이터광장의 다른 meta/ API들과 같은 공통 틀이라고
 // 가정한 거예요 — 실제 키가 생기면 이 가정이 맞는지 꼭 다시 확인해야 해요(engine/events.js
 // 하단 "확인할 것" 참고).
-import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText, parseEventDate, parseDateRange, parseUpcomingScheduleHtml } from "../engine/events.js";
+import { parseStartTime, parseDurationMinutes, matchSite, parsePerformanceResponse, parseApiResponseText, parseEventDate, parseDateRange, parseUpcomingScheduleHtml, parseDailyStartTimes } from "../engine/events.js";
 
 let failCount = 0;
 function check(name, condition, detail) {
@@ -207,6 +207,20 @@ function f(){
   check("둘째 항목: 모르는 장소는 추측 안 하고 장소미확인", events[1]?.site === null && events[1]?.flags.includes("장소미확인"));
   check("'지난 공연'(class=last) 구간은 안 읽음", !events.some((e) => e.title.includes("지난 공연")));
   check("모든 항목 출처가 '공단일정페이지'", events.every((e) => e.출처 === "공단일정페이지"));
+}
+
+{
+  // 11/26 "공연 일정 → 지도 연결" 1단계 — 실제 KSPO DOME 조용필 콘서트(11/27~29) 원문으로 검증.
+  const real = "2026년 11월 27일(금) 오후 7시 2026년 11월 28일(토) 오후 6시 2026년 11월 29일(일) 오후 5시";
+  const times = parseDailyStartTimes(real);
+  check("조용필 콘서트 3일치 시작시각 전부 뽑힘", Object.keys(times).length === 3, JSON.stringify(times));
+  check("11/27(금) 오후 7시 → 19:00", times["2026-11-27"] === "19:00", times["2026-11-27"]);
+  check("11/28(토) 오후 6시 → 18:00", times["2026-11-28"] === "18:00", times["2026-11-28"]);
+  check("11/29(일) 오후 5시 → 17:00", times["2026-11-29"] === "17:00", times["2026-11-29"]);
+  check("오전 12시(자정) → 00:00", parseDailyStartTimes("2026년 1월 1일 오전 12시")["2026-01-01"] === "00:00");
+  check("오후 12시(정오) → 12:00", parseDailyStartTimes("2026년 1월 1일 오후 12시")["2026-01-01"] === "12:00");
+  check("날짜 없이 요일만 있는 표현(예: 수목금 19시 30분)은 지어내지 않고 빈 결과", Object.keys(parseDailyStartTimes("수목금 19시 30분 / 토 15시, 19시")).length === 0);
+  check("null/undefined 입력도 안 터지고 빈 객체", Object.keys(parseDailyStartTimes(null)).length === 0 && Object.keys(parseDailyStartTimes(undefined)).length === 0);
 }
 
 console.log(failCount === 0 ? "\n전체 통과 (실패 0)" : `\n실패 ${failCount}건`);

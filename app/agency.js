@@ -26,13 +26,20 @@ const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_agency_trucks_v1";
 const EVENTS_STORAGE_KEY = "olpak_agency_manual_events_v1";
 const ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
+
+// <input type="datetime-local"> 값("YYYY-MM-DDTHH:mm", 시간대 정보 없음)을 KST로 못박아
+// ISO로 바꿔요 — 안 그러면 브라우저가 돌아가는 컴퓨터의 로컬 시간대로 해석해서, GitHub
+// Pages를 다른 시간대 사람이 열면 발전차 가동 시각이 틀어질 수 있어요.
+function localInputToIso(value) {
+  return value ? `${value}:00+09:00` : null;
+}
 const GRADE_LABEL = { 모름: "모름", 인증: "인증", 비인증: "비인증" };
 
 const state = {
   weatherByHour: null, siteByName: null, assumptions: null, concaweData: null, lessons: null, events: null,
   selectedVenues: new Set(),
   volumePreset: "기본",
-  trucks: loadTrucks(), // [{id, site, 발전기수:number|null, 인증등급:"모름"|"인증"|"비인증", 엔진출력_kW:number|null}]
+  trucks: loadTrucks(), // [{id, site, 발전기수:number|null, 인증등급:"모름"|"인증"|"비인증", 엔진출력_kW:number|null, 시작시각:"YYYY-MM-DDTHH:mm"|null, 셋업시작:"YYYY-MM-DDTHH:mm"|null}]
   manualEvents: loadManualEvents(), // [{id, title, site, 날짜, 시작, 소요분}] — 공단 화면에서 직접 입력(11/25)
   배출시나리오_기본값: "인증", // 트럭의 인증등급이 "모름"일 때 쓰는 값(하린 11/24 지시: 비인증 비교 보기)
   windOverride: null,
@@ -76,7 +83,9 @@ function buildGeneratorSourcesFromTrucks() {
       ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
       ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
       ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
-      time: ALWAYS_ON_TIME,
+      time: t.시작시각
+        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}), 출처: "공단화면입력" }
+        : ALWAYS_ON_TIME,
     });
   }
   return out;
@@ -155,6 +164,16 @@ function renderTruckTable(onChange) {
     powerInput.value = t.엔진출력_kW ?? "";
     powerInput.addEventListener("change", () => { const v = Number(powerInput.value); t.엔진출력_kW = powerInput.value === "" ? null : (Number.isFinite(v) ? v : null); onChange(); });
 
+    const startInput = document.createElement("input");
+    startInput.type = "datetime-local"; startInput.title = "비우면 1년 내내 가동(데모)으로 가정";
+    startInput.value = t.시작시각 ?? "";
+    startInput.addEventListener("change", () => { t.시작시각 = startInput.value || null; onChange(); });
+
+    const setupInput = document.createElement("input");
+    setupInput.type = "datetime-local"; setupInput.title = "공연 시작 시각을 먼저 넣어야 의미가 있어요";
+    setupInput.value = t.셋업시작 ?? "";
+    setupInput.addEventListener("change", () => { t.셋업시작 = setupInput.value || null; onChange(); });
+
     const delBtn = document.createElement("button");
     delBtn.type = "button"; delBtn.textContent = "삭제";
     delBtn.addEventListener("click", () => {
@@ -163,7 +182,7 @@ function renderTruckTable(onChange) {
       onChange();
     });
 
-    for (const el of [siteSel, countInput, gradeSel, powerInput, delBtn]) {
+    for (const el of [siteSel, countInput, gradeSel, powerInput, startInput, setupInput, delBtn]) {
       const td = document.createElement("td");
       td.appendChild(el);
       tr.appendChild(td);
@@ -193,8 +212,14 @@ function renderAutoEvents(events) {
     const flagsText = e.flags?.length ? ` — ${e.flags.join("·")}(확인 필요)` : "";
     // 출처가 둘이에요(11/25) — "공단API"(과거 기록)는 날짜 하루+시작시각, "공단일정페이지"
     // (앞으로 있을 공연, 공단 홈페이지에서 긁어옴)는 날짜 범위+원문 시간 텍스트예요.
+    // 11/26: "공단일정페이지" 쪽은 원문에서 날짜별 시작시각을 뽑을 수 있으면(일자별시작,
+    // engine/events.js의 parseDailyStartTimes) 그걸 같이 보여줘요 — 요일 묶음이라 전부
+    // 못 뽑을 때도 있어서(예: "수목금 19시 30분"), 뽑힌 날짜만 보여주고 나머진 원문 그대로예요.
+    const dailyTimesText = e.일자별시작 && Object.keys(e.일자별시작).length
+      ? ` [${Object.entries(e.일자별시작).map(([날짜, 시각]) => `${날짜} ${시각}`).join(", ")}]`
+      : "";
     const whenText = e.출처 === "공단일정페이지"
-      ? `${e.기간시작 ?? "날짜 미확인"}~${e.기간끝 ?? "?"} (${e.원본시간텍스트 ?? "시간 미확인"})`
+      ? `${e.기간시작 ?? "날짜 미확인"}~${e.기간끝 ?? "?"} (${e.원본시간텍스트 ?? "시간 미확인"})${dailyTimesText}`
       : `${e.날짜 ?? "날짜 미확인"} ${e.시작 ?? "시작시각 미확인"}`;
     return `<div>[${e.출처}] ${e.title} · ${e.site ?? "장소 미확인"} · ${whenText}${flagsText}</div>`;
   }).join("");
@@ -258,17 +283,22 @@ function renderManualEventsTable(onChange) {
 // 있는데 처음엔 안 봤어요 — 끝난 강좌도 "진행 중"으로 잘못 떴을 거예요. 요일·시각 판정도
 // date.getDay()/getHours()(브라우저 로컬 시간대)가 아니라 이 프로젝트가 늘 쓰는 KST
 // 명시 변환(kstParts)으로 고쳤어요 — GitHub Pages는 어느 시간대 브라우저에서나 열리니까요.
-function lessonsAtHour(lessons, date) {
+export function lessonsAtHour(lessons, date) {
   const { y, m, d, h } = kstParts(date);
   const dateStr = `${y}-${m}-${d}`;
   const dow = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).getUTCDay();
-  const hh = `${h}:00`;
+  const hourStart = `${h}:00`;
+  const hourEnd = `${String(Number(h) + 1).padStart(2, "0")}:00`;
   return (lessons ?? []).filter((l) => {
     if (!Array.isArray(l.요일) || !l.요일.includes(dow)) return false;
     if (typeof l.시작 !== "string" || typeof l.끝 !== "string") return false;
     if (typeof l.기간시작 === "string" && dateStr < l.기간시작) return false;
     if (typeof l.기간끝 === "string" && dateStr > l.기간끝) return false;
-    return hh >= l.시작 && hh < l.끝;
+    // 11/26 수정: 전엔 "이 시간대 칸의 시작 시각(hh)"이 강좌 구간 [시작,끝) 안에 있는지만
+    // 봐서, 예를 들어 14:30~15:30 강좌가 14시 칸(14:00~15:00)에서는 안 잡혔어요(칸 시작
+    // 14:00이 14:30보다 이르다는 이유로). 칸(hourStart~hourEnd)과 강좌 구간이 조금이라도
+    // 겹치면 "진행 중"으로 보게 고쳤어요(구간 겹침: l.시작 < hourEnd && l.끝 > hourStart).
+    return l.시작 < hourEnd && l.끝 > hourStart;
   });
 }
 
@@ -378,7 +408,7 @@ async function main() {
   });
 
   document.getElementById("add-truck").addEventListener("click", () => {
-    state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null });
+    state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null, 시작시각: null, 셋업시작: null });
     saveTrucks();
     renderTruckTable(onTruckChange);
   });
