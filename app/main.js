@@ -10,8 +10,6 @@
 
 import { skyCodeToName, stabilityFromForecast } from "../engine/plume.js";
 import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
-import { buildPlaceTimeline } from "../engine/place_view.js";
-import { renderPlaceTimeline } from "./place_view_ui.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
@@ -213,22 +211,6 @@ async function main() {
   });
   map.on("locationerror", () => { /* 위치 접근 거절/실패 — 지도 기능엔 필수가 아니라 조용히 넘어가요 */ });
   map.locate({ watch: true, setView: false, enableHighAccuracy: true });
-
-  // 장소별 보기(하린 11/24 요청) — 표준 장소 8곳에 점을 찍고, 누르면 그 장소의 72시간
-  // 소음·배출가스 시간표를 보여줘요(app/place_view_ui.js의 renderPlaceTimeline 그대로 재사용).
-  const placeViewPanel = document.getElementById("place-view");
-  const placeMarkersLayer = L.layerGroup().addTo(map);
-  for (const p of getPlaces()) {
-    const marker = L.circleMarker([p.lat, p.lon], {
-      radius: 6, color: "#1565c0", weight: 2, fillColor: "#64b5f6", fillOpacity: 0.9,
-    }).addTo(placeMarkersLayer);
-    marker.bindTooltip(p.name, { direction: "top" });
-    marker.on("click", () => {
-      const timeline = buildPlaceTimeline({ series: getPlaceSeries(), placeName: p.name });
-      placeViewPanel.hidden = false;
-      renderPlaceTimeline(placeViewPanel, timeline, { onClose: () => { placeViewPanel.hidden = true; } });
-    });
-  }
 
   // 음원 체크박스(데모) — 기본안_계산대상 중 소음_포함:true인 장소만
   const venueBox = document.getElementById("venue-checkboxes");
