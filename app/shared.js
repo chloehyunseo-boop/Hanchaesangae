@@ -185,32 +185,45 @@ export const CanvasCellLayer = L.Layer.extend({
   },
   onAdd(map) {
     this._map = map;
+    // 11/26: Safari(하린 화면)에서 확인됨 — 칸 색을 흐리는 걸 Canvas 2D의 `ctx.filter =
+    // blur(...)`로 했더니 Safari는 이걸 조용히 무시해서(에러 없이) 블러 없이 색 경계가
+    // 칼같이 또렷한 "원형 과녁판"처럼 보였어요(크롬만 잘 보임). Canvas 2D context.filter
+    // 대신 "표준 CSS filter"(모든 브라우저가 훨씬 오래 안정적으로 지원)를 캔버스 엘리먼트
+    // 자체에 걸어서 흐리고, 빗금·점무늬(모름 표시, 흐려지면 안 됨)는 그 위에 CSS filter가
+    // 안 걸린 투명한 캔버스를 따로 겹쳐 또렷하게 그려요 — 두 캔버스를 따로 둬서 "칠(흐림)"과
+    // "무늬(또렷)"가 서로 영향을 안 주게 했어요.
     // "leaflet-zoom-animated"를 줘야 지도 자체 줌 애니메이션 CSS 전환(0.25s)을 같이 타요
     // (11/26 친구 요청: 확대/축소할 때 반경이 줌 속도를 못 따라오고 끝나고서야 다시 그려지는
     // 문제 — Leaflet의 다른 레이어는 전부 zoomanim을 따라가는데 이 캔버스만 안 그랬어요).
-    this._canvas = L.DomUtil.create("canvas", "olpak-cell-canvas leaflet-zoom-animated");
-    this._canvas.style.position = "absolute";
-    this._canvas.style.pointerEvents = "none";
-    this._canvas.style.transformOrigin = "0 0";
-    map.getPanes().overlayPane.appendChild(this._canvas);
+    this._fillCanvas = L.DomUtil.create("canvas", "olpak-cell-canvas-fill leaflet-zoom-animated");
+    this._overlayCanvas = L.DomUtil.create("canvas", "olpak-cell-canvas-overlay leaflet-zoom-animated");
+    for (const c of [this._fillCanvas, this._overlayCanvas]) {
+      c.style.position = "absolute";
+      c.style.pointerEvents = "none";
+      c.style.transformOrigin = "0 0";
+    }
+    map.getPanes().overlayPane.appendChild(this._fillCanvas);
+    map.getPanes().overlayPane.appendChild(this._overlayCanvas); // 무늬가 칠 위에 오게 나중에 붙여요
     map.on("moveend zoomend resize", this._reset, this);
     map.on("zoomanim", this._animateZoom, this);
     this._reset();
   },
   onRemove(map) {
-    map.getPanes().overlayPane.removeChild(this._canvas);
+    map.getPanes().overlayPane.removeChild(this._fillCanvas);
+    map.getPanes().overlayPane.removeChild(this._overlayCanvas);
     map.off("moveend zoomend resize", this._reset, this);
     map.off("zoomanim", this._animateZoom, this);
   },
-  // 줌 애니메이션 도중(끝나기 전) 호출돼요 — 이미 그려둔 래스터(caption 없이 캔버스 그 자체)를
-  // 목표 줌·중심에 맞는 자리로 옮기고 배율만 CSS transform으로 미리 맞춰서, 다른 Leaflet 레이어
-  // (타일 등)와 같은 속도로 "주르륵" 커지거나 작아지게 해요. 다 끝나면 zoomend에서 _reset()이
-  // 실제 셀 좌표로 다시 그려서 흐려 보이던 배율 확대/축소를 또렷하게 바꿔요.
+  // 줌 애니메이션 도중(끝나기 전) 호출돼요 — 이미 그려둔 래스터(캔버스 둘 다)를 목표 줌·중심에
+  // 맞는 자리로 옮기고 배율만 CSS transform으로 미리 맞춰서, 다른 Leaflet 레이어(타일 등)와
+  // 같은 속도로 "주르륵" 커지거나 작아지게 해요. 다 끝나면 zoomend에서 _reset()이 실제 셀
+  // 좌표로 다시 그려서 흐려 보이던 배율 확대/축소를 또렷하게 바꿔요.
   _animateZoom(e) {
     if (!this._map || !this._topLeftLatLng) return;
     const scale = this._map.getZoomScale(e.zoom, this._map.getZoom());
     const newTopLeft = this._map._latLngToNewLayerPoint(this._topLeftLatLng, e.zoom, e.center);
-    L.DomUtil.setTransform(this._canvas, newTopLeft, scale);
+    L.DomUtil.setTransform(this._fillCanvas, newTopLeft, scale);
+    L.DomUtil.setTransform(this._overlayCanvas, newTopLeft, scale);
   },
   setCells(cells, cellSizeM) {
     this._cells = cells;
@@ -222,27 +235,28 @@ export const CanvasCellLayer = L.Layer.extend({
   _reset() {
     if (!this._map) return;
     const topLeft = this._map.containerPointToLayerPoint([0, 0]);
-    L.DomUtil.setTransform(this._canvas, topLeft, 1); // 전에 걸린 줌 애니메이션 배율을 1로 되돌려요
+    // 전에 걸린 줌 애니메이션 배율을 1로 되돌려요
+    L.DomUtil.setTransform(this._fillCanvas, topLeft, 1);
+    L.DomUtil.setTransform(this._overlayCanvas, topLeft, 1);
     this._topLeftLatLng = this._map.containerPointToLatLng([0, 0]); // 다음 줌 애니메이션이 따라갈 기준점
     const size = this._map.getSize();
-    this._canvas.width = size.x;
-    this._canvas.height = size.y;
+    this._fillCanvas.width = size.x;
+    this._fillCanvas.height = size.y;
+    this._overlayCanvas.width = size.x;
+    this._overlayCanvas.height = size.y;
     this._redraw();
   },
   // 칸(fill) 색은 흐리게 섞어서 "자연스럽게 퍼지는" 느낌을 주되, 빗금·점무늬(불확실·모름
   // 표시)는 흐리면 신호 자체가 흐려져 버려서(이 프로젝트에서 가장 중요한 "모름과 빈칸을
   // 구분" 규칙과 충돌) 또렷하게 따로 그려요 — 색은 분위기, 무늬는 사실이라고 생각하면 돼요.
   _redraw() {
-    if (!this._map || !this._canvas) return;
-    const w = this._canvas.width, h = this._canvas.height;
-    if (w === 0 || h === 0) return; // 지도가 아직 자리를 못 잡았을 때(폭·높이 0) — drawImage가 던짐(11/25 발견)
-    const ctx = this._canvas.getContext("2d");
-    ctx.clearRect(0, 0, w, h);
-    if (!this._buffer) this._buffer = document.createElement("canvas");
-    this._buffer.width = w;
-    this._buffer.height = h;
-    const bctx = this._buffer.getContext("2d");
-    bctx.clearRect(0, 0, w, h);
+    if (!this._map || !this._fillCanvas || !this._overlayCanvas) return;
+    const w = this._fillCanvas.width, h = this._fillCanvas.height;
+    if (w === 0 || h === 0) return; // 지도가 아직 자리를 못 잡았을 때(폭·높이 0, 11/25 발견)
+    const fctx = this._fillCanvas.getContext("2d");
+    const octx = this._overlayCanvas.getContext("2d");
+    fctx.clearRect(0, 0, w, h);
+    octx.clearRect(0, 0, w, h);
 
     const overlays = [];
     let cellPx = 25;
@@ -254,49 +268,48 @@ export const CanvasCellLayer = L.Layer.extend({
       const cw = Math.max(1, se.x - nw.x);
       const ch = Math.max(1, se.y - nw.y);
       cellPx = cw;
-      bctx.fillStyle = style.fill;
-      bctx.fillRect(nw.x, nw.y, cw, ch);
+      fctx.fillStyle = style.fill;
+      fctx.fillRect(nw.x, nw.y, cw, ch);
       if (style.hatch || style.dotted) overlays.push({ nw, se, w: cw, h: ch, style });
     }
 
     // 흐림 반경은 칸 크기(줌 배율)에 맞춰요 — 너무 흐리면 등급 경계가 안 보이고,
-    // 너무 또렷하면 예전처럼 네모가 그대로 보여요.
+    // 너무 또렷하면 예전처럼 네모가 그대로 보여요. Canvas 2D의 ctx.filter 대신 표준 CSS
+    // filter를 캔버스 엘리먼트에 거는 이유는 위 onAdd 주석(Safari에서 ctx.filter가 조용히
+    // 무시되던 문제) 참고.
     const blurPx = Math.max(2, Math.min(14, cellPx * 0.6));
-    ctx.save();
-    ctx.filter = `blur(${blurPx}px)`;
-    ctx.drawImage(this._buffer, 0, 0);
-    ctx.restore();
+    this._fillCanvas.style.filter = `blur(${blurPx}px)`;
 
     for (const { nw, se, w: cw, h: ch, style } of overlays) {
       if (style.hatch) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(nw.x, nw.y, cw, ch);
-        ctx.clip();
-        ctx.strokeStyle = style.hatchColor ?? "rgba(60,60,60,0.55)";
-        ctx.lineWidth = 1;
+        octx.save();
+        octx.beginPath();
+        octx.rect(nw.x, nw.y, cw, ch);
+        octx.clip();
+        octx.strokeStyle = style.hatchColor ?? "rgba(60,60,60,0.55)";
+        octx.lineWidth = 1;
         for (let off = -Math.max(cw, ch); off < Math.max(cw, ch); off += 5) {
-          ctx.beginPath();
-          ctx.moveTo(nw.x + off, nw.y);
-          ctx.lineTo(nw.x + off + ch, nw.y + ch);
-          ctx.stroke();
+          octx.beginPath();
+          octx.moveTo(nw.x + off, nw.y);
+          octx.lineTo(nw.x + off + ch, nw.y + ch);
+          octx.stroke();
         }
-        ctx.restore();
+        octx.restore();
       }
       if (style.dotted) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(nw.x, nw.y, cw, ch);
-        ctx.clip();
-        ctx.fillStyle = "rgba(60,60,60,0.6)";
+        octx.save();
+        octx.beginPath();
+        octx.rect(nw.x, nw.y, cw, ch);
+        octx.clip();
+        octx.fillStyle = "rgba(60,60,60,0.6)";
         for (let yy = nw.y + 3; yy < se.y; yy += 6) {
           for (let xx = nw.x + 3; xx < se.x; xx += 6) {
-            ctx.beginPath();
-            ctx.arc(xx, yy, 1, 0, Math.PI * 2);
-            ctx.fill();
+            octx.beginPath();
+            octx.arc(xx, yy, 1, 0, Math.PI * 2);
+            octx.fill();
           }
         }
-        ctx.restore();
+        octx.restore();
       }
     }
   },
