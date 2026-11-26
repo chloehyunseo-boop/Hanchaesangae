@@ -507,5 +507,26 @@
       "모델출처": "https://emc.cat.com/pubdirect.ashx?media_string_id=LEHE2691-"
     },
     "시민지도_기본시나리오": "인증 (하린 결정 2026-11-23)"
+  },
+  "실내공연장_외피": {
+    "_설명": "실내 공연장 소음 식 LW = Lp,실내 − R + 10·log10(S) − 6 입력값. 근거: docs/실내공연장_외피.md (하린 11/26)",
+    "Lp_실내_dBA": {
+      "값": 100,
+      "출처": "WHO global standard for safe listening venues and events(2022) 특징 1 F1.1.2: 100 dB LAeq,15min 권고 상한. Støfringsdal(2018, Proc. IOA 40-3) 실측과 2dB 안",
+      "성격": "권고 상한 = 최대치 가정"
+    },
+    "R_dB": {
+      "기본": 37,
+      "민감도": 26,
+      "출처": "NAIMA·MBMA(2019) Acoustical Performance of Insulated Metal Building Roof and Wall Assemblies 표 1: 금속 지붕 4종 STC 37~58, OITC 26~46. 기본=가장 약한 조립 STC, 민감도=같은 조립 OITC",
+      "성격": "일반 수치 가정(공연장 실측 아님), 모든 주파수에 같은 값"
+    },
+    "S_m2": {
+      "KSPO DOME": 18930,
+      "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)": 10404,
+      "우리금융아트홀": 4971,
+      "출처": "공단 '올림픽공원 공연장 실감형 콘텐츠' 3D(DAE·GLB), 지면 0.5m 위 볼록 껍질의 지붕+벽 면적",
+      "주의": "우리금융아트홀은 신뢰 낮음(모델이 안쪽 위주일 수 있음). 올림픽홀·K아트홀은 3D 없음"
+    }
   }
 }
