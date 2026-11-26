@@ -335,8 +335,10 @@ export function lwFromTargetDb({ sourceLat, sourceLon, measureLat, measureLon, t
 }
 
 /**
- * 공단 화면에서 기본 음량(역산값 또는 문헌 가정값)을 조정할 때 쓰는 preset(±3dB).
- * 값은 로드맵 2번에 적힌 가정이고, 실측으로 검증된 숫자는 아니에요.
+ * 시민·공단 화면에서 기본 음량(공단 기준 65dB 역산값, DEMO_BASE_LW_DB)을 조정할 때 쓰는
+ * preset(±3dB). "조용한·큰공연"은 실제 공연 크기별 음량 차이를 측정한 값이 아니라, 화면에서
+ * 음량을 바꿔보며 비교할 수 있게 만든 **데모 비교용** 상대 눈금이에요(하린 11/26 지적 —
+ * 전엔 "큰공연=역산값, 기본=−3dB"로 둬서 그 3dB 자체에 근거가 있는 것처럼 보였어요).
  */
 export const VOLUME_PRESETS = { 조용한: -3, 기본: 0, 큰공연: 3 };
 
