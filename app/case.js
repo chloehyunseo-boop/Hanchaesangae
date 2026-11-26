@@ -14,7 +14,7 @@ import { placeCellsForHour, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.
 import { placeCellState } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, CanvasCellLayer, createGridWorker, loadCommonData,
-  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage, DEMO_BASE_LW_DB,
+  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage,
 } from "./shared.js";
 
 const HOURS = [16, 17, 18, 19, 20, 21];
@@ -22,7 +22,7 @@ const DEFAULT_HOUR = 18;
 const NEWS_FROM_MIN = 18 * 60; // 보도 "2막 중간" 추정 18:15 ±15분 → 18:00~18:30
 const NEWS_TO_MIN = 18 * 60 + 30;
 
-const state = { caseData: null, siteByName: null, concaweData: null, excludeDome: true, cache: new Map() };
+const state = { caseData: null, siteByName: null, concaweData: null, assumptions: null, excludeDome: true, cache: new Map() };
 
 const pad = (n) => String(n).padStart(2, "0");
 const iso = (date, hh, mm = "00") => `${date}T${pad(hh)}:${mm}:00+09:00`;
@@ -54,8 +54,11 @@ function stageSources({ excludeDome }) {
     if (excludeDome && ev.site === "KSPO DOME") continue;
     const base = buildDemoStageSources(new Set([ev.site]), state.siteByName, "기본")[0];
     if (!base) continue;
+    // 실내 공연장은 외피 방사 값(엔진 입력 lwDb, docs/실내공연장_외피.md)을 써요(11/26). 없으면(올림픽홀·K아트홀) 야외값 그대로.
+    const indoorLw = state.assumptions?.실내공연장_외피?.공연장?.[ev.site]?.엔진입력_lwDb;
     out.push({
       ...base,
+      ...(Number.isFinite(indoorLw) ? { lwDb: indoorLw } : {}),
       ...coords(ev.음원좌표), // 야외 무대는 무대 좌표(CLAUDE.md 6번 좌표)
       time: { start: hm(state.caseData.날짜, ev.시작), end: hm(state.caseData.날짜, ev.끝), 출처: ev.출처 },
     });
@@ -150,12 +153,12 @@ function renderSide(hh) {
 }
 
 async function main() {
-  const [{ siteByName, concaweData }, caseData] = await Promise.all([
+  const [{ siteByName, concaweData, assumptions }, caseData] = await Promise.all([
     loadCommonData(),
     fetch("./data/case_20241012.json").then((r) => r.json()),
   ]);
-  Object.assign(state, { siteByName, concaweData, caseData });
-  document.getElementById("lw-note").textContent = `가정값(기본 ${DEMO_BASE_LW_DB}dB 기준)`;
+  Object.assign(state, { siteByName, concaweData, caseData, assumptions });
+  document.getElementById("lw-note").textContent = "가정값(야외: 공단 65dB 기준 역산, 실내: 최대 음량 100dB(A)와 유사 구조 지붕·벽 시험값)";
 
   const computeHourInWorker = createGridWorker();
   const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15 });
