@@ -556,3 +556,9 @@
 - 했음: 하린이 방금 올린 `data/assumptions.json`의 `실내공연장_외피`(Lp_실내_dBA·R_dB·S_m2, KSPO DOME·핸드볼경기장·우리금융아트홀 3곳)를 받아서 실제로 연결했어요. 전에는 `app/shared.js`의 `buildDemoStageSources`가 실내·야외 구분 없이 모든 선택 장소에 똑같은 야외 음량(preset) LW를 썼어요 — `engine/combine.js`가 이미 지원하던 `source.indoor`(LW = Lp,실내 − R + 10·log10(S) − 6, `indoorFacadeSourcePowerLevel`)를 실제로는 아무도 안 쓰고 있었던 거예요. `buildDemoStageSources`에 4번째 선택 인자 `assumptions`를 추가하고, 실내 공연장 5곳(KSPO DOME·핸드볼경기장·올림픽홀·우리금융아트홀·K아트홀) 이름을 알아서 `source.indoor`로 바꿔요 — S 데이터가 있는 3곳은 실제 값으로, 없는 2곳(올림픽홀·K아트홀)은 S가 `undefined`라 `indoorFacadeSourcePowerLevel`이 NaN을 돌려주고 combine.js가 그대로 "음원세기미확인"으로 빼요(지어내지 않음). `app/main.js`·`app/agency.js`의 모든 호출부(5곳)에 `state.assumptions`를 넘기게 고쳤어요(`app/case.js`는 안 건드림 — 4번째 인자가 없으면 그냥 예전처럼 동작해서 하린 화면엔 영향 없어요). 로컬에서 직접 확인: KSPO DOME 선택 시 `indoor:{lpIndoorDb:100,R:37,S:18930}`이 나오고 `indoorFacadeSourcePowerLevel(100,37,18930)`이 하린이 기록한 99.8dB과 정확히 일치, 200m 거리에서 37.2dB(A, 약 등급 미만)로 — 방음이 잘 되는 실내 공연장답게 바깥은 조용하다는 물리적으로 말이 되는 결과도 지도에서 직접 확인했어요.
 - 가정했음: 실내 음원도 지면·전파 계수(DEMO_GROUND: soft, dSoftM 300, hs 1.5)는 야외 음원과 똑같이 써요 — `indoorFacadeSourcePowerLevel`이 만드는 건 "건물 외피에서 나오는 등가 LW"뿐이고, 거기서 수음점까지 퍼지는 건 똑같은 CONCAWE 식이라 맞다고 봐요(야외 preset 음량 대신 이 값이 preset을 대체하는 구조).
 - 포기했음: 올림픽홀·K아트홀은 여전히 "모름"으로 빠져요(3D 데이터가 없어서) — 공단이 그쪽 GLB를 더 안 주면 영영 못 넣어요. 전체 validation 스위트(손계산 대조) 재실행해서 숫자 결과가 그대로인 것도 확인했어요(이 기능을 켜지 않은 기존 시나리오엔 영향 없음).
+
+## 2026-11-26 (이어서) · 하린 라인 · 실내 공연장 외피 최종 (외부 검토 3회 반영)
+
+- 했음: 지붕 재료를 건축물대장·공단·1988 자료로 확인하고 공연장별 R을 다시 정했어요(KSPO 37, 핸드볼 지붕 21·벽 48 부재별 합산, 우리 25). C_d는 ISO 부속서 B의 대형 홀 값 −5, 엔진 입력은 A가중 변환 +2.2 dB(엔진이 비가중 파워를 균등 분배 후 A가중하는 것을 코드로 확인). 엔진 입력 lwDb: KSPO 103.0 / 핸드볼 114.7 / 우리 109.2. 근거 `docs/실내공연장_외피.md`, 값 `data/assumptions.json` `실내공연장_외피`.
+- 가정했음: 실측이 아닌 유사 구조 시험값 기반 시나리오. WHO 100 dB(A)는 관객 위치 권고 상한을 최대 시나리오로 씀. 벽 48은 공동주택 경계벽 기준 참고 대용값.
+- 포기했음: 주파수별 차음·개구부·측로·구조전달음, 올림픽홀·K아트홀. 철회: KSPO 49(평균), 핸드볼 17·28(질량식), "−6이 관객석 과대를 상쇄" 논리, "소음을 작게 잡은 하한" 표현.
