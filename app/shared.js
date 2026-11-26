@@ -29,13 +29,34 @@ const EQUAL_SPLIT_OFFSET_DB = -10 * Math.log10(CONCAWE_BANDS_HZ.length);
 export const DEMO_SPECTRUM = Object.fromEntries(CONCAWE_BANDS_HZ.map((f) => [f, EQUAL_SPLIT_OFFSET_DB]));
 const ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
 
-/** 고른 장소들을 데모 음원(가정 음량·스펙트럼)으로 바꿔요. */
-export function buildDemoStageSources(selectedVenues, siteByName, volumePreset) {
+// 11/26: 하린이 `data/assumptions.json`의 `실내공연장_외피`(공단 3D 데이터로 뽑은 외피
+// 면적 S, NAIMA·MBMA 일반 수치 R, WHO 권고 상한 Lp_실내)를 채워 넣어서, 실내 공연장은
+// 야외 데모 음량(preset)이 아니라 이 값으로 `indoorFacadeSourcePowerLevel()`(engine/noise.js,
+// LW = Lp,실내 − R + 10·log10(S) − 6)을 쓰게 연결했어요. S 데이터가 없는 곳(올림픽홀·
+// K아트홀, 3D 미확보)은 S가 undefined라 `indoorFacadeSourcePowerLevel`이 NaN을 돌려주고
+// combine.js가 그대로 "음원세기미확인"으로 빼요(지어내지 않음, CLAUDE.md 2번).
+const INDOOR_VENUE_NAMES = new Set([
+  "KSPO DOME", "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)", "올림픽홀", "우리금융아트홀", "올림픽공원 K아트홀",
+]);
+
+/** 고른 장소들을 데모 음원(가정 음량·스펙트럼)으로 바꿔요. assumptions가 있으면 실내
+ * 공연장은 preset 대신 실내 외피 값(LW = Lp,실내 − R + 10·log10(S) − 6)을 써요. */
+export function buildDemoStageSources(selectedVenues, siteByName, volumePreset, assumptions) {
+  const indoorEnvelope = assumptions?.실내공연장_외피;
   const sources = [];
   for (const name of selectedVenues) {
     const feature = siteByName.get(name);
     if (!feature) continue;
     const [lon, lat] = feature.geometry.coordinates;
+    if (indoorEnvelope && INDOOR_VENUE_NAMES.has(name)) {
+      const indoor = {
+        lpIndoorDb: indoorEnvelope.Lp_실내_dBA?.값,
+        R: indoorEnvelope.R_dB?.기본,
+        S: indoorEnvelope.S_m2?.[name],
+      };
+      sources.push({ lat, lon, indoor, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM, time: ALWAYS_ON_TIME });
+      continue;
+    }
     const lwDb = applyVolumePreset(DEMO_BASE_LW_DB, volumePreset);
     sources.push({ lat, lon, lwDb, ...DEMO_GROUND, spectrumRatiosDb: DEMO_SPECTRUM, time: ALWAYS_ON_TIME });
   }

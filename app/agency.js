@@ -121,7 +121,7 @@ async function getCellsForHour(date, computeHourInWorker) {
     return result;
   }
 
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset);
+  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
   const generatorSources = buildGeneratorSourcesFromTrucks();
   const { cells, error } = await computeHourInWorker({
     stageSources, generatorSources, weather, hour: hourIso, noiseScenario: "concawe", concaweData: state.concaweData,
@@ -341,7 +341,7 @@ function pt(name) {
 // ---------------------------------------------------------------------------
 async function buildForecastCsv() {
   const places = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) })).filter((p) => p.lat !== undefined);
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset);
+  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
   const generatorSources = buildGeneratorSourcesFromTrucks();
   const rows = [["생성시각", "대상시각", "장소", "소음", "배출가스"]];
   const now = new Date().toISOString();
@@ -543,7 +543,7 @@ async function main() {
       if (weather) {
         placeCells = placeCellsForHour({
           places,
-          stageSources: buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset),
+          stageSources: buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions),
           generatorSources: buildGeneratorSourcesFromTrucks(),
           weather, hour: hourSlotIso(date), concaweData: state.concaweData, 배출시나리오: state.배출시나리오_기본값,
         });

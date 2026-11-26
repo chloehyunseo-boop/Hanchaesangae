@@ -111,7 +111,7 @@ async function getCellsForHour(date) {
     return result;
   }
 
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset);
+  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
   const generatorSources = buildGeneratorSources();
   const { cells, error } = await computeHourInWorker({
     stageSources, generatorSources, weather, hour: hourIso, noiseScenario: "concawe", concaweData: state.concaweData,
@@ -128,7 +128,7 @@ async function getCellsForHour(date) {
 // 비워서 다음에 쓸 때 다시 계산하게 해요(지도 캐시 비우는 자리마다 같이 비워요).
 function buildPlaceSeries() {
   const places = getPlaces();
-  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset);
+  const stageSources = buildDemoStageSources(state.selectedVenues, state.siteByName, state.volumePreset, state.assumptions);
   const generatorSources = buildGeneratorSources();
   const series = [];
   for (let offset = 0; offset < NUM_HOURS; offset++) {
