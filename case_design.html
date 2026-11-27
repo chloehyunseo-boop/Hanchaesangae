@@ -187,6 +187,7 @@
     .on { color: var(--k-blue); font-weight: 700; white-space: nowrap; }
     .off { color: #A9B4C0; white-space: nowrap; }
     .muted { color: var(--sub); font-size: 12px; }
+    .layer.static .bar, .layer.static .bar-lab { opacity: 1 !important; } /* 켜고 끄는 체크박스가 없는 범례 */
   </style>
 </head>
 <body>
@@ -245,7 +246,7 @@
 
       <section class="box" aria-label="표시 항목">
         <h2 class="sec-title">표시 항목</h2>
-        <div class="layer" style="cursor:default">
+        <div class="layer static" style="cursor:default">
           <span class="layer-head">소음 <small>dB(A), 1시간 평균</small></span>
           <span class="bar"><span style="background:rgba(253,216,53,0.85)"></span><span style="background:rgba(251,140,0,0.8)"></span><span style="background:rgba(198,40,40,0.85)"></span></span>
           <span class="bar-lab"><span><b>약</b>45 이상</span><span><b>중</b>55 이상</span><span><b>강</b>65 이상</span></span>
