@@ -148,7 +148,9 @@
     .ir:last-child { border-bottom: 0; padding-bottom: 0; }
     .ir .k { font-weight: 700; display: flex; align-items: flex-start; gap: 6px; }
     .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
-    .ir .v small { display: inline-block; min-width: 50px; color: var(--sub); font-size: 12px; }
+    .ir .v .l { display: grid; grid-template-columns: 54px 1fr; gap: 6px; }
+    .ir .v .l + .l { margin-top: 4px; }
+    .ir .v small { color: var(--sub); font-size: 12px; line-height: 1.75; }
 
     footer { border-top: 1px solid var(--line); background: #F5F6F8; }
     footer .inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 18px; font-size: 12px; color: var(--sub); }
@@ -343,13 +345,13 @@
           <div class="ir"><span class="k">음량</span><span class="v">가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</span></div>
           <div class="ir"><span class="k">발전차</span><span class="v" id="generator-count-note"></span></div>
           <div class="ir"><span class="k">계산</span><span class="v">시민 화면과 같은 엔진. 소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</span></div>
-          <div class="ir"><span class="k">저장</span><span class="v">입력값은 이 브라우저에만 저장돼요(서버 없음)</span></div>
+          <div class="ir"><span class="k">저장</span><span class="v">입력값은 이 브라우저에만 저장(서버 없음)</span></div>
         </div>
         <div class="ig">
           <h3>단계의 의미</h3>
-          <div class="ir"><span class="k">강</span><span class="v"><small>소음</small>공단 옥외 공연 소음 기준(65 dB) 이상<br /><small>배출가스</small>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></div>
-          <div class="ir"><span class="k">중</span><span class="v"><small>소음</small>주거지역 낮 소음 환경기준(55 dB) 이상<br /><small>배출가스</small>대기환경기준의 10% 이상 50% 미만</span></div>
-          <div class="ir"><span class="k">약</span><span class="v"><small>소음</small>주거지역 밤 소음 환경기준(45 dB) 이상<br /><small>배출가스</small>대기환경기준의 2% 이상 10% 미만</span></div>
+          <div class="ir"><span class="k">강</span><span class="v"><span class="l"><small>소음</small><span>공단 옥외 공연 소음 기준(65 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></span></span></div>
+          <div class="ir"><span class="k">중</span><span class="v"><span class="l"><small>소음</small><span>주거지역 낮 소음 환경기준(55 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준의 10% 이상 50% 미만</span></span></span></div>
+          <div class="ir"><span class="k">약</span><span class="v"><span class="l"><small>소음</small><span>주거지역 밤 소음 환경기준(45 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준의 2% 이상 10% 미만</span></span></span></div>
         </div>
       </div>
     </div>
