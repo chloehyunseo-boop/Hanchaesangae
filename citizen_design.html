@@ -45,7 +45,8 @@
 
     /* 지도 */
     .map-card { overflow: hidden; position: relative; }
-    #map { width: 100%; height: min(76vh, 760px); background: #E6EDF3; }
+    .left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    #map { width: 100%; height: max(420px, calc(100vh - 290px)); background: #E6EDF3; }
     #layer-warning:empty { display: none; }
     #layer-warning { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 500; background: rgba(56,73,89,.92); color: #fff; font-size: 13px; padding: 8px 12px; border-radius: 8px; }
     #layer-warning div + div { margin-top: 2px; }
@@ -58,14 +59,18 @@
     .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 
     /* 시간 */
-    #slider-label { font-size: 26px; font-weight: 700; color: var(--navy); letter-spacing: -.02em; }
-    #time-slider { width: 100%; margin: 12px 0 2px; accent-color: var(--steel); }
-    #slider-band { display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: var(--mist); }
+    .time-card { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; align-items: center; padding: 14px 20px; }
+    #slider-label { font-size: 24px; font-weight: 700; color: var(--navy); letter-spacing: -.02em; white-space: nowrap; }
+    #time-slider { width: 100%; margin: 0 0 2px; accent-color: var(--steel); }
+    #slider-band { display: flex; height: 4px; border-radius: 2px; overflow: hidden; }
     #slider-band .slider-seg { flex: 1; }
     #slider-band .slider-seg.impossible { background: #9AA8B6; }
     .ticks { position: relative; height: 16px; font-size: 11px; color: var(--muted); margin-top: 4px; }
     .ticks span { position: absolute; top: 0; white-space: nowrap; }
-    #slider-warning { font-size: 12px; color: var(--steel); min-height: 1.2em; margin-top: 4px; }
+    #slider-warning { font-size: 12px; color: var(--steel); min-height: 1.2em; margin-top: 2px; }
+    #band-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    #band-note:empty { display: none; }
+    #band-note i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; background: #9AA8B6; vertical-align: middle; margin-right: 4px; }
 
     /* 레이어 토글 */
     .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -113,7 +118,8 @@
     /* 모바일: 지도 위, 패널 아래 */
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
-      #map { height: 62vh; }
+      #map { height: 58vh; }
+      .time-card { grid-template-columns: 1fr; gap: 8px; }
       .brand span { display: none; }
     }
   </style>
@@ -136,20 +142,27 @@
   </header>
 
   <main>
-    <section class="card map-card">
-      <div id="layer-warning"></div>
-      <div id="map"></div>
-    </section>
+    <div class="left">
+      <section class="card map-card">
+        <div id="layer-warning"></div>
+        <div id="map"></div>
+      </section>
+      <section class="card time-card">
+        <div>
+          <div class="label">예측 시각</div>
+          <div id="slider-label"></div>
+        </div>
+        <div>
+          <input type="range" id="time-slider" aria-label="예측 시각" />
+          <div id="slider-band"></div>
+          <div class="ticks" id="slider-ticks"></div>
+          <div id="band-note"></div>
+          <div id="slider-warning"></div>
+        </div>
+      </section>
+    </div>
 
     <aside>
-      <div class="card section">
-        <div class="label">예측 시각</div>
-        <div id="slider-label"></div>
-        <input type="range" id="time-slider" aria-label="예측 시각" />
-        <div id="slider-band"></div>
-        <div class="ticks" id="slider-ticks"></div>
-        <div id="slider-warning"></div>
-      </div>
 
       <div class="card section">
         <div class="toggles">
@@ -221,6 +234,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen_design.js?v=4"></script>
+  <script type="module" src="./app/citizen_design.js?v=5"></script>
 </body>
 </html>
