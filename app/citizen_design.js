@@ -136,7 +136,7 @@ async function main() {
   const genNoteText = state.assumptions?.발전차_기본대수?.화면_문구;
   if (genNote && genNoteText) genNote.textContent = genNoteText;
 
-  const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15 });
+  const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15, zoomSnap: 0.25 }); // 디자인 사본: 0.25 단위 확대로 공원이 꽉 차게
   // OpenFreeMap Bright(MapLibre 벡터타일) — maplibre-gl-leaflet로 Leaflet 지도 위에 올림(11/27).
   L.maplibreGL({
     style: "https://tiles.openfreemap.org/styles/bright",
@@ -151,7 +151,7 @@ async function main() {
   // 디자인 사본(11/27): 범례는 오른쪽 패널(html)로 옮겨서 지도 위 상자는 없앰.
   // 지도는 공원과 주요 장소 8곳이 한눈에 들어오게 맞춰요(양옆 여백 최소).
   const pl = getPlaces();
-  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.12), { animate: false });
+  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false });
 
   let gpsMarker = null;
   let gpsAccuracyCircle = null;
