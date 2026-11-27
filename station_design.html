@@ -167,6 +167,14 @@
     }
 
     /* ---- 공단 화면 추가 ---- */
+    /* 오른쪽 '공연 일정/영향 강습' 탭: 아래 관리 탭(initTabs)과 따로 움직이게 클래스만 다르게, 모양은 같게 */
+    .gtab-bar { display: grid; grid-template-columns: repeat(2, 1fr); margin: -16px -16px 0; }
+    .gtab-btn { background: var(--tint); border: 0; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); padding: 11px 4px; font-size: 13px; cursor: pointer; color: var(--sub); }
+    .gtab-btn:first-child { border-left: 0; }
+    .gtab-btn:hover { color: var(--text); }
+    .gtab-btn.active { background: #fff; color: var(--k-blue); font-weight: 700; border-bottom-color: transparent; box-shadow: inset 0 -2px 0 var(--k-blue); }
+    .gtab-panel { padding: 12px 0 0; }
+    .gtab-panel[hidden] { display: none; }
     main { grid-template-columns: minmax(0, 1fr) 340px; }
     .glance + .glance { margin-top: 0; }
     .glance .sec-title { display: flex; align-items: baseline; gap: 8px; }
@@ -270,14 +278,13 @@
         </div>
       </section>
 
-      <section class="box glance" aria-label="이 시각 공연">
-        <h2 class="sec-title">공연 일정 <small>선택한 시각의 날짜</small></h2>
-        <div id="auto-events"></div>
-      </section>
-
-      <section class="box glance" aria-label="영향 강습">
-        <h2 class="sec-title">영향 강습 <small>선택한 시각</small></h2>
-        <div id="impacted-lessons"></div>
+      <section class="box glance-tabs" aria-label="선택한 시각 정보">
+        <div class="gtab-bar" role="tablist">
+          <button type="button" class="gtab-btn active" data-gtab="events" role="tab" aria-selected="true">공연 일정</button>
+          <button type="button" class="gtab-btn" data-gtab="lessons" role="tab" aria-selected="false">영향 강습</button>
+        </div>
+        <div class="gtab-panel" data-gtab="events"><div id="auto-events"></div></div>
+        <div class="gtab-panel" data-gtab="lessons" hidden><div id="impacted-lessons"></div></div>
       </section>
     </aside>
   </main>
@@ -358,7 +365,14 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station_design.js?v=1"></script>
+  <script type="module" src="./app/station_design.js?v=2"></script>
+  <script>
+    // 오른쪽 탭(공연 일정 / 영향 강습)
+    document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {
+      document.querySelectorAll(".gtab-btn").forEach((x) => { const on = x === b; x.classList.toggle("active", on); x.setAttribute("aria-selected", on); });
+      document.querySelectorAll(".gtab-panel").forEach((p) => { p.hidden = p.dataset.gtab !== b.dataset.gtab; });
+    }));
+  </script>
   <script>
     // 시간 막대의 채워진 부분(연한 하늘색) 폭을 손잡이 위치에 맞춰요
     (function () {
