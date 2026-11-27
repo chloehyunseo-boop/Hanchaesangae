@@ -139,7 +139,7 @@ const josaRo = (word) => {
  * @returns {string[]}
  */
 export function buildForecastSentences({ series, now, maxLines = MAX_LINES, placeViewAvailable = true }) {
-  if (!Array.isArray(series) || series.length === 0) return ["예보 자료가 아직 없어요."];
+  if (!Array.isArray(series) || series.length === 0) return ["예측 자료가 아직 없어요."];
   const sorted = [...series].filter((s) => kstParts(s.hour)).sort((a, b) => Date.parse(a.hour) - Date.parse(b.hour));
 
   // 1) 장소·레이어별로 같은 상태가 이어지는 시간대를 묶어요
@@ -214,7 +214,7 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES, plac
 
   if (lines.length === 0) {
     const s0 = sorted[0].hour, n = sorted.length;
-    return [`${spanText(s0, n, now)} 주요 장소에 '약' 이상으로 예보된 소음·배출가스가 없어요.`];
+    return [`${spanText(s0, n, now)} 주요 장소에 '약' 이상으로 예측된 소음·배출가스가 없어요.`];
   }
   // 강 → 이상 등급 → 중 → 모름 → 약, 같은 순위면 이른 시각 먼저
   lines.sort((a, b) => b.rank - a.rank || a.start - b.start);

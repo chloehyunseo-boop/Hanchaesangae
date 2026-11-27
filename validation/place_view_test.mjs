@@ -45,7 +45,7 @@ ok(tl.summary.exhaust.worst === "강" && tl.summary.exhaust.atLeast, "배출가�
 ok(tl.summary.exhaust.text.includes("21~22시·11/26 23시~다음 날 1시") && tl.summary.exhaust.text.includes("안전하다는 뜻은 아니에요"), "계산 못 한 시간도 요약에 적음(빈 시간 22시는 끊김)", tl.summary.exhaust.text);
 ok(!/세요|하십시오|권장/.test(JSON.stringify(tl)), "행동 권고 문구 없음(규칙 4)");
 const empty = buildPlaceTimeline({ series: [], placeName: "수영장" });
-ok(empty.rows.length === 0 && empty.summary.noise.text.includes("예보 자료가 아직 없어요"), "자료 없음");
+ok(empty.rows.length === 0 && empty.summary.noise.text.includes("예측 자료가 아직 없어요"), "자료 없음");
 const quiet = buildPlaceTimeline({ series: [{ hour: t(26, 19), cellsByPlace: { 수영장: { noise: below, exhaust: off } } }], placeName: "수영장" });
 ok(quiet.summary.noise.worst === null && quiet.summary.noise.text.includes("없어요"), "조용한 날: '약' 이상 없음");
 

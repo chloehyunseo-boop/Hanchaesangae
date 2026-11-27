@@ -28,7 +28,7 @@ ok(windName(NaN) === null && windName(undefined) === null, "풍향 없음 → nu
 {
   const series = [17, 18].map((h) => ({ hour: H(23, h), weather: { windVecFromDeg: 90 }, cellsByPlace: { 장미광장: { exhaust: ex(null), noise: no(null) } } }));
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out.length === 1 && out[0].includes("'약' 이상으로 예보된 소음·배출가스가 없어요"), "예보 없음 문장", out[0]);
+  ok(out.length === 1 && out[0].includes("'약' 이상으로 예측된 소음·배출가스가 없어요"), "예보 없음 문장", out[0]);
 }
 // 4) 강이 먼저, 6줄 이상이면 5줄째가 '그 밖에'
 {

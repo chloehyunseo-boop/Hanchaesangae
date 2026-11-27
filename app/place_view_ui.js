@@ -70,7 +70,7 @@ export function renderPlaceTimeline(container, timeline, opts = {}) {
     root.appendChild(b);
   }
   const h = doc.createElement("h2");
-  h.textContent = `${timeline.place} — 시간별 예보`;
+  h.textContent = `${timeline.place} — 시간별 예측`;
   root.appendChild(h);
   for (const layer of ["noise", "exhaust"]) {
     const p = doc.createElement("p");
