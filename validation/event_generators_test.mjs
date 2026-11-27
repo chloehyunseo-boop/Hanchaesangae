@@ -43,7 +43,7 @@ ok(buildRealEventGeneratorSources(events, siteByName, assumptions, "2026-11-30T2
 ok(by("KSPO DOME").every((g) => g.엔진출력_kW === undefined && g.인증등급 === undefined), "사양은 비워 둠 → v2 대표모델 가정");
 
 // 2-1) 공단 '발전차 사용 안 함' / 실제 입력 우선 (11/27)
-ok(defaultGeneratorCount("올림픽공원 K아트홀", assumptions) === 1, "K아트홀 = 1대 (11/27 포함 결정)");
+ok(defaultGeneratorCount("올림픽공원 K아트홀", assumptions) === 0, "K아트홀 = 0대 (11/27 운영 미확인으로 제외)");
 const skipNo = buildRealEventGeneratorSources(events, siteByName, assumptions, h, { noGeneratorDays: [{ site: "올림픽홀", 날짜: "2026-11-27" }] });
 ok(!skipNo.some((g) => g.site === "올림픽홀") && skipNo.some((g) => g.site === "KSPO DOME"), "'사용 안 함' 표시한 공연장·날짜만 빠짐");
 const skipOtherDay = buildRealEventGeneratorSources(events, siteByName, assumptions, h, { noGeneratorDays: [{ site: "올림픽홀", 날짜: "2026-11-28" }] });
