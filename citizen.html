@@ -2,143 +2,295 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>올팍 바람지도 — 시민 화면</title>
+  <title>올팍 바람지도</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <!-- 시민 화면(제출용). 11/27 하린·친구 합의로 디자인 시안 C 적용. 원본 시안: citizen_design_c.html -->
   <style>
-    body { margin: 0; font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; padding: 0 clamp(12px, 4cm, 8vw); box-sizing: border-box; }
-    #map { height: 70vh; width: 100%; }
-    #panel { padding: 12px 16px; }
-    #panel h1 { font-size: 1.1rem; margin: 0 0 8px; }
-    .row { margin: 8px 0; }
-    .legend-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
-    .disclaimer { font-size: 0.8rem; color: #555; background: #fff8e1; padding: 8px; border-radius: 4px; }
-    fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 8px 0; }
-    #slider-label { font-weight: bold; }
-    #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
-    #forecast-sentences { font-size: 0.9rem; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; }
-    #forecast-sentences div { margin: 2px 0; }
-    #layer-warning:not(:empty) { background: #424242; color: #fff; font-size: 0.9rem; padding: 8px 16px; }
-    #layer-warning div { margin: 2px 0; }
-    #slider-band { display: flex; height: 6px; margin-top: 2px; }
-    #slider-band .slider-seg { flex: 1; }
-    #slider-band .slider-seg.impossible { background: #9e9e9e; }
-    #auto-events { font-size: 0.9rem; }
-    #auto-events div { margin: 2px 0; }
-    .tab-bar { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ddd; margin: 0 16px; }
-    .tab-btn { background: none; border: none; padding: 10px 14px; font-size: 0.92rem; cursor: pointer; color: #666; border-bottom: 3px solid transparent; }
-    .tab-btn.active { color: #1565c0; border-bottom-color: #1565c0; font-weight: bold; }
-    .tab-panel { padding: 10px 16px; }
-    .tab-panel[hidden] { display: none; }
-    #map-box { background: #bdddfc; padding: 12px 16px 4px; margin: 8px clamp(-5vw, -1.5cm, -4px) 0; border-radius: 6px; }
-    #map-box #map { border-radius: 4px; overflow: hidden; }
+    :root {
+      /* 공공기관 사이트 톤: 무채색 바탕 + 한국체육산업개발 CI 색은 포인트로만 */
+      --k-blue: #0A2A70;   /* CI Blue */
+      --k-sky: #1B99C4;    /* CI Sky Blue */
+      --k-orange: #FF7F00; /* CI Orange (로고 한 획에만) */
+      --steel: #6A89A7;    /* Stormy morning: 보조 */
+      --bg: #FFFFFF;
+      --tint: #F5F7FA;
+      --panel: #FFFFFF;
+      --line: #DADFE6;
+      --line-soft: #ECEFF3;
+      --text: #222831;
+      --sub: #5C6773;
+      --radius: 4px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body { font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; color: inherit; }
+    a { color: inherit; }
+    .skip { position: absolute; left: -9999px; }
+    .skip:focus { left: 12px; top: 8px; background: #fff; padding: 6px 10px; border: 1px solid var(--k-blue); z-index: 2000; }
+    :focus-visible { outline: 2px solid var(--k-sky); outline-offset: 2px; }
 
-    /* 컴퓨터 화면(900px~): 지도를 메인으로 두고 나머지는 오른쪽 박스에 */
-    @media (min-width: 900px) {
-      html, body { height: 100%; }
-      body { display: flex; flex-direction: column; overflow: hidden; padding: 0 clamp(12px, 2cm, 4vw); }
-      #panel { flex: 0 0 auto; }
-      #main-row { display: flex; flex: 1 1 auto; min-height: 0; gap: 16px; padding-bottom: 12px; }
-      #map-box { order: 1; flex: 1 1 auto; min-width: 0; margin: 8px 0 0; display: flex; flex-direction: column; }
-      #map-box .row { flex: 0 0 auto; }
-      #map-box #map { flex: 1 1 auto; height: auto; min-height: 0; }
-      #sidebar { order: 2; flex: 0 0 380px; min-height: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-top: 8px; overflow: hidden; }
-      #sidebar .tab-bar { flex: 0 0 auto; margin: 0; }
-      #sidebar .tab-panel { flex: 1 1 auto; overflow-y: auto; margin: 0; }
+    .draft-banner { background: #FFF4E5; color: #8A5A1F; font-size: 11px; text-align: center; padding: 3px; }
+
+    /* 머리글 */
+    header.top { background: #fff; border-bottom: 2px solid var(--k-blue); }
+    header.top .inner { max-width: 1440px; margin: 0 auto; padding: 0 20px; height: 64px; display: flex; align-items: center; gap: 14px; }
+    .brand { display: flex; align-items: center; gap: 9px; color: var(--k-blue); text-decoration: none; }
+    .brand svg { width: 26px; height: 26px; }
+    .brand b { font-size: 19px; font-weight: 800; letter-spacing: -.03em; }
+    .brand { flex: none; } .brand b { white-space: nowrap; }
+    .htitle { margin: 0 0 0 6px; padding-left: 16px; border-left: 1px solid var(--line); font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
+    header.top .spacer { flex: 1; }
+    .meta { font-size: 12.5px; color: var(--sub); }
+
+    /* 페이지 제목 */
+    .page-head { max-width: 1240px; margin: 0 auto; padding: 26px 20px 0; }
+    .page-head h1 { padding-bottom: 14px; border-bottom: 2px solid var(--text); }
+    .page-head h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+    .page-head p { display: none; }
+
+    /* 본문 2열 */
+    main { max-width: 1440px; margin: 0 auto; padding: 16px 20px 28px; display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 16px; align-items: start; }
+    .box { background: #fff; }
+    .map-box { border-bottom: 1px solid var(--line); }
+    .left { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); }
+
+    /* 지도 */
+    .map-box { position: relative; overflow: hidden; }
+    #map { width: 100%; height: max(460px, calc(100vh - 222px)); background: #E9EDF2; }
+    #layer-warning:empty { display: none; }
+    #layer-warning { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 500; background: #fff; border: 1px solid var(--text); color: var(--text); font-size: 13px; padding: 8px 12px; }
+    .leaflet-control-zoom { border: 1px solid var(--line) !important; box-shadow: none !important; }
+    .leaflet-control-zoom a { color: var(--text) !important; border-radius: 0 !important; }
+    .leaflet-control-scale-line { border-color: var(--sub); color: var(--text); background: rgba(255,255,255,.85); }
+
+    /* 예측 시각 */
+    .time-box { padding: 12px 20px 10px; background: var(--tint); }
+    .tb-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--sub); }
+    #slider-label { font-size: 18px; font-weight: 700; color: var(--k-blue); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #slider-warning { font-size: 12px; color: var(--sub); }
+    #slider-warning:empty, #band-note:empty { display: none; }
+    .tb-head .spacer { flex: 1; }
+    #band-note { font-size: 12px; color: var(--sub); }
+    #band-note i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; background: #A9B4C0; vertical-align: middle; margin-right: 6px; }
+    /* 막대: 바탕선 → 채워진 부분(연한 하늘) → 회색 구간(막대 위에 얹음) → 손잡이 순으로 겹침 */
+    .tb-track { margin-top: 8px; position: relative; height: 18px; --fill: #A9D6EC; }
+    .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 6px; height: 6px; border-radius: 3px; }
+    .tb-track .rail { background: #DCE6EF; }
+    .tb-track .fill { right: auto; width: var(--p, 0%); background: var(--fill); }
+    #slider-band { display: flex; overflow: hidden; pointer-events: none; left: 9px; right: 9px; border-radius: 0; } /* 손잡이 중심이 움직이는 범위와 맞춤 */
+    #slider-band .slider-seg { flex: 1; }
+    #slider-band .slider-seg.impossible { background: #A9B4C0; }
+    #time-slider { position: relative; z-index: 2; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+    #time-slider::-webkit-slider-runnable-track { height: 18px; background: transparent; }
+    #time-slider::-moz-range-track { height: 18px; background: transparent; }
+    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: 0; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+    #time-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); }
+    .ticks { position: relative; height: 16px; margin: 4px 9px 0; font-size: 11.5px; color: var(--sub); }
+    .ticks span { position: absolute; top: 0; white-space: nowrap; }
+
+    /* 오른쪽 패널 */
+    aside { display: flex; flex-direction: column; gap: 14px; }
+    aside .box { border: 1px solid var(--line); padding: 16px 16px 14px; }
+    aside .box .sec-title { margin: -16px -16px 12px; padding: 11px 16px; background: var(--tint); border-bottom: 1px solid var(--line); font-size: 14px; }
+    .panel-sec { padding: 10px 0; }
+    .panel-sec:first-child { padding-top: 0; }
+    .panel-sec + .panel-sec { border-top: 1px solid var(--line-soft); }
+    .sec-title { margin: 0 0 10px; font-weight: 700; }
+
+    /* 범례(표시 항목 겸용) */
+    .layer { display: block; cursor: pointer; }
+    .layer + .layer { margin-top: 14px; }
+    .layer-head { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 14px; min-height: 28px; }
+    .layer-head input { width: 16px; height: 16px; margin: 0; accent-color: var(--k-blue); cursor: pointer; }
+    .layer-head small { font-weight: 400; color: var(--sub); font-size: 12px; }
+    .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 6px; }
+    .bar span { height: 10px; }
+    .bar-lab { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 4px; font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+    .bar-lab b { color: var(--text); margin-right: 3px; }
+    .layer:not(:has(input:checked)) .bar, .layer:not(:has(input:checked)) .bar-lab { opacity: .35; }
+    .lg { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .lg caption { text-align: left; padding: 0 0 6px; }
+    .lg caption label { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; cursor: pointer; min-height: 28px; }
+    .lg caption input { width: 16px; height: 16px; margin: 0; accent-color: var(--k-blue); cursor: pointer; }
+    .lg caption small { font-weight: 400; color: var(--sub); margin-left: 2px; }
+    .lg td { padding: 4px 0; border-top: 1px solid var(--line-soft); }
+    .lg td.sw { width: 28px; }
+    .lg td.sw span { display: block; width: 18px; height: 10px; }
+    .lg td.g { width: 28px; font-weight: 700; }
+    .lg td.v { color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
+    .lg + .lg { margin-top: 12px; }
+    .marks { display: flex; gap: 14px; font-size: 12px; color: var(--sub); }
+    .marks span span { display: inline-block; width: 18px; height: 10px; vertical-align: -1px; margin-right: 5px; }
+    .hatch { background: repeating-linear-gradient(45deg, #7D8894 0 1.5px, transparent 1.5px 4.5px); border: 1px solid #B9C1CA; }
+    .dots { background-image: radial-gradient(#7D8894 0.9px, transparent 1.1px); background-size: 4px 4px; border: 1px solid #B9C1CA; }
+    .note { font-size: 12px; color: var(--sub); }
+
+    /* 탭: 칸 나뉜 탭 */
+    .tab-bar { display: grid; grid-template-columns: repeat(3, 1fr); margin: -16px -16px 0; }
+    .tab-btn { background: #fff; border: 0; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); padding: 11px 4px; font-size: 13px; cursor: pointer; color: var(--sub); }
+    .tab-btn:first-child { border-left: 0; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { background: #fff; color: var(--k-blue); font-weight: 700; border-bottom-color: transparent; box-shadow: inset 0 -2px 0 var(--k-blue); }
+    .tab-btn:not(.active) { background: var(--tint); }
+    .tab-panel { padding: 12px 0 0; font-size: 13px; }
+    .tab-panel[hidden] { display: none; }
+    #forecast-sentences div, #auto-events div { padding: 8px 0; border-top: 1px solid var(--line-soft); }
+    #forecast-sentences div:first-child, #auto-events div:first-child { border-top: 0; padding-top: 2px; }
+    #auto-events .ev-date { font-weight: 700; font-size: 13.5px; color: var(--k-blue); }
+    .ig + .ig { margin-top: 18px; }
+    .ig h3 { margin: 0 0 2px; padding-bottom: 7px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 700; color: var(--k-blue); }
+    .ir { display: grid; grid-template-columns: 62px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; line-height: 1.5; }
+    .ir:last-child { border-bottom: 0; padding-bottom: 0; }
+    .ir .k { font-weight: 700; display: flex; align-items: flex-start; gap: 6px; }
+    .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
+    .ir .v small { display: inline-block; min-width: 50px; color: var(--sub); font-size: 12px; }
+
+    footer { border-top: 1px solid var(--line); background: #F5F6F8; }
+    footer .inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 18px; font-size: 12px; color: var(--sub); }
+    footer .inner p { margin: 2px 0; }
+
+    @media (max-width: 900px) {
+      .page-head { padding: 16px 14px 0; }
+      .page-head h1 { font-size: 19px; }
+      main { grid-template-columns: 1fr; padding: 12px 14px 20px; gap: 12px; }
+      #map { height: 58vh; }
+      .time-box { padding: 12px 14px 10px; }
+      .meta { display: none; }
+      .htitle { font-size: 12px; padding-left: 10px; margin-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+      .brand b { font-size: 17px; }
+      .tab-btn { min-height: 44px; }
     }
   </style>
 </head>
 <body>
-  <div id="panel">
-    <h1>올팍 바람지도 — 시민 화면</h1>
-    <div class="row">
-      <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
-      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강 65dB↑
-      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중 55dB↑
-      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약 45dB↑
-      &nbsp;&nbsp;
-      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스(NO2) 레이어</label>
-      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강 0.05ppm↑
-      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중 0.01ppm↑
-      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약 0.002ppm↑
-      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금/점무늬 = 등급 보류·모름(자세한 설명은 "안내" 탭)
+  <a class="skip" href="#map">지도로 바로가기</a>
+
+  <header class="top">
+    <div class="inner">
+      <a class="brand" href="./citizen.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M3 8h11a3 3 0 1 0-3-3" stroke="#0A2A70" /><path d="M3 12h16a3 3 0 1 1-3 3" stroke="#1B99C4" /><path d="M3 16h7" stroke="#FF7F00" />
+        </svg>
+        <b>올팍 바람지도</b>
+      </a>
+      <h1 class="htitle">올림픽공원 공연 소음·발전차 배출가스 확산 예측</h1>
+      <div class="spacer"></div>
+      <div class="meta">기상청 단기예보 · 매시 갱신</div>
     </div>
-  </div>
+  </header>
 
-  <div id="main-row">
-  <div id="sidebar">
-  <div class="tab-bar">
-    <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
-    <button type="button" class="tab-btn" data-tab="forecast">문장 예측</button>
-    <button type="button" class="tab-btn" data-tab="info">안내</button>
-  </div>
-
-  <div class="tab-panel" data-tab="events">
-    <div id="auto-events"></div>
-    <p id="generator-count-note" style="font-size:0.8rem;color:#555"></p>
-  </div>
-  <div class="tab-panel" data-tab="forecast">
-    <div id="forecast-sentences"></div>
-  </div>
-  <div class="tab-panel" data-tab="info">
-    <p class="disclaimer">
-      ⚠️ 이 화면은 사람이 켜고 끄는 가정 없이, 기상청 단기예보를 그대로 입력값으로 써서 그
-      바람으로 소음·배출가스가 퍼지는 범위를 예측하고, 공단 올림픽공원 홈페이지의 공연 일정을
-      자동으로 반영해요. 공연 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은 날은 "모름"으로
-      표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(옥외 무대는 21:30 중 먼저 오는
-      쪽)으로 가정</b>했어요(실측 아님). 발전차 대수는 공단이 확인한 값(KSPO DOME 최대 5대)을
-      쓰고, 확인되지 않은 공연장은 최소 1대로 가정했어요. 실제로는 더 많을 수 있어요 — 공단이
-      "발전차 사용 안 함"으로 표시한 공연은 0대예요. 음원 세기(음량)는 공단이 음향장비 사양을
-      못 준다고 해서 여전히 <b>가정값</b>이에요(실제 숫자 아님) — 야외 무대는 공단 기준(옥외
-      행사 소음 65dB(A) 상한)을 역산한 값, 실내는 하린이 확정한 외피 계산값을 써요. 소음
-      레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·설비차폐는 미반영),
-      배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두 대기환경기준 초과 판정이
-      아니에요.
-    </p>
-    <div style="margin-top:10px">
-      <b>단계의 의미</b>
-      <p style="font-size:0.85rem;color:#555;margin:4px 0">
-        [소음 · 공연 소리만, 1시간 평균]<br>
-        강: 공단 옥외 공연 소음 기준(65 dB) 이상<br>
-        중: 주거지역 낮 소음 환경기준(55 dB) 이상<br>
-        약: 주거지역 밤 소음 환경기준(45 dB) 이상<br>
-        → 공연 소리만 계산 · 생활 소음 미포함 · 기준 초과 판정 아님
-      </p>
-      <p style="font-size:0.85rem;color:#555;margin:4px 0">
-        [배출가스 · 발전차 이산화질소만, 1시간 평균]<br>
-        강: 대기환경기준(NO2 1시간 0.10 ppm)의 50% 이상<br>
-        중: 대기환경기준의 10% 이상 50% 미만<br>
-        약: 대기환경기준의 2% 이상 10% 미만<br>
-        → 발전차 배출분만 계산 · 배경 농도 미포함 · 기준 초과 판정 아님
-      </p>
-    </div>
-    <p style="font-size:0.85rem;color:#555">
-      빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급").
-      점 무늬 = 모름(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음).
-      슬라이더 아래 회색 구간 = 그 시간은 바람이 거의 없어 배출가스를 계산 못 해요.
-    </p>
-  </div>
-  </div>
-
-  <div id="map-box">
-    <div class="row" style="padding:0 16px">
-      시간: <span id="slider-label"></span>
-      <input type="range" id="time-slider" style="width:100%" />
-      <div id="slider-band"></div>
-      <div id="slider-warning"></div>
+  <main>
+    <div class="left">
+      <section class="box map-box" aria-label="확산 지도">
+        <div id="layer-warning"></div>
+        <div id="map"></div>
+      </section>
+      <section class="box time-box" aria-label="예측 시각">
+        <div class="tb-head">
+          <h2 class="h2">예측 시각</h2>
+          <div id="slider-label"></div>
+          <div id="slider-warning"></div>
+          <span class="spacer"></span>
+          <div id="band-note"></div>
+        </div>
+        <div class="tb-track">
+          <div class="rail"></div>
+          <div class="fill"></div>
+          <div id="slider-band"></div>
+          <input type="range" id="time-slider" aria-label="예측 시각 선택" />
+        </div>
+        <div class="ticks" id="slider-ticks"></div>
+      </section>
     </div>
 
-    <div id="layer-warning"></div>
+    <aside>
+      <section class="box" aria-label="표시 항목">
+        <h2 class="sec-title">표시 항목</h2>
+        <div class="panel-sec">
+          <label class="layer">
+            <span class="layer-head"><input type="checkbox" id="toggle-noise" checked />소음 <small>dB(A)</small></span>
+            <span class="bar"><span style="background:rgba(253,216,53,0.85)"></span><span style="background:rgba(251,140,0,0.8)"></span><span style="background:rgba(198,40,40,0.85)"></span></span>
+            <span class="bar-lab"><span><b>약</b>45 이상</span><span><b>중</b>55 이상</span><span><b>강</b>65 이상</span></span>
+          </label>
+          <label class="layer">
+            <span class="layer-head"><input type="checkbox" id="toggle-exhaust" checked />배출가스 <small>NO₂ ppm</small></span>
+            <span class="bar"><span style="background:rgba(206,147,216,0.8)"></span><span style="background:rgba(171,71,188,0.8)"></span><span style="background:rgba(106,27,154,0.85)"></span></span>
+            <span class="bar-lab"><span><b>약</b>0.002 이상</span><span><b>중</b>0.01 이상</span><span><b>강</b>0.05 이상</span></span>
+          </label>
+        </div>
+        <div class="panel-sec">
+          <div class="marks"><span><span class="hatch"></span>등급 보류</span><span><span class="dots"></span>계산 불가</span></div>
+        </div>
+        <div class="panel-sec note">공연·발전차 기여분만 계산 · 기준 초과 판정 아님</div>
+      </section>
 
-    <div id="map"></div>
-  </div>
-  </div>
+      <section class="box" aria-label="상세 정보">
+                <div class="tab-bar" role="tablist">
+          <button type="button" class="tab-btn" data-tab="forecast">요약</button>
+          <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
+          <button type="button" class="tab-btn" data-tab="info">안내</button>
+        </div>
+        <div class="tab-panel" data-tab="forecast">
+          <div id="forecast-sentences"></div>
+        </div>
+        <div class="tab-panel" data-tab="events">
+          <div id="auto-events"></div>
+        </div>
+        <div class="tab-panel info" data-tab="info">
+          <div class="ig">
+            <h3>계산 근거</h3>
+            <div class="ir"><span class="k">기상</span><span class="v">기상청 단기예보</span></div>
+            <div class="ir"><span class="k">공연</span><span class="v">올림픽공원 공연 일정 자동 수집. 종료 시각은 가정(3시간, 옥외 21:30)</span></div>
+            <div class="ir"><span class="k">음량</span><span class="v">가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</span></div>
+            <div class="ir"><span class="k">발전차</span><span class="v" id="generator-count-note"></span></div>
+            <div class="ir"><span class="k">계산</span><span class="v">소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</span></div>
+          </div>
+          <div class="ig">
+            <h3>단계의 의미</h3>
+            <div class="ir"><span class="k">강</span><span class="v"><small>소음</small>공단 옥외 공연 소음 기준(65 dB) 이상<br /><small>배출가스</small>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></div>
+            <div class="ir"><span class="k">중</span><span class="v"><small>소음</small>주거지역 낮 소음 환경기준(55 dB) 이상<br /><small>배출가스</small>대기환경기준의 10% 이상 50% 미만</span></div>
+            <div class="ir"><span class="k">약</span><span class="v"><small>소음</small>주거지역 밤 소음 환경기준(45 dB) 이상<br /><small>배출가스</small>대기환경기준의 2% 이상 10% 미만</span></div>
+          </div>
+          <div class="ig">
+            <h3>지도 무늬</h3>
+            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 일부 음원 제외 또는 발전차 근거리</span></div>
+            <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">계산 불가. 약풍 등이며 안전하다는 뜻은 아님</span></div>
+            <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    <div class="inner">
+      <p>자료: 기상청 단기예보 · 한국체육산업개발 올림픽공원 공연 일정 · 지도 © OpenStreetMap contributors, OpenFreeMap</p>
+      <p>2026 한국체육산업개발 공공데이터 활용 경진대회 출품작</p>
+    </div>
+  </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen.js"></script>
+  <script type="module" src="./app/citizen.js?v=20261127"></script>
+  <script>
+    // 시간 막대의 채워진 부분(연한 하늘색) 폭을 손잡이 위치에 맞춰요
+    (function () {
+      const s = document.getElementById("time-slider");
+      const track = s.parentElement;
+      const upd = () => {
+        const max = Number(s.max) || 1, v = Number(s.value) || 0;
+        track.style.setProperty("--p", `calc(${(v / max) * 100}% - ${(v / max) * 18}px + 9px)`);
+      };
+      s.addEventListener("input", upd); s.addEventListener("change", upd);
+      new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["max", "value"] });
+      upd();
+    })();
+  </script>
 </body>
 </html>

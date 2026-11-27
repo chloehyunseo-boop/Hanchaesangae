@@ -148,6 +148,8 @@ async function main() {
   const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+  // 창 크기가 바뀌면 지도 칸 크기도 바뀌어서 다시 맞춰요(친구 11/27 원본 수정 반영)
+  window.addEventListener("resize", () => map.invalidateSize());
 
   // 디자인 사본(11/27): 범례는 오른쪽 패널(html)로 옮겨서 지도 위 상자는 없앰.
   // 지도는 공원과 주요 장소 8곳이 한눈에 들어오게 맞춰요(양옆 여백 최소).
@@ -202,9 +204,13 @@ async function main() {
   const autoEventsEl = document.getElementById("auto-events");
   function renderAutoEvents(hourIso) {
     const items = listTodaysRealEvents(state.events, hourIso);
-    autoEventsEl.innerHTML = items.length
+    // 디자인: 선택한 시각의 날짜를 맨 위에 보여줘요(예: 11월 28일 (토))
+    const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
+      .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
+    const dateHead = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
+    autoEventsEl.innerHTML = dateHead + (items.length
       ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
-      : "<div style=\"color:var(--sub)\">이 날짜의 공연 없음</div>";
+      : "<div style=\"color:var(--sub)\">이 날짜의 공연 없음</div>");
   }
 
   let refreshSeq = 0;

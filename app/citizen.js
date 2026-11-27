@@ -1,3 +1,5 @@
+// 11/27 하린·친구 합의: 디자인 시안 C(citizen_design_c.html + app/citizen_design.js)를 그대로 옮겨 왔어요.
+// 지도 색은 블러 대신 등치선 면(app/contour_layer_design.js). 계산·데이터 로직은 바뀌지 않았어요.
 // app/citizen.js — 시민 화면 "최종판"(citizen.html). 11/26 친구 요청: 체크박스로 "가정"하던
 // app/main.js(데모, index.html)는 그대로 두고, 사람이 아무것도 안 눌러도 실제 데이터로만
 // 돌아가는 화면을 새로 만들었어요. 지도·격자 계산·Web Worker는 app/shared.js를 그대로
@@ -18,6 +20,7 @@ import {
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
   allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
+import { ContourCellLayer } from "./contour_layer_design.js"; // 디자인 사본: 블러 대신 등치선 면
 
 const NUM_HOURS = 72;
 const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가한 장소"는 항상 없음
@@ -127,49 +130,34 @@ function getPlaceSeries() {
 
 async function main() {
   await loadData();
-  initTabs({ defaultTab: "events" });
+  initTabs({ defaultTab: "forecast" });
 
   // 11/27 하린 지시: 발전차 대수를 가정값으로 자동 채운다는 걸 화면에 명시
   const genNote = document.getElementById("generator-count-note");
   const genNoteText = state.assumptions?.발전차_기본대수?.화면_문구;
   if (genNote && genNoteText) genNote.textContent = genNoteText;
 
-  const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15 });
+  const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15, zoomSnap: 0.25 }); // 디자인 사본: 0.25 단위 확대로 공원이 꽉 차게
   // OpenFreeMap Bright(MapLibre 벡터타일) — maplibre-gl-leaflet로 Leaflet 지도 위에 올림(11/27).
   L.maplibreGL({
     style: "https://tiles.openfreemap.org/styles/bright",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
-  const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
+  const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
+  const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
-  // 11/27: 컴퓨터 화면 레이아웃(지도+오른쪽 박스)은 지도 칸 크기가 창 크기에 따라 바뀌어서 필요
+  // 창 크기가 바뀌면 지도 칸 크기도 바뀌어서 다시 맞춰요(친구 11/27 원본 수정 반영)
   window.addEventListener("resize", () => map.invalidateSize());
 
-  const MapLegend = L.Control.extend({
-    options: { position: "topright" },
-    onAdd() {
-      const box = L.DomUtil.create("div", "olpak-map-legend");
-      box.style.cssText = "background:#fff;padding:8px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.4);font-size:0.78rem;line-height:1.5;max-width:180px;";
-      const row = (color, label) => `<div><span style="display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle;background:${color}"></span>${label}</div>`;
-      box.innerHTML = `
-        <div style="font-weight:bold;margin-bottom:2px;">소음</div>
-        ${row(NOISE_PALETTE.강, "강 65dB↑")}
-        ${row(NOISE_PALETTE.중, "중 55dB↑")}
-        ${row(NOISE_PALETTE.약, "약 45dB↑")}
-        <div style="font-weight:bold;margin:6px 0 2px;">배출가스(NO2)</div>
-        ${row(EXHAUST_PALETTE.강, "강 0.05ppm↑")}
-        ${row(EXHAUST_PALETTE.중, "중 0.01ppm↑")}
-        ${row(EXHAUST_PALETTE.약, "약 0.002ppm↑")}
-        ${row(NOISE_PALETTE.uncertain, "모름/불확실")}
-      `;
-      L.DomEvent.disableClickPropagation(box);
-      return box;
-    },
-  });
-  new MapLegend().addTo(map);
+  // 디자인 사본(11/27): 범례는 오른쪽 패널(html)로 옮겨서 지도 위 상자는 없앰.
+  // 지도는 공원과 주요 장소 8곳이 한눈에 들어오게 맞춰요(양옆 여백 최소).
+  const pl = getPlaces();
+  // 시안 B처럼 지도 위에 패널이 떠 있으면 #map의 data-fit-pad="위,오른쪽,아래,왼쪽"(px)만큼 비워 두고 맞춰요(넓은 화면만).
+  const padAttr = document.getElementById("map").dataset.fitPad;
+  const [pt, pr, pb, plft] = padAttr && window.innerWidth > 860 ? padAttr.split(",").map(Number) : [0, 0, 0, 0];
+  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false, paddingTopLeft: [plft, pt], paddingBottomRight: [pr, pb] });
 
   let gpsMarker = null;
   let gpsAccuracyCircle = null;
@@ -216,9 +204,13 @@ async function main() {
   const autoEventsEl = document.getElementById("auto-events");
   function renderAutoEvents(hourIso) {
     const items = listTodaysRealEvents(state.events, hourIso);
-    autoEventsEl.innerHTML = items.length
-      ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})${e.요일추정 ? " — 공연 시각은 공단 일정 페이지 문장에서 읽은 값이에요(요일별로 바뀔 수 있음)" : ""}</div>`).join("")
-      : "<div>지금 자동으로 찾은 실제 공연 일정이 없어요.</div>";
+    // 디자인: 선택한 시각의 날짜를 맨 위에 보여줘요(예: 11월 28일 (토))
+    const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
+      .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
+    const dateHead = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
+    autoEventsEl.innerHTML = dateHead + (items.length
+      ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
+      : "<div style=\"color:var(--sub)\">이 날짜의 공연 없음</div>");
   }
 
   let refreshSeq = 0;
@@ -272,6 +264,9 @@ async function main() {
       segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
+    // 디자인 사본: 회색 칸이 있을 때만 무슨 뜻인지 한 줄 표시
+    const noteEl = document.getElementById("band-note");
+    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍 · 배출가스 계산 불가" : "";
   }
 
   const sentencesEl = document.getElementById("forecast-sentences");
@@ -279,11 +274,21 @@ async function main() {
     const series = getPlaceSeries();
     const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
     sentencesEl.innerHTML = lines.length
-      ? lines.map((l, i) => `<div>${i + 1}. ${l}</div>`).join("")
-      : "<div>주요 장소 8곳에 '약' 이상으로 예측된 소음·배출가스가 없어요.</div>";
+      ? lines.map((l) => `<div>${l}</div>`).join("")
+      : "<div style=\"color:var(--sub)\">주요 장소 8곳 모두 '약' 미만</div>";
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
+  // 시간 막대 아래 날짜 눈금(지금 · 다음 날 0시들)
+  const ticksEl = document.getElementById("slider-ticks");
+  if (ticksEl) {
+    const marks = [[0, "지금"]];
+    for (let o = 1; o < NUM_HOURS; o++) {
+      const lab = formatSlotLabel(hourSlotDate(o));
+      if (lab.endsWith(" 00시") && (o - marks[marks.length - 1][0]) / (NUM_HOURS - 1) >= 0.1) marks.push([o, lab.replace(" 00시", "")]); // 앞 눈금과 너무 가까우면 생략(겹침 방지)
+    }
+    ticksEl.innerHTML = marks.map(([o, m]) => `<span style="left:${(o / (NUM_HOURS - 1)) * 100}%;${o === 0 ? "" : "transform:translateX(-50%)"}">${m}</span>`).join("");
+  }
   slider.addEventListener("change", refresh);
   slider.addEventListener("input", (e) => {
     const offset = Number(e.target.value);
