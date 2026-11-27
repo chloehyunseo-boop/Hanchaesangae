@@ -266,6 +266,26 @@
     .col-right .gtab-bar { margin: 0; }
     .col-right .gtab-panel { padding: 12px 16px 16px; }
     #impacted-lessons { max-height: none; }
+    .w-meta { font-size: 11.5px; color: var(--sub); font-weight: 400; }
+    #auto-events { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+    /* 공단 요약 */
+    .sum-sec + .sum-sec { margin-top: 18px; }
+    .sum-sec h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--k-blue); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 4px; }
+    .stat { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+    .stat + .stat { border-left: 1px solid var(--line); }
+    .stat b { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .stat b em { font-style: normal; font-size: 13px; color: var(--sub); font-weight: 500; }
+    .stat span { font-size: 12px; color: var(--text); }
+    .stat small { font-size: 11px; color: var(--sub); }
+    .sum-tbl td { vertical-align: middle; }
+    .sum-tbl .chip { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; text-align: center; white-space: nowrap; }
+    .sum-tbl .chip.unk { background: repeating-linear-gradient(45deg, #E3E8EE 0 3px, #F5F7FA 3px 6px); color: var(--sub); }
+    .sum-tbl .chip.none { color: var(--sub); padding-left: 0; text-align: left; }
+    .sum-lines { margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+    .sum-lines li { padding: 7px 0; border-top: 1px solid var(--line-soft); }
+    .sum-lines li:first-child { border-top: 0; padding-top: 0; }
+    .muted { color: var(--sub); font-size: 12.5px; margin: 0; }
     .r-foot { padding: 12px 16px 16px; font-size: 11px; color: var(--sub); line-height: 1.6; }
 
     @media (max-width: 1100px) {
@@ -305,9 +325,16 @@
       </div>
       <div class="scroll">
         <div class="tab-panel" data-tab="events">
-          <div class="w-head"><h3>공연 수동 입력</h3><span class="spacer"></span><button type="button" class="btn" id="add-event">추가</button></div>
+          <div class="w-sec">
+            <div class="w-head"><h3>자동 수집 일정</h3><span class="spacer"></span><small class="w-meta">선택한 시각의 날짜</small></div>
+            <p class="w-note">올림픽공원 홈페이지 공연 일정에서 매시 자동 반영.</p>
+            <div id="auto-events"></div>
+          </div>
+          <div class="w-sec">
+          <div class="w-head"><h3>공연 추가</h3><span class="spacer"></span><button type="button" class="btn" id="add-event">추가</button></div>
           <p class="w-note">자동 수집에 없거나 시작 시각이 없는 공연. 소요를 비우면 3시간(옥외 21:30 중 먼저).</p>
           <table class="cards" id="event-table"><thead><tr><th>공연명</th><th>위치</th><th>날짜</th><th>시작 시각</th><th>소요(분)</th><th></th></tr></thead><tbody id="event-rows"></tbody></table>
+          </div>
         </div>
 
         <div class="tab-panel" data-tab="trucks">
@@ -399,10 +426,10 @@
       </div>
       <div>
         <div class="gtab-bar" role="tablist">
-          <button type="button" class="gtab-btn active" data-gtab="events" role="tab" aria-selected="true">공연 일정</button>
+          <button type="button" class="gtab-btn active" data-gtab="summary" role="tab" aria-selected="true">요약</button>
           <button type="button" class="gtab-btn" data-gtab="lessons" role="tab" aria-selected="false">영향 강습</button>
         </div>
-        <div class="gtab-panel" data-gtab="events"><div id="auto-events"></div></div>
+        <div class="gtab-panel" data-gtab="summary"><div id="station-summary"><p class="muted">계산 중…</p></div></div>
         <div class="gtab-panel" data-gtab="lessons" hidden><div id="impacted-lessons"></div></div>
       </div>
       <div class="r-foot">자료: 기상청 · 한국체육산업개발 · © OpenStreetMap, OpenFreeMap<br />2026 한국체육산업개발 공공데이터 활용 경진대회 출품작</div>
@@ -412,7 +439,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station_design.js?v=3"></script>
+  <script type="module" src="./app/station_design.js?v=4"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {

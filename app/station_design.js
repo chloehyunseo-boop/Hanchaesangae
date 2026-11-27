@@ -14,7 +14,8 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { generatorActivityAtHour } from "../engine/combine.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
@@ -292,6 +293,76 @@ function pt(name) {
   return { lat, lon };
 }
 
+// ---------------------------------------------------------------------------
+// 공단용 요약(시안 B, 하린 11/27). 새 계산 없이 이미 있는 결과만 모아서 보여줘요:
+//  ① 이 시각 현황(진행 공연·가동 발전차·영향 강습 수) ② 주요 장소 8곳 단계 ③ 앞으로 72시간 문장 예측.
+// 해결책·조치 권고는 넣지 않아요(CLAUDE.md 규칙 4).
+let summarySeries = null; // 72시간 장소 시리즈(입력이 바뀌면 비움)
+function invalidateSummary() { summarySeries = null; }
+function overlapsHour(time, hourIso) {
+  if (!time || !time.start) return time?.출처 === "미확인" ? "unknown" : false;
+  const h0 = Date.parse(hourIso), h1 = h0 + 3600e3;
+  const s = Date.parse(time.start), e = time.end ? Date.parse(time.end) : Infinity;
+  return s < h1 && e > h0;
+}
+function chipHtml(st, palette) {
+  if (st.kind === "level") return `<span class="chip" style="background:${palette[st.level]}">${st.text}</span>`;
+  if (st.kind === "unknown") return `<span class="chip unk">${st.text}</span>`;
+  return `<span class="chip none">${st.kind === "below" ? "기준 미만" : "–"}</span>`;
+}
+function renderSummary(date, placeCells) {
+  const el = document.getElementById("station-summary");
+  if (!el) return;
+  const hourIso = hourSlotIso(date);
+  const stages = buildStageSources(hourIso);
+  const showCount = stages.filter((x) => overlapsHour(x.time, hourIso)).length;
+  const showUnknown = stages.filter((x) => overlapsHour(x.time, hourIso) === "unknown").length;
+  const gens = buildGeneratorSources(hourIso);
+  const active = gens.filter((g) => generatorActivityAtHour(g, hourIso) === "active");
+  const assumed = active.filter((g) => g.정보출처 === "공연일정자동_대수가정").length;
+  const running = lessonsAtHour(state.lessons?.강좌 ?? [], date);
+  let affected = 0;
+  for (const l of running) {
+    const f = state.siteByName.get(l.site);
+    if (!f) continue;
+    const [lon, lat] = f.geometry.coordinates;
+    const near = nearestPlace(DEFAULT_PLACE_NAMES.map((n) => ({ name: n, ...pt(n) })).filter((p) => p.lat), lat, lon, 9999);
+    const c = near ? placeCells?.[near.name] : null;
+    if (placeCellState(c?.noise).kind === "level" || placeCellState(c?.exhaust).kind === "level") affected++;
+  }
+  const stat = (num, label, sub) => `<div class="stat"><b>${num}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const places = DEFAULT_PLACE_NAMES.filter((n) => placeCells?.[n]);
+  const rows = places.map((n) => `<tr><td>${n}</td><td>${chipHtml(placeCellState(placeCells[n].noise), NOISE_PALETTE)}</td><td>${chipHtml(placeCellState(placeCells[n].exhaust), EXHAUST_PALETTE)}</td></tr>`).join("");
+  if (!summarySeries) {
+    summarySeries = [];
+    const pls = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) })).filter((p) => p.lat !== undefined);
+    for (let o = 0; o < NUM_HOURS; o++) {
+      const d = hourSlotDate(o), w = resolveWeather(d);
+      if (!w) continue;
+      const h = hourSlotIso(d);
+      summarySeries.push({ hour: h, weather: w, cellsByPlace: placeCellsForHour({ places: pls, stageSources: buildStageSources(h), generatorSources: buildGeneratorSources(h), weather: w, hour: h, concaweData: state.concaweData, 배출시나리오: state.배출시나리오_기본값 }) });
+    }
+  }
+  const lines = buildForecastSentences({ series: summarySeries, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
+  el.innerHTML = `
+    <div class="sum-sec">
+      <h4>${formatSlotLabel(date)} 현황</h4>
+      <div class="stats">
+        ${stat(showCount, "진행 공연", showUnknown ? `시각 미상 ${showUnknown}` : "")}
+        ${stat(active.length, "가동 발전차", assumed ? `기본 가정 ${assumed}` : "")}
+        ${stat(`${affected}<em>/${running.length}</em>`, "영향 강습", "약 이상 / 진행")}
+      </div>
+    </div>
+    <div class="sum-sec">
+      <h4>주요 장소</h4>
+      ${rows ? `<table class="mini sum-tbl"><thead><tr><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">이 시각 계산 결과 없음</p>`}
+    </div>
+    <div class="sum-sec">
+      <h4>앞으로 72시간</h4>
+      ${lines.length ? `<ul class="sum-lines">${lines.map((l) => `<li>${l}</li>`).join("")}</ul>` : `<p class="muted">주요 장소 8곳 모두 '약' 미만</p>`}
+    </div>`;
+}
+
 function renderImpactedLessons(lessons, date, cells) {
   const el = document.getElementById("impacted-lessons");
   const list = lessons?.강좌 ?? [];
@@ -384,6 +455,7 @@ async function main() {
     renderNoGenTable(onNoGenChange);
   });
   function onNoGenChange() {
+    invalidateSummary();
     saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays);
     state.cellCache.clear();
     refresh();
@@ -405,6 +477,7 @@ async function main() {
     URL.revokeObjectURL(url);
   });
   function onTruckChange() {
+    invalidateSummary();
     saveTrucks();
     state.cellCache.clear();
     refreshSliderBand();
@@ -418,6 +491,7 @@ async function main() {
     renderManualEventsTable(onEventChange);
   });
   function onEventChange() {
+    invalidateSummary();
     saveManualEvents();
     state.cellCache.clear(); // 11/26: 이제 계산에 들어가니 agency.js와 달리 캐시도 비워요
     refresh();
@@ -426,6 +500,7 @@ async function main() {
 
   document.getElementById("scenario-default").addEventListener("change", (e) => {
     state.배출시나리오_기본값 = e.target.value;
+    invalidateSummary();
     state.cellCache.clear();
     refresh();
   });
@@ -519,6 +594,7 @@ async function main() {
       }
     }
     renderImpactedLessons(state.lessons, date, placeCells);
+    renderSummary(date, placeCells);
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
