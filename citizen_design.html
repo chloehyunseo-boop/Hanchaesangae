@@ -2,105 +2,221 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>올팍 바람지도 — 시민 화면</title>
+  <title>올팍 바람지도</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <!-- 디자인 작업용 사본(하린 11/27). 제출 화면은 citizen.html. 친구는 이 파일을 안 건드려요. -->
   <style>
-    body { margin: 0; font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; padding: 0 clamp(12px, 4cm, 8vw); box-sizing: border-box; }
-    #map { height: 70vh; width: 100%; }
-    #panel { padding: 12px 16px; }
-    #panel h1 { font-size: 1.1rem; margin: 0 0 8px; }
-    .row { margin: 8px 0; }
-    .legend-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
-    .disclaimer { font-size: 0.8rem; color: #555; background: #fff8e1; padding: 8px; border-radius: 4px; }
-    fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 8px 0; }
-    #slider-label { font-weight: bold; }
-    #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
-    #forecast-sentences { font-size: 0.9rem; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; }
-    #forecast-sentences div { margin: 2px 0; }
-    #layer-warning:not(:empty) { background: #424242; color: #fff; font-size: 0.9rem; padding: 8px 16px; }
-    #layer-warning div { margin: 2px 0; }
-    #slider-band { display: flex; height: 6px; margin-top: 2px; }
+    :root {
+      /* 하린 지정 팔레트 "Stormy morning" */
+      --navy: #384959;
+      --steel: #6A89A7;
+      --sky: #88BDF2;
+      --mist: #BDDDFC;
+      --bg: #EEF4FA;
+      --card: #FFFFFF;
+      --line: #D7E3EF;
+      --text: #1F2A35;
+      --muted: #6B7B8C;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body { font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; font-size: 14px; line-height: 1.45; }
+    button, input { font: inherit; }
+
+    .draft-banner { background: #1B2530; color: #9FB3C8; font-size: 11px; text-align: center; padding: 3px; letter-spacing: .02em; }
+
+    /* 머리글 */
+    header.top { background: var(--navy); color: #fff; }
+    header.top .inner { max-width: 1240px; margin: 0 auto; padding: 0 20px; height: 56px; display: flex; align-items: center; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand svg { width: 26px; height: 26px; }
+    .brand b { font-size: 17px; letter-spacing: -.01em; }
+    .brand span { font-size: 12px; color: var(--mist); opacity: .85; }
+    header.top .spacer { flex: 1; }
+    .now-chip { font-size: 12px; color: var(--mist); }
+
+    /* 본문 2열 */
+    main { max-width: 1240px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+
+    /* 지도 */
+    .map-card { overflow: hidden; position: relative; }
+    #map { width: 100%; height: min(76vh, 760px); background: #E6EDF3; }
+    #layer-warning:empty { display: none; }
+    #layer-warning { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 500; background: rgba(56,73,89,.92); color: #fff; font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+    #layer-warning div + div { margin-top: 2px; }
+    .leaflet-control-scale-line { border-color: var(--steel); color: var(--navy); background: rgba(255,255,255,.8); }
+    .leaflet-control-zoom a { color: var(--navy) !important; }
+
+    /* 오른쪽 패널 */
+    aside { display: flex; flex-direction: column; gap: 14px; }
+    .section { padding: 16px; }
+    .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+
+    /* 시간 */
+    #slider-label { font-size: 26px; font-weight: 700; color: var(--navy); letter-spacing: -.02em; }
+    #time-slider { width: 100%; margin: 12px 0 2px; accent-color: var(--steel); }
+    #slider-band { display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: var(--mist); }
     #slider-band .slider-seg { flex: 1; }
-    #slider-band .slider-seg.impossible { background: #9e9e9e; }
-    #auto-events { font-size: 0.9rem; }
-    #auto-events div { margin: 2px 0; }
-    .tab-bar { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ddd; margin: 0 16px; }
-    .tab-btn { background: none; border: none; padding: 10px 14px; font-size: 0.92rem; cursor: pointer; color: #666; border-bottom: 3px solid transparent; }
-    .tab-btn.active { color: #1565c0; border-bottom-color: #1565c0; font-weight: bold; }
-    .tab-panel { padding: 10px 16px; }
+    #slider-band .slider-seg.impossible { background: #9AA8B6; }
+    .ticks { position: relative; height: 16px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .ticks span { position: absolute; top: 0; white-space: nowrap; }
+    #slider-warning { font-size: 12px; color: var(--steel); min-height: 1.2em; margin-top: 4px; }
+
+    /* 레이어 토글 */
+    .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .toggle { position: relative; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; user-select: none; font-weight: 600; color: var(--muted); }
+    .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+    .toggle .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+    .toggle:has(input:checked) { border-color: var(--steel); color: var(--navy); background: #F4F9FE; }
+    .toggle.noise:has(input:checked) .dot { background: rgb(198,40,40); }
+    .toggle.exhaust:has(input:checked) .dot { background: rgb(106,27,154); }
+    .toggle:has(input:focus-visible) { outline: 2px solid var(--sky); outline-offset: 2px; }
+
+    /* 범례 */
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-top: 14px; }
+    .legend h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .legend .row { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 3px 0; white-space: nowrap; }
+    .legend .sw { width: 14px; height: 10px; border-radius: 2px; flex: none; }
+    .legend .grade { font-weight: 700; width: 1.2em; }
+    .legend .val { color: var(--muted); }
+    .legend-extra { display: flex; gap: 12px; margin-top: 10px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+    .legend-extra .sw { width: 14px; height: 10px; border-radius: 2px; display: inline-block; vertical-align: -1px; margin-right: 4px; }
+    .hatch { background: repeating-linear-gradient(45deg, #8A98A6 0 2px, transparent 2px 5px); border: 1px solid #B5C1CC; }
+    .dots { background-image: radial-gradient(#8A98A6 1px, transparent 1.2px); background-size: 4px 4px; border: 1px solid #B5C1CC; }
+    .footnote { font-size: 11.5px; color: var(--muted); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+    /* 탭 */
+    .tab-bar { display: flex; border-bottom: 1px solid var(--line); padding: 0 8px; }
+    .tab-btn { flex: 1; background: none; border: none; padding: 12px 4px 10px; font-size: 13px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
+    .tab-panel { padding: 14px 16px 16px; font-size: 13px; }
     .tab-panel[hidden] { display: none; }
-    #map-box { background: #88bdf2; padding: 12px 16px 4px; margin: 8px clamp(-5vw, -1.5cm, -4px) 0; border-radius: 6px; }
-    #map-box #map { border-radius: 4px; overflow: hidden; }
+    #forecast-sentences div { padding: 8px 0; border-bottom: 1px solid #EEF2F6; }
+    #forecast-sentences div:last-child { border-bottom: none; }
+    #auto-events div { padding: 8px 0; border-bottom: 1px solid #EEF2F6; }
+    #auto-events div:last-child { border-bottom: none; }
+    .info dl { margin: 0; display: grid; grid-template-columns: 64px 1fr; gap: 6px 10px; }
+    .info dt { color: var(--muted); }
+    .info dd { margin: 0; }
+    .info table { width: 100%; border-collapse: collapse; margin: 6px 0 2px; font-size: 12px; }
+    .info th, .info td { text-align: left; padding: 4px 4px; border-bottom: 1px solid #EEF2F6; vertical-align: top; }
+    .info th { color: var(--muted); font-weight: 600; width: 2.2em; }
+    .info h5 { margin: 14px 0 4px; font-size: 12px; color: var(--navy); }
+
+    footer { max-width: 1240px; margin: 0 auto; padding: 0 20px 24px; font-size: 11.5px; color: var(--muted); }
+
+    /* 모바일: 지도 위, 패널 아래 */
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+      #map { height: 62vh; }
+      .brand span { display: none; }
+    }
   </style>
 </head>
 <body>
-  <!-- 디자인 작업용 사본(하린 11/27). 제출 화면은 citizen.html. 여기서 정한 디자인을 나중에 citizen.html로 옮겨요. 친구는 이 파일을 안 건드려요. -->
-  <div style="background:#263238;color:#fff;font-size:12px;padding:4px 16px">디자인 작업용 사본 — 제출 화면 아님</div>
-  <div id="panel">
-    <h1>올팍 바람지도 — 시민 화면</h1>
-    <div class="row">
-      <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
-      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중
-      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약
-      &nbsp;&nbsp;
-      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스 레이어</label>
-      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중
-      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
-      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금/점무늬 = 등급 보류·모름(자세한 설명은 "안내" 탭)
+  <div class="draft-banner">디자인 작업용 사본 · 제출 화면 아님</div>
+
+  <header class="top">
+    <div class="inner">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#BDDDFC" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M3 8h11a3 3 0 1 0-3-3" /><path d="M3 12h16a3 3 0 1 1-3 3" /><path d="M3 16h7" />
+        </svg>
+        <b>올팍 바람지도</b>
+        <span>올림픽공원 공연 소음·발전차 배출가스 확산 예측</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="now-chip">기상청 단기예보 기반 · 매시 갱신</div>
     </div>
-  </div>
+  </header>
 
-  <div class="tab-bar">
-    <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
-    <button type="button" class="tab-btn" data-tab="forecast">문장 예보</button>
-    <button type="button" class="tab-btn" data-tab="info">안내</button>
-  </div>
+  <main>
+    <section class="card map-card">
+      <div id="layer-warning"></div>
+      <div id="map"></div>
+    </section>
 
-  <div class="tab-panel" data-tab="events">
-    <div id="auto-events"></div>
-    <p id="generator-count-note" style="font-size:0.8rem;color:#555"></p>
-  </div>
-  <div class="tab-panel" data-tab="forecast">
-    <div id="forecast-sentences"></div>
-  </div>
-  <div class="tab-panel" data-tab="info">
-    <p class="disclaimer">
-      ⚠️ 이 화면은 사람이 켜고 끄는 가정 없이, 실제 기상청 예보와 공단 올림픽공원 홈페이지의
-      공연 일정을 자동으로 반영해요. 공연 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은
-      날은 "모름"으로 표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(옥외 무대는
-      21:30 중 먼저 오는 쪽)으로 가정</b>했어요(실측 아님). 발전차 정보는 공단이 공연마다
-      입력해둔 값이 있으면 그걸 쓰고, 아직 입력 전이면 "발전차가 있는 건 확실한데 대수·시간은
-      모른다"는 표시만 해요(공단 11/26 답변: 모든 공연장에서 발전차 사용). 음원 세기(음량)는
-      공단이 음향장비 사양을 못 준다고 해서 여전히 <b>가정값</b>이에요(실제 숫자 아님) — 야외
-      무대는 공단 기준(옥외 행사 소음 65dB(A) 상한)을 역산한 값, 실내는 하린이 확정한 외피
-      계산값을 써요. 소음 레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·
-      설비차폐는 미반영), 배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두
-      대기환경기준 초과 판정이 아니에요.
-    </p>
-    <p style="font-size:0.85rem;color:#555">
-      빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급").
-      점 무늬 = 모름(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음).
-      슬라이더 아래 회색 구간 = 그 시간은 바람이 거의 없어 배출가스를 계산 못 해요.
-    </p>
-  </div>
+    <aside>
+      <div class="card section">
+        <div class="label">예측 시각</div>
+        <div id="slider-label"></div>
+        <input type="range" id="time-slider" aria-label="예측 시각" />
+        <div id="slider-band"></div>
+        <div class="ticks" id="slider-ticks"></div>
+        <div id="slider-warning"></div>
+      </div>
 
-  <div id="map-box">
-    <div class="row" style="padding:0 16px">
-      시간: <span id="slider-label"></span>
-      <input type="range" id="time-slider" style="width:100%" />
-      <div id="slider-band"></div>
-      <div id="slider-warning"></div>
-    </div>
+      <div class="card section">
+        <div class="toggles">
+          <label class="toggle noise"><input type="checkbox" id="toggle-noise" checked /><span class="dot"></span>소음</label>
+          <label class="toggle exhaust"><input type="checkbox" id="toggle-exhaust" checked /><span class="dot"></span>배출가스</label>
+        </div>
+        <div class="legend">
+          <div>
+            <h4>소음 dB(A)</h4>
+            <div class="row"><span class="sw" style="background:rgba(198,40,40,0.72)"></span><span class="grade">강</span><span class="val">65↑</span></div>
+            <div class="row"><span class="sw" style="background:rgba(251,140,0,0.62)"></span><span class="grade">중</span><span class="val">55↑</span></div>
+            <div class="row"><span class="sw" style="background:rgba(253,216,53,0.5)"></span><span class="grade">약</span><span class="val">45↑</span></div>
+          </div>
+          <div>
+            <h4>배출가스 NO₂ ppm</h4>
+            <div class="row"><span class="sw" style="background:rgba(106,27,154,0.72)"></span><span class="grade">강</span><span class="val">0.05↑</span></div>
+            <div class="row"><span class="sw" style="background:rgba(171,71,188,0.6)"></span><span class="grade">중</span><span class="val">0.01↑</span></div>
+            <div class="row"><span class="sw" style="background:rgba(206,147,216,0.48)"></span><span class="grade">약</span><span class="val">0.002↑</span></div>
+          </div>
+        </div>
+        <div class="legend-extra">
+          <span><span class="sw hatch"></span>등급 보류</span>
+          <span><span class="sw dots"></span>계산 불가</span>
+        </div>
+        <div class="footnote">공연·발전차 기여분만 계산 · 기준 초과 판정 아님</div>
+      </div>
 
-    <div id="layer-warning"></div>
+      <div class="card">
+        <div class="tab-bar">
+          <button type="button" class="tab-btn" data-tab="forecast">요약</button>
+          <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
+          <button type="button" class="tab-btn" data-tab="info">안내</button>
+        </div>
+        <div class="tab-panel" data-tab="forecast">
+          <div id="forecast-sentences"></div>
+        </div>
+        <div class="tab-panel" data-tab="events">
+          <div id="auto-events"></div>
+        </div>
+        <div class="tab-panel info" data-tab="info">
+          <dl>
+            <dt>기상</dt><dd>기상청 단기예보</dd>
+            <dt>공연</dt><dd>올림픽공원 공연 일정 자동 수집 · 종료 시각 가정(3시간, 옥외 21:30)</dd>
+            <dt>음량</dt><dd>가정값 · 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</dd>
+            <dt>발전차</dt><dd id="generator-count-note"></dd>
+            <dt>계산</dt><dd>소음 CONCAWE, 배출가스 가우시안 플룸 (공개 표준 단순화)</dd>
+          </dl>
+          <h5>단계의 의미</h5>
+          <table>
+            <tr><th>강</th><td>소음: 공단 옥외 공연 소음 기준(65 dB) 이상<br />배출가스: 대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</td></tr>
+            <tr><th>중</th><td>소음: 주거지역 낮 소음 환경기준(55 dB) 이상<br />배출가스: 대기환경기준의 10% 이상 50% 미만</td></tr>
+            <tr><th>약</th><td>소음: 주거지역 밤 소음 환경기준(45 dB) 이상<br />배출가스: 대기환경기준의 2% 이상 10% 미만</td></tr>
+          </table>
+          <h5>무늬</h5>
+          <dl>
+            <dt>빗금</dt><dd>등급 보류 · 일부 음원 제외 또는 발전차 근거리</dd>
+            <dt>점무늬</dt><dd>계산 불가 · 약풍 등 (안전하다는 뜻 아님)</dd>
+            <dt>회색 막대</dt><dd>시간 막대 아래 · 바람이 약해 배출가스 계산 불가</dd>
+          </dl>
+        </div>
+      </div>
+    </aside>
+  </main>
 
-    <div id="map"></div>
-  </div>
+  <footer>
+    지도 © OpenStreetMap contributors · OpenFreeMap · 기상 자료 기상청 · 공연 일정 한국체육산업개발 올림픽공원 홈페이지
+  </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>

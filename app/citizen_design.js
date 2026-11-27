@@ -129,7 +129,7 @@ function getPlaceSeries() {
 
 async function main() {
   await loadData();
-  initTabs({ defaultTab: "events" });
+  initTabs({ defaultTab: "forecast" });
 
   // 11/27 하린 지시: 발전차 대수를 가정값으로 자동 채운다는 걸 화면에 명시
   const genNote = document.getElementById("generator-count-note");
@@ -148,28 +148,10 @@ async function main() {
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
 
-  const MapLegend = L.Control.extend({
-    options: { position: "topright" },
-    onAdd() {
-      const box = L.DomUtil.create("div", "olpak-map-legend");
-      box.style.cssText = "background:#fff;padding:8px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.4);font-size:0.78rem;line-height:1.5;max-width:180px;";
-      const row = (color, label) => `<div><span style="display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle;background:${color}"></span>${label}</div>`;
-      box.innerHTML = `
-        <div style="font-weight:bold;margin-bottom:2px;">소음</div>
-        ${row(NOISE_PALETTE.강, "강(65dB↑)")}
-        ${row(NOISE_PALETTE.중, "중(55~65)")}
-        ${row(NOISE_PALETTE.약, "약(45~55)")}
-        <div style="font-weight:bold;margin:6px 0 2px;">배출가스</div>
-        ${row(EXHAUST_PALETTE.강, "강")}
-        ${row(EXHAUST_PALETTE.중, "중")}
-        ${row(EXHAUST_PALETTE.약, "약")}
-        ${row(NOISE_PALETTE.uncertain, "모름/불확실")}
-      `;
-      L.DomEvent.disableClickPropagation(box);
-      return box;
-    },
-  });
-  new MapLegend().addTo(map);
+  // 디자인 사본(11/27): 범례는 오른쪽 패널(html)로 옮겨서 지도 위 상자는 없앰.
+  // 지도는 공원과 주요 장소 8곳이 한눈에 들어오게 맞춰요(양옆 여백 최소).
+  const pl = getPlaces();
+  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.12), { animate: false });
 
   let gpsMarker = null;
   let gpsAccuracyCircle = null;
@@ -217,8 +199,8 @@ async function main() {
   function renderAutoEvents(hourIso) {
     const items = listTodaysRealEvents(state.events, hourIso);
     autoEventsEl.innerHTML = items.length
-      ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})${e.요일추정 ? " — 공연 시각은 공단 일정 페이지 문장에서 읽은 값이에요(요일별로 바뀔 수 있음)" : ""}</div>`).join("")
-      : "<div>지금 자동으로 찾은 실제 공연 일정이 없어요.</div>";
+      ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--muted)">${e.title}</span></div>`).join("")
+      : "<div style=\"color:var(--muted)\">이 날짜의 공연 없음</div>";
   }
 
   let refreshSeq = 0;
@@ -279,11 +261,21 @@ async function main() {
     const series = getPlaceSeries();
     const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
     sentencesEl.innerHTML = lines.length
-      ? lines.map((l, i) => `<div>${i + 1}. ${l}</div>`).join("")
-      : "<div>주요 장소 8곳에 '약' 이상으로 예보된 소음·배출가스가 없어요.</div>";
+      ? lines.map((l) => `<div>${l}</div>`).join("")
+      : "<div style=\"color:var(--muted)\">주요 장소 8곳 모두 '약' 미만</div>";
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
+  // 시간 막대 아래 날짜 눈금(지금 · 다음 날 0시들)
+  const ticksEl = document.getElementById("slider-ticks");
+  if (ticksEl) {
+    const marks = [[0, "지금"]];
+    for (let o = 1; o < NUM_HOURS; o++) {
+      const lab = formatSlotLabel(hourSlotDate(o));
+      if (lab.endsWith(" 00시")) marks.push([o, lab.replace(" 00시", "")]);
+    }
+    ticksEl.innerHTML = marks.map(([o, m]) => `<span style="left:${(o / (NUM_HOURS - 1)) * 100}%;${o === 0 ? "" : "transform:translateX(-50%)"}">${m}</span>`).join("");
+  }
   slider.addEventListener("change", refresh);
   slider.addEventListener("input", (e) => {
     const offset = Number(e.target.value);
