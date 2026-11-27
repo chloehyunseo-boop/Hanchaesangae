@@ -1,4 +1,4 @@
-// 발전차 대수 민감도 (하린 라인, 11/27): KSPO DOME 5대 고정, 핸드볼·올림픽홀·우리금융아트홀을 1/3/5대로. 11/28 19~22시 공연, 바람 8방향×(1.5m/s F, 3m/s D) 중 장소별 최댓값.
+// 발전차 대수 민감도 (하린 라인, 11/27): KSPO DOME 5대 고정, 올림픽홀·우리금융아트홀을 1/3/5대로(실제 11/28 일정). 11/28 19~22시 공연, 바람 8방향×(1.5m/s F, 3m/s D) 중 장소별 최댓값.
 import { readFileSync } from "node:fs";
 const R = new URL("../", import.meta.url).pathname;
 const { placeCellsForHour, DEFAULT_PLACE_NAMES } = await import(R+"engine/forecast_text.js");
@@ -11,7 +11,7 @@ const pt = n => { const [lon,lat]=by.get(n).geometry.coordinates; return {lat,lo
 const places = DEFAULT_PLACE_NAMES.map(name=>({name,...pt(name)}));
 const hour = "2026-11-28T19:00:00+09:00";
 const time = { start: "2026-11-28T19:00:00+09:00", end: "2026-11-28T22:00:00+09:00", 출처: "민감도" };
-const others = ["티켓링크 라이브 아레나(SK올림픽핸드볼경기장)","올림픽홀","우리금융아트홀"];
+const others = ["올림픽홀","우리금융아트홀"]; // 11/27: 실제 11/28 일정(KSPO DOME·올림픽홀·우리금융아트홀)만. 핸드볼은 그날 공연 없음
 const gp = s => { const g = generatorPosition(s, by.get(s), assumptions); return { lat: g.lat, lon: g.lon }; }; // 11/27 공단 회신 위치 반영
 const gens = n => [...Array(5)].map(()=>({...gp("KSPO DOME"),time})).concat(others.flatMap(s=>[...Array(n)].map(()=>({...gp(s),time}))));
 const res = {};
