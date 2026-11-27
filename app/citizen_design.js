@@ -272,7 +272,7 @@ async function main() {
     const marks = [[0, "지금"]];
     for (let o = 1; o < NUM_HOURS; o++) {
       const lab = formatSlotLabel(hourSlotDate(o));
-      if (lab.endsWith(" 00시")) marks.push([o, lab.replace(" 00시", "")]);
+      if (lab.endsWith(" 00시") && o >= 8) marks.push([o, lab.replace(" 00시", "")]); // "지금"과 너무 가까운 날짜는 생략(겹침 방지)
     }
     ticksEl.innerHTML = marks.map(([o, m]) => `<span style="left:${(o / (NUM_HOURS - 1)) * 100}%;${o === 0 ? "" : "transform:translateX(-50%)"}">${m}</span>`).join("");
   }
