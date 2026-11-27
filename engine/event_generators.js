@@ -15,8 +15,8 @@
 // 그날 시작 시각을 모르면 time.출처 "미확인"으로 넣어요 → 엔진이 그 칸을 비워요(11/22 결정:
 // 발전차 하나라도 가동 시간을 모르면 칸 전체를 비움 — 일부만 빼면 과소평가).
 //
-// 위치: 공단도 공연장별 발전차 위치 값을 아직 안 줬어요(추가 문의 중). 그래서 site.geojson의
-// 공연장 좌표를 그대로 써요(지어낸 위치 없음). 같은 곳에 여러 대면 한 점에 겹쳐요.
+// 위치: 11/27 공단 회신(지도 표시)으로 KSPO DOME·88잔디마당·티켓링크 라이브 아레나·올림픽홀은
+// assumptions.발전차_위치 좌표를 써요. 나머지는 site.geojson 공연장 좌표. 여러 대면 한 점에 겹쳐요.
 // 사양: 비워 둬요 → plume_v2가 대표모델(Cat XQ230) 가정값과 꼬리표를 붙여요.
 
 const ASSUMED_DURATION_MS = 3 * 3600 * 1000; // app/shared.js PERFORMANCE_ASSUMED_DURATION_MS와 같아야 함
@@ -26,6 +26,14 @@ const INDOOR_KINDS = /^실내/;
 function kstDateStr(hourIso) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
   return fmt.format(new Date(hourIso)); // "YYYY-MM-DD"
+}
+
+/** 공연장별 발전차 위치: 공단이 알려준 위치(assumptions.발전차_위치)가 있으면 그 좌표, 없으면 공연장 좌표. */
+export function generatorPosition(site, feature, assumptions) {
+  const p = assumptions?.발전차_위치?.공연장별?.[site];
+  if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon)) return { lat: p.lat, lon: p.lon, 위치출처: "공단회신" };
+  const [lon, lat] = feature.geometry.coordinates;
+  return { lat, lon, 위치출처: "공연장좌표" };
 }
 
 /** 공연장 이름 → 기본 대수. 매연 계산 대상이 아니면 0. */
@@ -64,7 +72,8 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
     if (count === 0) continue;
     const feature = siteByName.get(ev.site);
     if (!feature) continue;
-    const [lon, lat] = feature.geometry.coordinates;
+    const pos = generatorPosition(ev.site, feature, assumptions);
+    const { lat, lon } = pos;
     const indoor = INDOOR_KINDS.test(venues.find((x) => x.site === ev.site)?.종류 ?? "");
 
     let time;
@@ -82,7 +91,7 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
     }
     const 대수근거 = assumptions.발전차_기본대수.공연장별?.[ev.site] ? "공단확인값" : "확인된최소";
     for (let i = 0; i < count; i++) {
-      out.push({ lat, lon, site: ev.site, 정보출처: "공연일정자동_대수가정", 대수근거, time });
+      out.push({ lat, lon, 위치출처: pos.위치출처, site: ev.site, 정보출처: "공연일정자동_대수가정", 대수근거, time });
     }
   }
   return out;

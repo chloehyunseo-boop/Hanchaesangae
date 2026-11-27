@@ -107,7 +107,7 @@ function saveManualEvents() {
 // 트럭 입력 → combine.js가 받는 generatorSources(발전차 목록). 11/26: 시민 화면(citizen.js)도
 // 같은 변환이 필요해서 shared.js로 옮기고 여기서는 그대로 불러요(로직 안 바뀜).
 function buildGeneratorSourcesFromTrucks() {
-  return buildGeneratorSourcesFromTruckRecords(state.trucks, state.siteByName);
+  return buildGeneratorSourcesFromTruckRecords(state.trucks, state.siteByName, state.assumptions);
 }
 
 /** 그 시각 엔진 입력 날씨. 시민 화면(main.js)의 resolveWeather와 같은 구조예요. */

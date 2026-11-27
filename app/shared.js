@@ -7,7 +7,7 @@ import { mapDisplayFor } from "../engine/common.js";
 import { skyCodeToName, stabilityFromForecast } from "../engine/plume.js";
 import { applyVolumePreset, CONCAWE_BANDS_HZ } from "../engine/noise.js";
 import { generateGridPoints } from "../engine/combine.js";
-import { buildRealEventGeneratorSources } from "../engine/event_generators.js";
+import { buildRealEventGeneratorSources, generatorPosition } from "../engine/event_generators.js";
 
 export const PARK_CENTER = { lat: 37.5203, lon: 127.1268 };
 
@@ -162,12 +162,13 @@ export function localInputToIso(value) {
  * 여기로 옮겨 파라미터화함 — 로직은 안 바꿨어요). 공란은 undefined로 보내서 plume_v2.js가
  * 대표모델 가정값을 쓰고 '가정' 꼬리표를 붙이게 해요. */
 const TRUCK_ALWAYS_ON_TIME = { start: "2026-01-01T00:00:00+09:00", end: "2026-12-31T23:00:00+09:00", 출처: "데모" };
-export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName) {
+export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName, assumptions) {
   const out = [];
   for (const t of trucks ?? []) {
     const feature = siteByName.get(t.site);
     if (!feature) continue; // 위치를 아직 안 고른 트럭은 계산에서 빼요
-    const [lon, lat] = feature.geometry.coordinates;
+    // 11/27 하린: 공단이 알려준 공연장별 발전차 위치가 있으면 그 좌표(assumptions.발전차_위치)
+    const { lat, lon } = generatorPosition(t.site, feature, assumptions);
     out.push({
       lat, lon,
       ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
@@ -189,7 +190,7 @@ export function buildCitizenGeneratorSources({ events, truckRecords, noGenerator
   // 11/27 하린: 공단 입력이 없는 공연은 "모름" 대신 기본 대수(assumptions.발전차_기본대수 —
   // KSPO DOME 5대, 나머지 최소 1대)로 자동 생성해요(engine/event_generators.js). 공단이 실제로
   // 입력한 공연장·날짜는 그 입력이 우선이고, '발전차 사용 안 함'으로 표시한 공연장·날짜는 빼요.
-  const realTrucks = buildGeneratorSourcesFromTruckRecords(truckRecords, siteByName);
+  const realTrucks = buildGeneratorSourcesFromTruckRecords(truckRecords, siteByName, assumptions);
   const enteredDays = [];
   const enteredAllDaysSites = [];
   for (const t of truckRecords ?? []) {

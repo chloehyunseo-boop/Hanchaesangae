@@ -60,6 +60,14 @@ ok(!skipAll.some((g) => g.site === "KSPO DOME"), "날짜 없는(상시) 입력�
     "시민 화면 함수: 공단 입력 1대 + 88잔디마당 자동 1대, 올림픽홀 빠짐", `${cg.length}대`);
 }
 
+// 2-2) 공단이 알려준 발전차 위치(11/27)
+ok(by("KSPO DOME")[0].lat === assumptions.발전차_위치.공연장별["KSPO DOME"].lat && by("KSPO DOME")[0].위치출처 === "공단회신", "KSPO DOME 발전차는 공단 회신 위치(돔 북동쪽)");
+{
+  const only = buildRealEventGeneratorSources({ 공연: [{ 출처: "공단일정페이지", site: "우리금융아트홀", 기간시작: "2026-11-27", 기간끝: "2026-11-27", 일자별시작: { "2026-11-27": "19:00" } }] }, siteByName, assumptions, h);
+  const [lon, lat] = siteByName.get("우리금융아트홀").geometry.coordinates;
+  ok(only[0].lat === lat && only[0].lon === lon && only[0].위치출처 === "공연장좌표", "위치 회신이 없는 공연장(우리금융아트홀)은 공연장 좌표");
+}
+
 // 3) 소음 쪽(buildRealEventStageSources)과 공연 시간이 똑같은지
 const stages = buildRealEventStageSources(events, siteByName, "기본", assumptions, h);
 const key = (t) => `${t.start}|${t.end}|${t.출처}`;

@@ -4,13 +4,16 @@ const R = new URL("../", import.meta.url).pathname;
 const { placeCellsForHour, DEFAULT_PLACE_NAMES } = await import(R+"engine/forecast_text.js");
 const site = JSON.parse(readFileSync(R+"data/site.geojson"));
 const concaweData = JSON.parse(readFileSync(R+"data/concawe_4_81.json"));
+const assumptions = JSON.parse(readFileSync(R+"data/assumptions.json"));
+const { generatorPosition } = await import(R+"engine/event_generators.js");
 const by = new Map(site.features.map(f=>[f.properties.name,f]));
 const pt = n => { const [lon,lat]=by.get(n).geometry.coordinates; return {lat,lon}; };
 const places = DEFAULT_PLACE_NAMES.map(name=>({name,...pt(name)}));
 const hour = "2026-11-28T19:00:00+09:00";
 const time = { start: "2026-11-28T19:00:00+09:00", end: "2026-11-28T22:00:00+09:00", 출처: "민감도" };
 const others = ["티켓링크 라이브 아레나(SK올림픽핸드볼경기장)","올림픽홀","우리금융아트홀"];
-const gens = n => [...Array(5)].map(()=>({...pt("KSPO DOME"),time})).concat(others.flatMap(s=>[...Array(n)].map(()=>({...pt(s),time}))));
+const gp = s => { const g = generatorPosition(s, by.get(s), assumptions); return { lat: g.lat, lon: g.lon }; }; // 11/27 공단 회신 위치 반영
+const gens = n => [...Array(5)].map(()=>({...gp("KSPO DOME"),time})).concat(others.flatMap(s=>[...Array(n)].map(()=>({...gp(s),time}))));
 const res = {};
 for (const ws of [1.5, 3]) for (const dir of [0,45,90,135,180,225,270,315]) {
   const weather = { tempC: 5, tmp: 5, rhPercent: 60, windVecFromDeg: dir, wsd10m: ws, stability: ws<2?"F":"D" };
