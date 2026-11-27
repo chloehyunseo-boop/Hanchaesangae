@@ -1,3 +1,5 @@
+// 11/27 하린 확인: 공단 화면 시안 B(station_design_b.html + app/station_design.js)를 그대로 옮겨 왔어요. 계산 로직은 그대로.
+// 바뀐 것: 등치선 면 레이어, 지도 위 범례 상자 제거(오른쪽 표시 항목), 처음 지도 맞춤, 시간 눈금, 공연 일정 날짜·목록형.
 // app/station.js — 공단 화면 "최종판"(station.html). 11/26 친구 요청: 체크박스로 "가정"하던
 // app/agency.js(데모 성격이 있던 부분)는 그대로 두고, 공연 일정이 자동(또는 정확한 수동
 // 입력)으로 돌아가는 화면을 새로 만들었어요. 지도·격자 계산은 app/shared.js를 그대로 빌려
@@ -12,7 +14,8 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { generatorActivityAtHour } from "../engine/combine.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
@@ -21,6 +24,7 @@ import {
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
+import { ContourCellLayer } from "./contour_layer_design.js";
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_station_trucks_v1";
@@ -212,17 +216,12 @@ function renderTruckTable(onChange) {
 function renderAutoEvents(hourIso) {
   const el = document.getElementById("auto-events");
   const items = listTodaysRealEvents(state.events, hourIso);
-  if (!items.length) {
-    el.innerHTML = "<p>지금 자동으로 찾은 실제 공연 일정이 없어요.</p>";
-    return;
-  }
-  const rows = items.map((e) => `<tr>
-    <td>${e.site}</td>
-    <td>${e.title}</td>
-    <td>${e.startTimeStr ? e.startTimeStr + " 시작" : "모름"}</td>
-    <td>${e.요일추정 ? "요일별 문장에서 읽음(바뀔 수 있음)" : ""}</td>
-  </tr>`).join("");
-  el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>공연장</th><th>공연명</th><th>시작</th><th>비고</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
+    .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
+  const head = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
+  el.innerHTML = head + (items.length
+    ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
+    : `<div style="color:var(--sub)">이 날짜의 자동 수집 공연 없음</div>`);
 }
 
 function renderManualEventsTable(onChange) {
@@ -294,6 +293,76 @@ function pt(name) {
   return { lat, lon };
 }
 
+// ---------------------------------------------------------------------------
+// 공단용 요약(시안 B, 하린 11/27). 새 계산 없이 이미 있는 결과만 모아서 보여줘요:
+//  ① 이 시각 현황(진행 공연·가동 발전차·영향 강습 수) ② 주요 장소 8곳 단계 ③ 앞으로 72시간 문장 예측.
+// 해결책·조치 권고는 넣지 않아요(CLAUDE.md 규칙 4).
+let summarySeries = null; // 72시간 장소 시리즈(입력이 바뀌면 비움)
+function invalidateSummary() { summarySeries = null; }
+function overlapsHour(time, hourIso) {
+  if (!time || !time.start) return time?.출처 === "미확인" ? "unknown" : false;
+  const h0 = Date.parse(hourIso), h1 = h0 + 3600e3;
+  const s = Date.parse(time.start), e = time.end ? Date.parse(time.end) : Infinity;
+  return s < h1 && e > h0;
+}
+function chipHtml(st, palette) {
+  if (st.kind === "level") return `<span class="chip" style="background:${palette[st.level]}">${st.text}</span>`;
+  if (st.kind === "unknown") return `<span class="chip unk">${st.text}</span>`;
+  return `<span class="chip none">${st.kind === "below" ? "기준 미만" : "–"}</span>`;
+}
+function renderSummary(date, placeCells) {
+  const el = document.getElementById("station-summary");
+  if (!el) return;
+  const hourIso = hourSlotIso(date);
+  const stages = buildStageSources(hourIso);
+  const showCount = stages.filter((x) => overlapsHour(x.time, hourIso)).length;
+  const showUnknown = stages.filter((x) => overlapsHour(x.time, hourIso) === "unknown").length;
+  const gens = buildGeneratorSources(hourIso);
+  const active = gens.filter((g) => generatorActivityAtHour(g, hourIso) === "active");
+  const assumed = active.filter((g) => g.정보출처 === "공연일정자동_대수가정").length;
+  const running = lessonsAtHour(state.lessons?.강좌 ?? [], date);
+  let affected = 0;
+  for (const l of running) {
+    const f = state.siteByName.get(l.site);
+    if (!f) continue;
+    const [lon, lat] = f.geometry.coordinates;
+    const near = nearestPlace(DEFAULT_PLACE_NAMES.map((n) => ({ name: n, ...pt(n) })).filter((p) => p.lat), lat, lon, 9999);
+    const c = near ? placeCells?.[near.name] : null;
+    if (placeCellState(c?.noise).kind === "level" || placeCellState(c?.exhaust).kind === "level") affected++;
+  }
+  const stat = (num, label, sub) => `<div class="stat"><b>${num}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const places = DEFAULT_PLACE_NAMES.filter((n) => placeCells?.[n]);
+  const rows = places.map((n) => `<tr><td>${n}</td><td>${chipHtml(placeCellState(placeCells[n].noise), NOISE_PALETTE)}</td><td>${chipHtml(placeCellState(placeCells[n].exhaust), EXHAUST_PALETTE)}</td></tr>`).join("");
+  if (!summarySeries) {
+    summarySeries = [];
+    const pls = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) })).filter((p) => p.lat !== undefined);
+    for (let o = 0; o < NUM_HOURS; o++) {
+      const d = hourSlotDate(o), w = resolveWeather(d);
+      if (!w) continue;
+      const h = hourSlotIso(d);
+      summarySeries.push({ hour: h, weather: w, cellsByPlace: placeCellsForHour({ places: pls, stageSources: buildStageSources(h), generatorSources: buildGeneratorSources(h), weather: w, hour: h, concaweData: state.concaweData, 배출시나리오: state.배출시나리오_기본값 }) });
+    }
+  }
+  const lines = buildForecastSentences({ series: summarySeries, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
+  el.innerHTML = `
+    <div class="sum-sec">
+      <h4>${formatSlotLabel(date)} 현황</h4>
+      <div class="stats">
+        ${stat(showCount, "진행 공연", showUnknown ? `시각 미상 ${showUnknown}` : "")}
+        ${stat(active.length, "가동 발전차", assumed ? `기본 가정 ${assumed}` : "")}
+        ${stat(`${affected}<em>/${running.length}</em>`, "영향 강습", "약 이상 / 진행")}
+      </div>
+    </div>
+    <div class="sum-sec">
+      <h4>주요 장소</h4>
+      ${rows ? `<table class="mini sum-tbl"><thead><tr><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="muted">이 시각 계산 결과 없음</p>`}
+    </div>
+    <div class="sum-sec">
+      <h4>앞으로 72시간</h4>
+      ${lines.length ? `<ul class="sum-lines">${lines.map((l) => `<li>${l}</li>`).join("")}</ul>` : `<p class="muted">주요 장소 8곳 모두 '약' 미만</p>`}
+    </div>`;
+}
+
 function renderImpactedLessons(lessons, date, cells) {
   const el = document.getElementById("impacted-lessons");
   const list = lessons?.강좌 ?? [];
@@ -317,7 +386,7 @@ function renderImpactedLessons(lessons, date, cells) {
     const exhaust = placeCellState(c?.exhaust);
     return `<tr><td>${l.name}</td><td>${l.site}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
   }).join("");
-  el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>강좌명</th><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  el.innerHTML = `<table class="mini"><thead><tr><th>강좌</th><th>장소</th><th>소음</th><th>배출</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function buildForecastCsv() {
@@ -364,34 +433,16 @@ async function main() {
     style: "https://tiles.openfreemap.org/styles/bright",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
-  const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
-  const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
+  const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
+  const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
   // 11/27: 컴퓨터 화면 레이아웃(지도+오른쪽 박스)은 지도 칸 크기가 창 크기에 따라 바뀌어서 필요
   window.addEventListener("resize", () => map.invalidateSize());
-  const MapLegend = L.Control.extend({
-    options: { position: "topright" },
-    onAdd() {
-      const box = L.DomUtil.create("div", "olpak-map-legend");
-      box.style.cssText = "background:#fff;padding:8px 10px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.4);font-size:0.78rem;line-height:1.5;max-width:180px;";
-      const row = (color, label) => `<div><span style="display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle;background:${color}"></span>${label}</div>`;
-      box.innerHTML = `
-        <div style="font-weight:bold;margin-bottom:2px;">소음</div>
-        ${row(NOISE_PALETTE.강, "강 65dB↑")}
-        ${row(NOISE_PALETTE.중, "중 55dB↑")}
-        ${row(NOISE_PALETTE.약, "약 45dB↑")}
-        <div style="font-weight:bold;margin:6px 0 2px;">배출가스(NO2)</div>
-        ${row(EXHAUST_PALETTE.강, "강 0.05ppm↑")}
-        ${row(EXHAUST_PALETTE.중, "중 0.01ppm↑")}
-        ${row(EXHAUST_PALETTE.약, "약 0.002ppm↑")}
-        ${row(NOISE_PALETTE.uncertain, "모름/불확실")}
-      `;
-      L.DomEvent.disableClickPropagation(box);
-      return box;
-    },
-  });
-  new MapLegend().addTo(map);
+  // 처음 지도: 공원과 주요 장소 8곳이 꽉 차게(0.25 단위 확대)
+  map.options.zoomSnap = 0.25;
+  const fitPlaces = DEFAULT_PLACE_NAMES.map((n) => pt(n)).filter((p) => p.lat !== undefined);
+  if (fitPlaces.length) map.fitBounds(L.latLngBounds(fitPlaces.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false });
 
   document.getElementById("add-truck").addEventListener("click", () => {
     state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null, 시작시각: null, 셋업시작: null });
@@ -404,6 +455,7 @@ async function main() {
     renderNoGenTable(onNoGenChange);
   });
   function onNoGenChange() {
+    invalidateSummary();
     saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays);
     state.cellCache.clear();
     refresh();
@@ -425,6 +477,7 @@ async function main() {
     URL.revokeObjectURL(url);
   });
   function onTruckChange() {
+    invalidateSummary();
     saveTrucks();
     state.cellCache.clear();
     refreshSliderBand();
@@ -438,6 +491,7 @@ async function main() {
     renderManualEventsTable(onEventChange);
   });
   function onEventChange() {
+    invalidateSummary();
     saveManualEvents();
     state.cellCache.clear(); // 11/26: 이제 계산에 들어가니 agency.js와 달리 캐시도 비워요
     refresh();
@@ -446,6 +500,7 @@ async function main() {
 
   document.getElementById("scenario-default").addEventListener("change", (e) => {
     state.배출시나리오_기본값 = e.target.value;
+    invalidateSummary();
     state.cellCache.clear();
     refresh();
   });
@@ -472,7 +527,7 @@ async function main() {
       URL.revokeObjectURL(url);
     } finally {
       btn.disabled = false;
-      btn.textContent = "지금 설정으로 72시간 CSV 받기";
+      btn.textContent = "72시간 CSV 받기";
     }
   });
 
@@ -504,6 +559,8 @@ async function main() {
       segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
+    const noteEl = document.getElementById("band-note");
+    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍 · 배출가스 계산 불가" : "";
   }
 
   let refreshSeq = 0;
@@ -537,9 +594,19 @@ async function main() {
       }
     }
     renderImpactedLessons(state.lessons, date, placeCells);
+    renderSummary(date, placeCells);
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
+  const ticksEl = document.getElementById("slider-ticks");
+  if (ticksEl) {
+    const marks = [[0, "지금"]];
+    for (let o = 1; o < NUM_HOURS; o++) {
+      const lab = formatSlotLabel(hourSlotDate(o));
+      if (lab.endsWith(" 00시") && (o - marks[marks.length - 1][0]) / (NUM_HOURS - 1) >= 0.1) marks.push([o, lab.replace(" 00시", "")]);
+    }
+    ticksEl.innerHTML = marks.map(([o, m]) => `<span style="left:${(o / (NUM_HOURS - 1)) * 100}%;${o === 0 ? "" : "transform:translateX(-50%)"}">${m}</span>`).join("");
+  }
   slider.addEventListener("change", refresh);
   slider.addEventListener("input", (e) => { sliderLabel.textContent = formatSlotLabel(hourSlotDate(Number(e.target.value))); });
 
