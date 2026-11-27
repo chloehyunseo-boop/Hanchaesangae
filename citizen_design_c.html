@@ -82,7 +82,7 @@
     .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; }
     .tb-track .rail { background: #E1E6EC; }
     .tb-track .fill { right: auto; width: var(--p, 0%); background: var(--fill); }
-    #slider-band { display: flex; overflow: hidden; pointer-events: none; }
+    #slider-band { display: flex; overflow: hidden; pointer-events: none; left: 8px; right: 8px; border-radius: 0; } /* 손잡이 중심이 움직이는 범위와 맞춤 */
     #slider-band .slider-seg { flex: 1; }
     #slider-band .slider-seg.impossible { background: #A9B4C0; }
     #time-slider { position: relative; z-index: 2; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
