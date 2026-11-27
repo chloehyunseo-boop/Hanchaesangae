@@ -313,6 +313,7 @@
     .cards tr.compact td { flex-direction: row; align-items: center; gap: 10px; grid-column: auto; }
     .cards tr.compact .ev-sum { flex: 1; min-width: 0; font-size: 13px; color: var(--text); line-height: 1.45; }
     .cards tr.compact .ev-sum span { color: var(--sub); font-size: 12px; }
+    #event-table tr.compact td::before { content: none; }
     .cards tr.compact .ev-btns { display: flex; gap: 4px; flex: none; }
     .cards tr.compact .ev-btns button { height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; color: var(--sub); }
     .cards tr.compact .ev-btns button:hover { border-color: var(--k-blue); color: var(--k-blue); }
@@ -476,7 +477,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station.js?v=20261127c"></script>
+  <script type="module" src="./app/station.js?v=20261127d"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {
