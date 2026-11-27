@@ -114,7 +114,9 @@
 
     /* 휴대폰: 지도 위, 나머지 아래로 쌓기 */
     @media (max-width: 860px) {
-      body { overflow: auto; background: #fff; }
+      body { overflow: auto; background: #fff; display: flex; flex-direction: column; }
+      .brand { order: -1; }
+      #map { flex: none; }
       #map { position: relative; height: 62vh; }
       .float { position: static; border-radius: 0; box-shadow: none; }
       .brand { position: sticky; top: 0; z-index: 1001; border-bottom: 1px solid var(--line); }
