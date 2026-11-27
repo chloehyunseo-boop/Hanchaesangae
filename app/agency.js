@@ -26,6 +26,7 @@ import {
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_agency_trucks_v1";
 const EVENTS_STORAGE_KEY = "olpak_agency_manual_events_v1";
+const NOGEN_STORAGE_KEY = "olpak_agency_no_generator_v1";
 const GRADE_LABEL = { 모름: "모름", 인증: "인증", 비인증: "비인증" };
 
 const state = {
@@ -33,6 +34,7 @@ const state = {
   selectedVenues: new Set(),
   volumePreset: "기본",
   trucks: loadTrucks(), // [{id, site, 발전기수:number|null, 인증등급:"모름"|"인증"|"비인증", 엔진출력_kW:number|null, 시작시각:"YYYY-MM-DDTHH:mm"|null, 셋업시작:"YYYY-MM-DDTHH:mm"|null}]
+  noGeneratorDays: loadList(NOGEN_STORAGE_KEY), // [{id, site, 날짜:"YYYY-MM-DD"}] — '발전차 사용 안 함'(하린 11/27)
   manualEvents: loadManualEvents(), // [{id, title, site, 날짜, 시작, 소요분}] — 공단 화면에서 직접 입력(11/25)
   배출시나리오_기본값: "인증", // 트럭의 인증등급이 "모름"일 때 쓰는 값(하린 11/24 지시: 비인증 비교 보기)
   windOverride: null,
@@ -49,6 +51,45 @@ function loadTrucks() {
 }
 function saveTrucks() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.trucks)); } catch { /* 저장 안 돼도 화면은 그대로 동작 */ }
+}
+
+function loadList(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? "null");
+    if (Array.isArray(parsed)) return parsed;
+  } catch { /* 깨졌으면 빈 목록 */ }
+  return [];
+}
+function saveList(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* 저장 안 돼도 화면은 동작 */ }
+}
+
+// '발전차 사용 안 함' 표 (하린 11/27). 공단 화면 지도 계산에는 영향 없음(공단 화면은 입력한
+// 발전차만 계산) — 시민 화면에 내보낼 파일(generator_inputs.json의 `미사용`)에만 들어가요.
+function renderNoGenTable() {
+  const tbody = document.getElementById("nogen-rows");
+  tbody.innerHTML = "";
+  const venues = (state.assumptions?.기본안_계산대상?.venues ?? []).filter((v) => v.매연_포함).map((v) => v.site);
+  for (const r of state.noGeneratorDays) {
+    const tr = document.createElement("tr");
+    const sel = document.createElement("select");
+    sel.innerHTML = `<option value="">공연장 고르기</option>` + venues.map((n) => `<option value="${n}">${n}</option>`).join("");
+    sel.value = r.site ?? "";
+    sel.addEventListener("change", () => { r.site = sel.value || null; saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays); });
+    const date = document.createElement("input");
+    date.type = "date";
+    date.value = r.날짜 ?? "";
+    date.addEventListener("change", () => { r.날짜 = date.value || null; saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays); });
+    const del = document.createElement("button");
+    del.type = "button"; del.textContent = "삭제";
+    del.addEventListener("click", () => {
+      state.noGeneratorDays = state.noGeneratorDays.filter((x) => x.id !== r.id);
+      saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays);
+      renderNoGenTable();
+    });
+    for (const el of [sel, date, del]) { const td = document.createElement("td"); td.appendChild(el); tr.appendChild(td); }
+    tbody.appendChild(tr);
+  }
 }
 
 function loadManualEvents() {
@@ -395,7 +436,8 @@ async function main() {
   // — 대신 이 버튼으로 파일을 다운로드해서, 사람이 data/generator_inputs.json 자리에 덮어쓰고
   // 커밋하면 시민 화면(citizen.js)이 그 파일을 읽어요.
   document.getElementById("export-trucks").addEventListener("click", () => {
-    const payload = { _설명: "agency.html에서 내보낸 발전차 입력값 — data/generator_inputs.json 자리에 덮어써서 커밋하면 시민 화면에 반영돼요.", 내보낸시각: new Date().toISOString(), trucks: state.trucks };
+    const payload = { _설명: "agency.html에서 내보낸 발전차 입력값 — data/generator_inputs.json 자리에 덮어써서 커밋하면 시민 화면에 반영돼요.", 내보낸시각: new Date().toISOString(), trucks: state.trucks,
+      미사용: state.noGeneratorDays.filter((r) => r.site && r.날짜).map(({ site, 날짜 }) => ({ site, 날짜 })) };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -411,6 +453,12 @@ async function main() {
     refresh();
   }
   renderTruckTable(onTruckChange);
+  renderNoGenTable();
+  document.getElementById("add-nogen").addEventListener("click", () => {
+    state.noGeneratorDays.push({ id: `n${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 날짜: null });
+    saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays);
+    renderNoGenTable();
+  });
 
   document.getElementById("add-event").addEventListener("click", () => {
     state.manualEvents.push({ id: `e${Date.now()}${Math.random().toString(36).slice(2, 6)}`, title: null, site: null, 날짜: null, 시작: null, 소요분: null });

@@ -41,16 +41,25 @@ export function defaultGeneratorCount(site, assumptions) {
 
 /**
  * 그 시각(hourIso)이 속한 날짜에 열리는 실제 공연(data/events.json, 공단일정페이지)마다 발전차를 만들어요.
+ * opts.noGeneratorDays: [{site, 날짜:"YYYY-MM-DD"}] 공단이 '발전차 사용 안 함'으로 표시한 날
+ * opts.enteredDays:     [{site, 날짜}] 공단이 실제 발전차를 입력한 날(그 입력이 대신 들어감)
+ * opts.enteredAllDaysSites: [site] 날짜 없이 입력된 발전차가 있는 곳(상시 가동 입력 → 그 공연장은 자동 생성 안 함)
  * @returns {Array<{lat:number, lon:number, 정보출처:string, 대수근거:string, site:string, time:object}>}
  */
-export function buildRealEventGeneratorSources(events, siteByName, assumptions, hourIso) {
+export function buildRealEventGeneratorSources(events, siteByName, assumptions, hourIso, opts = {}) {
   const out = [];
   if (!events?.공연) return out;
   const dateStr = kstDateStr(hourIso);
+  // 11/27 하린: 공단이 "이 공연장 이날은 발전차 안 씀"이라고 표시한 곳(공단 화면 '발전차 사용 안 함')과
+  // 공단이 실제 발전차를 입력한 곳(그 값이 우선)은 기본 대수를 넣지 않아요.
+  const skip = new Set([...(opts.noGeneratorDays ?? []), ...(opts.enteredDays ?? [])]
+    .filter((x) => x?.site && x?.날짜).map((x) => `${x.site}|${x.날짜}`));
+  const skipWholeSite = new Set(opts.enteredAllDaysSites ?? []);
   const venues = assumptions?.기본안_계산대상?.venues ?? [];
   for (const ev of events.공연) {
     if (ev.출처 !== "공단일정페이지") continue; // 과거 기록(공단API)은 예보에 안 씀
     if (!ev.기간시작 || !ev.기간끝 || dateStr < ev.기간시작 || dateStr > ev.기간끝) continue;
+    if (skip.has(`${ev.site}|${dateStr}`) || skipWholeSite.has(ev.site)) continue;
     const count = defaultGeneratorCount(ev.site, assumptions);
     if (count === 0) continue;
     const feature = siteByName.get(ev.site);

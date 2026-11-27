@@ -66,13 +66,19 @@
         <tbody id="truck-rows"></tbody>
       </table>
       <button type="button" id="add-truck">발전차 추가</button>
+      <div class="row" style="margin-top:8px">
+        <b>발전차 사용 안 함</b> — 공연은 있는데 발전차가 오지 않는 공연장·날짜를 적어 주세요.
+        여기에도, 위 발전차 입력에도 없으면 시민 화면은 기본 대수(KSPO DOME 5대, 나머지 1대, 가정값)로 계산해요.
+        <table id="nogen-table" style="margin-top:4px"><thead><tr><th>공연장</th><th>날짜</th><th></th></tr></thead><tbody id="nogen-rows"></tbody></table>
+        <button type="button" id="add-nogen">사용 안 함 추가</button>
+      </div>
       <button type="button" id="export-trucks">입력값 내보내기(시민 화면에 반영할 파일)</button>
       <p style="font-size:0.8rem;color:#555">
         "입력값 내보내기"를 누르면 <code>generator_inputs.json</code> 파일이 다운로드돼요 —
         이 파일을 저장소의 <code>data/generator_inputs.json</code> 자리에 그대로 덮어써서
         커밋·푸시하면, 시민 화면도 이 발전차 정보를 그대로 봐요(서버가 없어서 자동 동기화는
-        안 되고, 이 파일을 커밋해야 반영돼요). 아직 입력을 못 한 공연은 시민 화면에
-        "발전차 있음, 자세한 건 모름"으로만 표시돼요(숫자를 지어내지 않음).
+        안 되고, 이 파일을 커밋해야 반영돼요). 아직 입력을 못 한 공연은 시민 화면에서
+        기본 대수(가정값)로 계산돼요. 발전차가 안 오는 공연은 '발전차 사용 안 함'에 적어 주세요.
       </p>
       <p style="font-size:0.8rem;color:#555">
         공연 시작 시각을 비워두면 1년 내내 가동 중이라고 가정하는 데모예요(예전과 같음).

@@ -7,6 +7,7 @@ import { mapDisplayFor } from "../engine/common.js";
 import { skyCodeToName, stabilityFromForecast } from "../engine/plume.js";
 import { applyVolumePreset, CONCAWE_BANDS_HZ } from "../engine/noise.js";
 import { generateGridPoints } from "../engine/combine.js";
+import { buildRealEventGeneratorSources } from "../engine/event_generators.js";
 
 export const PARK_CENTER = { lat: 37.5203, lon: 127.1268 };
 
@@ -180,29 +181,26 @@ export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName) {
   return out;
 }
 
-// 11/26 친구 요청: 공단이 agency.html에서 발전차를 입력해 "내보내기"한 파일
-// (data/generator_inputs.json)이 있으면 시민 화면도 실제 값을 그대로 써요. 아직 입력이
-// 안 된 공연(공단이 깜빡했거나 막 스크래핑돼서 처리 전인 경우)은 숫자를 지어내지 않고,
-// "발전차가 있는 건 확실한데(11/26 공단 답변: 모든 공연장에서 사용) 대수·시간은 모른다"는
-// 표시만 넣어요(시간 출처를 "미확인"으로 둬서 엔진이 자동으로 "발전차시간미확인"으로 처리 —
-// combine.js generatorActivityAtHour가 이미 하는 구분, 새 로직 아님). 매연_포함:false인
-// 장소(예: K아트홀, 로드맵이 범위를 좁힌 곳)는 이 안전장치 대상에서 빼요. */
-export function buildCitizenGeneratorSources({ events, truckRecords, siteByName, assumptions, hourIso }) {
+// 11/26 친구: 공단이 agency.html에서 발전차를 입력해 "내보내기"한 파일(data/generator_inputs.json)이
+// 있으면 시민 화면도 실제 값을 그대로 써요. 11/27 하린: 입력이 없는 공연은 기본 대수로 자동 생성
+// (예전엔 "모름" 표시만 넣어서 배출가스 지도 전체가 비었음). 파일의 `미사용` 목록은 공단이
+// '발전차 사용 안 함'으로 표시한 공연장·날짜예요.
+export function buildCitizenGeneratorSources({ events, truckRecords, noGeneratorDays, siteByName, assumptions, hourIso }) {
+  // 11/27 하린: 공단 입력이 없는 공연은 "모름" 대신 기본 대수(assumptions.발전차_기본대수 —
+  // KSPO DOME 5대, 나머지 최소 1대)로 자동 생성해요(engine/event_generators.js). 공단이 실제로
+  // 입력한 공연장·날짜는 그 입력이 우선이고, '발전차 사용 안 함'으로 표시한 공연장·날짜는 빼요.
   const realTrucks = buildGeneratorSourcesFromTruckRecords(truckRecords, siteByName);
-  const truckSites = new Set((truckRecords ?? []).map((t) => t.site).filter(Boolean));
-  const venueFlags = new Map((assumptions?.기본안_계산대상?.venues ?? []).map((v) => [v.site, v.매연_포함]));
-  const eventSites = new Set(listTodaysRealEvents(events, hourIso).map((e) => e.site));
-
-  const placeholders = [];
-  for (const site of eventSites) {
-    if (truckSites.has(site)) continue; // 실제 입력이 이미 있어요
-    if (venueFlags.get(site) !== true) continue; // 이 장소는 발전차 사용 자체가 확인 안 됐거나 범위 밖
-    const feature = siteByName.get(site);
-    if (!feature) continue;
-    const [lon, lat] = feature.geometry.coordinates;
-    placeholders.push({ lat, lon, time: { start: null, end: null, 출처: "미확인" } });
+  const enteredDays = [];
+  const enteredAllDaysSites = [];
+  for (const t of truckRecords ?? []) {
+    if (!t.site) continue;
+    if (t.시작시각) enteredDays.push({ site: t.site, 날짜: String(t.시작시각).slice(0, 10) });
+    else enteredAllDaysSites.push(t.site); // 날짜 없는 입력 = 상시 가동(데모) → 그 공연장은 자동 생성 안 함
   }
-  return [...realTrucks, ...placeholders];
+  const autoGens = buildRealEventGeneratorSources(events, siteByName, assumptions, hourIso, {
+    noGeneratorDays, enteredDays, enteredAllDaysSites,
+  });
+  return [...realTrucks, ...autoGens];
 }
 
 export const NOISE_PALETTE = { 강: "rgba(198,40,40,0.72)", 중: "rgba(251,140,0,0.62)", 약: "rgba(253,216,53,0.5)", uncertain: "rgba(120,120,120,0.45)" };

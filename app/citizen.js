@@ -24,7 +24,7 @@ const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가�
 
 const state = {
   weatherByHour: null, concaweData: null, siteByName: new Map(), assumptions: null, events: null,
-  truckRecords: [],
+  truckRecords: [], noGeneratorDays: [],
   cellCache: new Map(),
   placeSeries: null,
 };
@@ -55,9 +55,12 @@ async function loadData() {
   // 빈 목록으로 다뤄요, 아직 아무도 안 내보낸 상태일 수 있어서 에러로 막지 않음).
   try {
     const res = await fetch("./data/generator_inputs.json");
-    state.truckRecords = res.ok ? (await res.json()).trucks ?? [] : [];
+    const json = res.ok ? await res.json() : {};
+    state.truckRecords = json.trucks ?? [];
+    state.noGeneratorDays = json.미사용 ?? []; // 11/27: 공단 화면 '발전차 사용 안 함'
   } catch {
     state.truckRecords = [];
+    state.noGeneratorDays = [];
   }
 }
 
@@ -71,7 +74,7 @@ function buildStageSources(hourIso) {
 }
 function buildGeneratorSourcesForHour(hourIso) {
   return buildCitizenGeneratorSources({
-    events: state.events, truckRecords: state.truckRecords, siteByName: state.siteByName,
+    events: state.events, truckRecords: state.truckRecords, noGeneratorDays: state.noGeneratorDays, siteByName: state.siteByName,
     assumptions: state.assumptions, hourIso,
   });
 }
