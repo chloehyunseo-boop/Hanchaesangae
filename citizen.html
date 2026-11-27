@@ -31,6 +31,8 @@
     .tab-btn.active { color: #1565c0; border-bottom-color: #1565c0; font-weight: bold; }
     .tab-panel { padding: 10px 16px; }
     .tab-panel[hidden] { display: none; }
+    #map-box { background: #e8f5e9; padding: 12px 16px 4px; margin-top: 8px; border-radius: 6px; }
+    #map-box #map { border-radius: 4px; overflow: hidden; }
   </style>
 </head>
 <body>
@@ -84,16 +86,18 @@
     </p>
   </div>
 
-  <div class="row" style="padding:0 16px">
-    시간: <span id="slider-label"></span>
-    <input type="range" id="time-slider" style="width:100%" />
-    <div id="slider-band"></div>
-    <div id="slider-warning"></div>
+  <div id="map-box">
+    <div class="row" style="padding:0 16px">
+      시간: <span id="slider-label"></span>
+      <input type="range" id="time-slider" style="width:100%" />
+      <div id="slider-band"></div>
+      <div id="slider-warning"></div>
+    </div>
+
+    <div id="layer-warning"></div>
+
+    <div id="map"></div>
   </div>
-
-  <div id="layer-warning"></div>
-
-  <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
