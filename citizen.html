@@ -41,21 +41,21 @@
     <h1>올팍 바람지도 — 시민 화면</h1>
     <div class="row">
       <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
-      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중
-      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약
+      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강 65dB↑
+      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중 55dB↑
+      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약 45dB↑
       &nbsp;&nbsp;
-      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스 레이어</label>
-      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중
-      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
+      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스(NO2) 레이어</label>
+      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강 0.05ppm↑
+      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중 0.01ppm↑
+      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약 0.002ppm↑
       &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금/점무늬 = 등급 보류·모름(자세한 설명은 "안내" 탭)
     </div>
   </div>
 
   <div class="tab-bar">
     <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
-    <button type="button" class="tab-btn" data-tab="forecast">문장 예보</button>
+    <button type="button" class="tab-btn" data-tab="forecast">문장 예측</button>
     <button type="button" class="tab-btn" data-tab="info">안내</button>
   </div>
 
@@ -68,18 +68,36 @@
   </div>
   <div class="tab-panel" data-tab="info">
     <p class="disclaimer">
-      ⚠️ 이 화면은 사람이 켜고 끄는 가정 없이, 실제 기상청 예보와 공단 올림픽공원 홈페이지의
-      공연 일정을 자동으로 반영해요. 공연 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은
-      날은 "모름"으로 표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(옥외 무대는
-      21:30 중 먼저 오는 쪽)으로 가정</b>했어요(실측 아님). 발전차 정보는 공단이 공연마다
-      입력해둔 값이 있으면 그걸 쓰고, 아직 입력 전이면 "발전차가 있는 건 확실한데 대수·시간은
-      모른다"는 표시만 해요(공단 11/26 답변: 모든 공연장에서 발전차 사용). 음원 세기(음량)는
-      공단이 음향장비 사양을 못 준다고 해서 여전히 <b>가정값</b>이에요(실제 숫자 아님) — 야외
-      무대는 공단 기준(옥외 행사 소음 65dB(A) 상한)을 역산한 값, 실내는 하린이 확정한 외피
-      계산값을 써요. 소음 레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·
-      설비차폐는 미반영), 배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두
-      대기환경기준 초과 판정이 아니에요.
+      ⚠️ 이 화면은 사람이 켜고 끄는 가정 없이, 기상청 단기예보를 그대로 입력값으로 써서 그
+      바람으로 소음·배출가스가 퍼지는 범위를 예측하고, 공단 올림픽공원 홈페이지의 공연 일정을
+      자동으로 반영해요. 공연 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은 날은 "모름"으로
+      표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(옥외 무대는 21:30 중 먼저 오는
+      쪽)으로 가정</b>했어요(실측 아님). 발전차 대수는 공단이 확인한 값(KSPO DOME 최대 5대)을
+      쓰고, 확인되지 않은 공연장은 최소 1대로 가정했어요. 실제로는 더 많을 수 있어요 — 공단이
+      "발전차 사용 안 함"으로 표시한 공연은 0대예요. 음원 세기(음량)는 공단이 음향장비 사양을
+      못 준다고 해서 여전히 <b>가정값</b>이에요(실제 숫자 아님) — 야외 무대는 공단 기준(옥외
+      행사 소음 65dB(A) 상한)을 역산한 값, 실내는 하린이 확정한 외피 계산값을 써요. 소음
+      레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·설비차폐는 미반영),
+      배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두 대기환경기준 초과 판정이
+      아니에요.
     </p>
+    <div style="margin-top:10px">
+      <b>단계의 의미</b>
+      <p style="font-size:0.85rem;color:#555;margin:4px 0">
+        [소음 · 공연 소리만, 1시간 평균]<br>
+        강: 공단 옥외 공연 소음 기준(65 dB) 이상<br>
+        중: 주거지역 낮 소음 환경기준(55 dB) 이상<br>
+        약: 주거지역 밤 소음 환경기준(45 dB) 이상<br>
+        → 공연 소리만 계산 · 생활 소음 미포함 · 기준 초과 판정 아님
+      </p>
+      <p style="font-size:0.85rem;color:#555;margin:4px 0">
+        [배출가스 · 발전차 이산화질소만, 1시간 평균]<br>
+        강: 대기환경기준(NO2 1시간 0.10 ppm)의 50% 이상<br>
+        중: 대기환경기준의 10% 이상 50% 미만<br>
+        약: 대기환경기준의 2% 이상 10% 미만<br>
+        → 발전차 배출분만 계산 · 배경 농도 미포함 · 기준 초과 판정 아님
+      </p>
+    </div>
     <p style="font-size:0.85rem;color:#555">
       빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급").
       점 무늬 = 모름(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음).

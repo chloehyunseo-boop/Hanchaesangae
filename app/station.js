@@ -376,13 +376,13 @@ async function main() {
       const row = (color, label) => `<div><span style="display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:middle;background:${color}"></span>${label}</div>`;
       box.innerHTML = `
         <div style="font-weight:bold;margin-bottom:2px;">소음</div>
-        ${row(NOISE_PALETTE.강, "강(65dB↑)")}
-        ${row(NOISE_PALETTE.중, "중(55~65)")}
-        ${row(NOISE_PALETTE.약, "약(45~55)")}
-        <div style="font-weight:bold;margin:6px 0 2px;">배출가스</div>
-        ${row(EXHAUST_PALETTE.강, "강")}
-        ${row(EXHAUST_PALETTE.중, "중")}
-        ${row(EXHAUST_PALETTE.약, "약")}
+        ${row(NOISE_PALETTE.강, "강 65dB↑")}
+        ${row(NOISE_PALETTE.중, "중 55dB↑")}
+        ${row(NOISE_PALETTE.약, "약 45dB↑")}
+        <div style="font-weight:bold;margin:6px 0 2px;">배출가스(NO2)</div>
+        ${row(EXHAUST_PALETTE.강, "강 0.05ppm↑")}
+        ${row(EXHAUST_PALETTE.중, "중 0.01ppm↑")}
+        ${row(EXHAUST_PALETTE.약, "약 0.002ppm↑")}
         ${row(NOISE_PALETTE.uncertain, "모름/불확실")}
       `;
       L.DomEvent.disableClickPropagation(box);
@@ -465,7 +465,7 @@ async function main() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `올팍_예보기록_${hourSlotIso(new Date()).slice(0, 13)}시.csv`;
+      a.download = `올팍_예측기록_${hourSlotIso(new Date()).slice(0, 13)}시.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
