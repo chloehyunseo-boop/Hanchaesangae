@@ -96,6 +96,14 @@ const OUTDOOR_CUTOFF_HHMM = "21:30:00";
  * 이걸 자동으로 "일부음원제외"(일부만 모름)로 표시해요(noise.js stageActiveMinutes, 새로
  * 만든 로직 없음). excludeVenues에 있는 장소는 건너뛰어요(데모 체크박스로 이미 켜둔 장소와
  * 음원이 두 번 겹쳐 들어가지 않게). */
+// 날짜 문자열("YYYY-MM-DD")의 요일(0=일~6=토). engine/events.js의 weekdayOf와 같은 규칙
+// (JS Date.getUTCDay()) — 요일만 적힌 자유문장을 펼친 공연(ev.공연요일)이 그 날짜에 실제로
+// 하는지 확인할 때 써요(11/27, expandWeekdayScheduleToDates와 짝).
+function weekdayOfDateStr(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 export function buildRealEventStageSources(events, siteByName, volumePreset, assumptions, hourIso, excludeVenues = new Set()) {
   const sources = [];
   if (!events?.공연) return sources;
@@ -105,6 +113,9 @@ export function buildRealEventStageSources(events, siteByName, volumePreset, ass
     if (ev.출처 !== "공단일정페이지") continue; // 공단API(과거 기록)는 예보에 안 씀(CLAUDE.md §5)
     if (!ev.기간시작 || !ev.기간끝) continue;
     if (dateStr < ev.기간시작 || dateStr > ev.기간끝) continue; // 이 날짜엔 안 하는 공연
+    // 11/27: 요일만 적힌 원문을 펼친 공연(공연요일)은, 글에 없는 요일이면 "확인된 휴무"예요
+    // (모름이 아니라 아예 이 날짜엔 공연이 없음 — expandWeekdayScheduleToDates 주석 참고).
+    if (Array.isArray(ev.공연요일) && !ev.공연요일.includes(weekdayOfDateStr(dateStr))) continue;
     if (excludeVenues.has(ev.site)) continue;
     const params = venueSourceParams(ev.site, siteByName, volumePreset, assumptions);
     if (!params) continue; // 장소를 모르거나(매칭 실패) site.geojson에 없음 — 지어내지 않음
@@ -116,7 +127,12 @@ export function buildRealEventStageSources(events, siteByName, volumePreset, ass
       sources.push({ ...params, time: { start: null, end: null, 출처: "미확인" } });
       continue;
     }
-    let endMs = startMs + PERFORMANCE_ASSUMED_DURATION_MS;
+    // 11/27: 하루에 공연이 여러 번이면(예: 토 15시·19시) 일자별최종공연시작에 마지막 공연
+    // 시작시각이 따로 있어요 — 가동 시작은 첫 공연(startMs) 기준이지만, 종료 가정은 "마지막
+    // 공연 시작 + 3시간"으로 잡아야 과소평가가 안 돼요.
+    const lastShowStr = ev.일자별최종공연시작?.[dateStr] ?? startTimeStr;
+    const lastShowMs = new Date(`${dateStr}T${lastShowStr}:00+09:00`).getTime();
+    let endMs = (Number.isFinite(lastShowMs) ? lastShowMs : startMs) + PERFORMANCE_ASSUMED_DURATION_MS;
     if (!INDOOR_VENUE_NAMES.has(ev.site)) {
       const cutoffMs = new Date(`${dateStr}T${OUTDOOR_CUTOFF_HHMM}+09:00`).getTime();
       if (Number.isFinite(cutoffMs)) endMs = Math.min(endMs, cutoffMs);
@@ -125,7 +141,7 @@ export function buildRealEventStageSources(events, siteByName, volumePreset, ass
       ...params,
       time: {
         start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(),
-        출처: "공단일정페이지_종료시각가정(3시간 또는 21:30 중 먼저)",
+        출처: "공단일정페이지_종료시각가정(마지막 공연+3시간 또는 21:30 중 먼저)",
       },
     });
   }
@@ -179,9 +195,15 @@ export function listTodaysRealEvents(events, hourIso, excludeVenues = new Set())
     if (ev.출처 !== "공단일정페이지") continue;
     if (!ev.기간시작 || !ev.기간끝) continue;
     if (dateStr < ev.기간시작 || dateStr > ev.기간끝) continue;
+    if (Array.isArray(ev.공연요일) && !ev.공연요일.includes(weekdayOfDateStr(dateStr))) continue; // 확인된 휴무일
     if (excludeVenues.has(ev.site)) continue;
     const startTimeStr = ev.일자별시작?.[dateStr];
-    out.push({ title: ev.title, site: ev.site, startTimeStr: startTimeStr ?? null });
+    out.push({
+      title: ev.title, site: ev.site, startTimeStr: startTimeStr ?? null,
+      // 요일만 적힌 자유문장에서 날짜별로 펼친 시각이면, 원문 자체가 "변동 있음"일 수 있다고
+      // 적어둔 경우가 많아서 화면에 그대로 알려요(지어낸 확정 시각처럼 안 보이게, 11/27).
+      요일추정: Array.isArray(ev.공연요일),
+    });
   }
   return out;
 }

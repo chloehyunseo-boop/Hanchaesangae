@@ -28,6 +28,14 @@ function kstDateStr(hourIso) {
   return fmt.format(new Date(hourIso)); // "YYYY-MM-DD"
 }
 
+// app/shared.js의 weekdayOfDateStr와 같은 규칙(JS Date.getUTCDay(), 0=일~6=토) — 11/27
+// expandWeekdayScheduleToDates(engine/events.js)가 요일만 적힌 자유문장을 펼친 공연(ev.공연요일)이
+// 이 날짜에 실제로 하는지 확인할 때 써요.
+function weekdayOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 /** 공연장별 발전차 위치: 공단이 알려준 위치(assumptions.발전차_위치)가 있으면 그 좌표, 없으면 공연장 좌표. */
 export function generatorPosition(site, feature, assumptions) {
   const p = assumptions?.발전차_위치?.공연장별?.[site];
@@ -67,6 +75,9 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
   for (const ev of events.공연) {
     if (ev.출처 !== "공단일정페이지") continue; // 과거 기록(공단API)은 예보에 안 씀
     if (!ev.기간시작 || !ev.기간끝 || dateStr < ev.기간시작 || dateStr > ev.기간끝) continue;
+    // 11/27: 요일만 적힌 원문을 펼친 공연(공연요일)은, 글에 없는 요일이면 확인된 휴무예요
+    // (app/shared.js buildRealEventStageSources와 같은 규칙 — event_generators_test.mjs가 확인).
+    if (Array.isArray(ev.공연요일) && !ev.공연요일.includes(weekdayOf(dateStr))) continue;
     if (skip.has(`${ev.site}|${dateStr}`) || skipWholeSite.has(ev.site)) continue;
     const count = defaultGeneratorCount(ev.site, assumptions);
     if (count === 0) continue;
@@ -82,11 +93,15 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
     if (!Number.isFinite(startMs)) {
       time = { start: null, end: null, 출처: "미확인" };
     } else {
-      let endMs = startMs + ASSUMED_DURATION_MS;
+      // 11/27: 하루 여러 공연이면(예: 토 15시·19시) 일자별최종공연시작의 마지막 공연 시각
+      // 기준으로 종료를 잡아요(app/shared.js buildRealEventStageSources와 같은 규칙).
+      const lastShowStr = ev.일자별최종공연시작?.[dateStr] ?? startStr;
+      const lastShowMs = new Date(`${dateStr}T${lastShowStr}:00+09:00`).getTime();
+      let endMs = (Number.isFinite(lastShowMs) ? lastShowMs : startMs) + ASSUMED_DURATION_MS;
       if (!indoor) endMs = Math.min(endMs, new Date(`${dateStr}T${OUTDOOR_CUTOFF_HHMM}+09:00`).getTime());
       time = {
         start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(),
-        출처: "공단일정페이지_종료시각가정(3시간 또는 21:30 중 먼저)",
+        출처: "공단일정페이지_종료시각가정(마지막 공연+3시간 또는 21:30 중 먼저)",
       };
     }
     const 대수근거 = assumptions.발전차_기본대수.공연장별?.[ev.site] ? "공단확인값" : "확인된최소";

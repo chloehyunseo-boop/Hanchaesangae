@@ -213,7 +213,7 @@ async function main() {
   function renderAutoEvents(hourIso) {
     const items = listTodaysRealEvents(state.events, hourIso);
     autoEventsEl.innerHTML = items.length
-      ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})</div>`).join("")
+      ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})${e.요일추정 ? " — 공연 시각은 공단 일정 페이지 문장에서 읽은 값이에요(요일별로 바뀔 수 있음)" : ""}</div>`).join("")
       : "<div>지금 자동으로 찾은 실제 공연 일정이 없어요.</div>";
   }
 

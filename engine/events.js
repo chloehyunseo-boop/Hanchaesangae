@@ -288,40 +288,128 @@ export function parseDateRange(text) {
 /**
  * "2026년 11월 27일(금) 오후 7시 2026년 11월 28일(토) 오후 6시 2026년 11월 29일(일) 오후 5시"
  * 같은 요일별 자유문장에서, "YYYY년 M월 D일 (오전|오후) H시(분?)" 패턴만 뽑아 날짜별
- * 시작시각(24시간, "HH:MM")으로 바꿔요(11/26, "공연 일정 → 지도 연결" 1단계). 이 패턴에
- * 안 맞는 부분(예: "수목금 19시 30분"처럼 요일 묶음+시각만 있고 날짜가 없는 표현)은 그냥
- * 건너뛰어요 — 날짜가 명시된 부분만 믿을 수 있어서, 지어내지 않아요(CLAUDE.md 2번).
+ * 시작시각(24시간, "HH:MM")으로 바꿔요(11/26, "공연 일정 → 지도 연결" 1단계). 11/27 보강:
+ * "2026년 11월 27일(금) 8PM"처럼 영문 AM/PM 표기("H(AM|PM)")도 같이 읽어요(올림픽홀 실제
+ * 원문이 이 형식이었어요 — 전엔 "오전/오후"만 읽어서 통째로 "시작시각미확인"으로 빠졌어요).
+ * 이 패턴에 안 맞는 부분(예: "수목금 19시 30분"처럼 요일 묶음+시각만 있고 날짜가 없는 표현)은
+ * `parseWeekdayGroupedTimes()`가 따로 읽어요 — 날짜가 명시된 부분만 믿을 수 있어서, 지어내지
+ * 않아요(CLAUDE.md 2번).
  * @param {string|null} timeText
  * @returns {Record<string,string>} {"YYYY-MM-DD": "HH:MM"} — 못 읽으면 빈 객체.
  */
 export function parseDailyStartTimes(timeText) {
   if (typeof timeText !== "string") return {};
-  const re = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\([^)]*\))?\s*(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
+  const re = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\([^)]*\))?\s*(?:(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?|(\d{1,2})\s*(AM|PM))/gi;
   const out = {};
   for (const m of timeText.matchAll(re)) {
-    const [, y, mo, d, ampm, hRaw, minRaw] = m;
-    let h = Number(hRaw);
-    if (ampm === "오후" && h !== 12) h += 12;
-    if (ampm === "오전" && h === 12) h = 0;
+    const [, y, mo, d, ampmKo, hKoRaw, minRaw, hEnRaw, ampmEn] = m;
+    let h, min;
+    if (ampmKo) {
+      h = Number(hKoRaw);
+      if (ampmKo === "오후" && h !== 12) h += 12;
+      if (ampmKo === "오전" && h === 12) h = 0;
+      min = minRaw ? Number(minRaw) : 0;
+    } else {
+      h = Number(hEnRaw);
+      const pm = ampmEn.toUpperCase() === "PM";
+      if (pm && h !== 12) h += 12;
+      if (!pm && h === 12) h = 0;
+      min = 0;
+    }
     if (h < 0 || h > 23) continue; // 시각이 말이 안 되면(파싱 실수) 그 날짜는 건너뛰어요
-    const min = minRaw ? Number(minRaw) : 0;
     const dateKey = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     out[dateKey] = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
   }
   return out;
 }
 
+const WEEKDAY_CHAR_TO_INDEX = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 }; // JS Date.getUTCDay()와 같은 규칙
+
+/**
+ * "수목금 19시 30분 / 토 15시, 19시 / 일 14시 (일자별 공연 시간 변동 있으며...)" 같은, 날짜
+ * 없이 "요일 묶음 + 시각(복수 가능)"만 적힌 자유문장을 읽어요(11/27, 우리금융아트홀 실제
+ * 원문). 날짜가 아예 없어서 parseDailyStartTimes는 못 읽는 형식이에요 — 요일별로 그날 공연이
+ * 몇 시에 하는지(여러 번이면 전부) 모아서 돌려주고, 글에 언급 안 된 요일(이 예시의 월·화)은
+ * "그 요일엔 공연 안 함"으로 간주해요(하린 11/27 지시) — 지어낸 휴무가 아니라, 공연 주최
+ * 쪽이 적어둔 요일 목록 자체가 "공연하는 날"의 전부라고 보는 거예요.
+ * @param {string|null} timeText
+ * @returns {Record<number,string[]>} {요일(0=일~6=토): ["HH:MM", ...]} — 순서대로(첫 공연부터).
+ */
+export function parseWeekdayGroupedTimes(timeText) {
+  if (typeof timeText !== "string") return {};
+  const groupRe = /([월화수목금토일]{1,3})\s*((?:\d{1,2}시(?:\s*\d{1,2}분)?\s*,?\s*)+)/g;
+  const timeRe = /(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
+  const byWeekday = {};
+  for (const gm of timeText.matchAll(groupRe)) {
+    const days = [...gm[1]].map((ch) => WEEKDAY_CHAR_TO_INDEX[ch]).filter((n) => n !== undefined);
+    if (days.length === 0) continue;
+    const times = [];
+    for (const tm of gm[2].matchAll(timeRe)) {
+      const h = Number(tm[1]);
+      if (h < 0 || h > 23) continue;
+      const min = tm[2] ? Number(tm[2]) : 0;
+      times.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+    }
+    if (times.length === 0) continue;
+    for (const d of days) byWeekday[d] = times;
+  }
+  return byWeekday;
+}
+
+/** [기간시작, 기간끝] 사이 모든 날짜("YYYY-MM-DD")를 하루씩 돌려줘요. 상한(370일)은 날짜가
+ * 깨져서 무한 반복하는 걸 막는 안전장치예요(generateGridPoints의 간격 검사와 같은 원칙). */
+function* eachDateInRange(기간시작, 기간끝) {
+  const startMs = new Date(`${기간시작}T00:00:00Z`).getTime();
+  const endMs = new Date(`${기간끝}T00:00:00Z`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return;
+  const MAX_DAYS = 370;
+  for (let i = 0, t = startMs; t <= endMs && i < MAX_DAYS; i++, t += 86400000) {
+    yield new Date(t).toISOString().slice(0, 10);
+  }
+}
+
+/** 날짜 문자열("YYYY-MM-DD")의 요일(0=일~6=토, JS Date.getUTCDay()와 같은 규칙)을 구해요. */
+function weekdayOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** parseDailyStartTimes가 날짜를 하나도 못 찾았을 때(원문에 날짜가 없고 요일만 있을 때)
+ * parseWeekdayGroupedTimes + [기간시작,기간끝]로 날짜별 시작시각을 채워요(11/27). 요일에
+ * 공연이 여러 번 있으면(토 15시,19시) 첫 공연을 일자별시작에, 마지막 공연을
+ * 일자별최종공연시작에 넣어요(이름은 "마지막 공연까지 끝나야 진짜 종료" 계산용 — 종료 시각
+ * 가정은 그 공연 호출 쪽에서 "마지막 공연 시작 + 3시간"으로 써요). 글에 없는 요일은
+ * 공연요일 배열에서 빠져서 "그날은 공연 안 함"으로 구분돼요(상시가동으로 안 보임).
+ * @returns {{일자별시작:Record<string,string>, 일자별최종공연시작:Record<string,string>, 공연요일:number[]|null}}
+ */
+export function expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝) {
+  const byWeekday = parseWeekdayGroupedTimes(timeText);
+  const weekdays = Object.keys(byWeekday).map(Number);
+  if (weekdays.length === 0 || !기간시작 || !기간끝) return { 일자별시작: {}, 일자별최종공연시작: {}, 공연요일: null };
+  const 일자별시작 = {};
+  const 일자별최종공연시작 = {};
+  for (const dateStr of eachDateInRange(기간시작, 기간끝)) {
+    const times = byWeekday[weekdayOf(dateStr)];
+    if (!times) continue; // 글에 언급 안 된 요일 — 공연 안 함
+    일자별시작[dateStr] = times[0];
+    if (times.length > 1) 일자별최종공연시작[dateStr] = times[times.length - 1];
+  }
+  return { 일자별시작, 일자별최종공연시작, 공연요일: weekdays.sort((a, b) => a - b) };
+}
+
 /**
  * 일정안내 페이지 HTML → EventRecord[]로 바꿔요(11/25 실제 페이지로 구조 확인). 맨 위
  * "앞으로 있을 공연" 영역(id="rowSpace")만 읽고, 그 아래 "지난 공연"(class="last") 구간은
  * 안 읽어요. 공연마다 요일별 시간이 다르게 적혀 있어서(예: "수목금 19시30분/토 15시,19시")
- * 그 전부를 안전하게 구조화하긴 어려워요 — 날짜 범위(기간시작·기간끝)만 뽑고, 시간
+ * 그 전부를 안전하게 구조화하긴 어려워요 — 날짜가 박힌 형식이면 일자별시작을 바로 채우고,
+ * 요일만 적힌 자유문장이면(11/27) expandWeekdayScheduleToDates로 날짜 범위에 펼쳐요. 시간
  * 원문은 그대로(`원본시간텍스트`) 남겨서 지어내지 않아요.
  * ⚠️ <head>의 <script> 안에도 똑같은 HTML 조각(AJAX 템플릿 문자열)이 들어있어서, 반드시
  * "rowSpace" 섹션 범위 안에서만 찾아야 해요 — 전체 페이지에서 찾으면 스크립트 템플릿까지
  * 걸려서 완전히 엉뚱한 값이 나와요(11/25 실제로 겪은 버그, 테스트로 남겨둠).
  * @returns {{title:string, site:string|null, 날짜:null, 기간시작:string|null, 기간끝:string|null,
- *   시작:null, 소요분:null, 일자별시작:Record<string,string>, 출처:"공단일정페이지", flags:string[],
+ *   시작:null, 소요분:null, 일자별시작:Record<string,string>, 일자별최종공연시작:Record<string,string>,
+ *   공연요일:number[]|null, 출처:"공단일정페이지", flags:string[],
  *   원본장소텍스트:string|null, 원본시간텍스트:string|null}[]}
  */
 export function parseUpcomingScheduleHtml(html) {
@@ -340,10 +428,21 @@ export function parseUpcomingScheduleHtml(html) {
     const { site, flags } = matchSite(spatial);
     const { 기간시작, 기간끝 } = parseDateRange(dateText);
     if (!기간시작) flags.push("날짜미확인");
-    const 일자별시작 = parseDailyStartTimes(timeText);
+    let 일자별시작 = parseDailyStartTimes(timeText);
+    let 일자별최종공연시작 = {};
+    let 공연요일 = null;
+    // 11/27: 날짜가 박힌 형식("2026년 11월 27일(금) 8PM")으로 하나도 못 읽었으면, 요일만
+    // 적힌 자유문장("수목금 19시 30분 / 토 15시, 19시 / 일 14시")으로 다시 시도해요.
+    if (Object.keys(일자별시작).length === 0) {
+      const expanded = expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝);
+      일자별시작 = expanded.일자별시작;
+      일자별최종공연시작 = expanded.일자별최종공연시작;
+      공연요일 = expanded.공연요일;
+    }
     if (Object.keys(일자별시작).length === 0) flags.push("시작시각미확인");
     out.push({
       title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null, 일자별시작,
+      일자별최종공연시작, 공연요일,
       출처: "공단일정페이지", flags, 원본장소텍스트: spatial, 원본시간텍스트: timeText || null,
     });
   }
