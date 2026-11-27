@@ -1,3 +1,6 @@
 .DS_Store
 node_modules/
 *.log
+
+# 공단이 메일로 준 원자료(공개 저장소에 올리지 않음, 하린 11/27)
+data/private/
