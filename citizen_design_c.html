@@ -70,23 +70,27 @@
     /* 예측 시각 */
     .time-box { padding: 12px 20px 10px; background: var(--tint); }
     .tb-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-    .h2 { margin: 0; font-size: 13px; font-weight: 700; color: var(--sub); }
-    #slider-label { font-size: 22px; font-weight: 700; color: var(--k-blue); letter-spacing: -.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--sub); }
+    #slider-label { font-size: 18px; font-weight: 700; color: var(--k-blue); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
     #slider-warning { font-size: 12px; color: var(--sub); }
     #slider-warning:empty, #band-note:empty { display: none; }
     .tb-head .spacer { flex: 1; }
     #band-note { font-size: 12px; color: var(--sub); }
-    #band-note i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: #B8C3CF; vertical-align: middle; margin-right: 6px; }
-    .tb-track { margin-top: 8px; }
-    #slider-band { display: flex; height: 4px; margin: 0 9px 3px; border-radius: 2px; overflow: hidden; }
+    #band-note i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: #A9B4C0; vertical-align: middle; margin-right: 6px; }
+    /* 막대: 바탕선 → 채워진 부분(연한 하늘) → 회색 구간(막대 위에 얹음) → 손잡이 순으로 겹침 */
+    .tb-track { margin-top: 8px; position: relative; height: 18px; --fill: #8CCBE6; }
+    .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; }
+    .tb-track .rail { background: #E1E6EC; }
+    .tb-track .fill { right: auto; width: var(--p, 0%); background: var(--fill); }
+    #slider-band { display: flex; overflow: hidden; pointer-events: none; }
     #slider-band .slider-seg { flex: 1; }
-    #slider-band .slider-seg.impossible { background: #B8C3CF; }
-    #time-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
-    #time-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: #D3E3F1; }
-    #time-slider::-moz-range-track { height: 6px; border-radius: 3px; background: #D3E3F1; }
-    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
-    #time-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); }
-    .ticks { position: relative; height: 16px; margin: 4px 9px 0; font-size: 11.5px; color: var(--sub); }
+    #slider-band .slider-seg.impossible { background: #A9B4C0; }
+    #time-slider { position: relative; z-index: 2; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+    #time-slider::-webkit-slider-runnable-track { height: 18px; background: transparent; }
+    #time-slider::-moz-range-track { height: 18px; background: transparent; }
+    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; background: var(--fill); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(10,42,112,.18); }
+    #time-slider::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--fill); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(10,42,112,.18); }
+    .ticks { position: relative; height: 16px; margin: 4px 8px 0; font-size: 11.5px; color: var(--sub); }
     .ticks span { position: absolute; top: 0; white-space: nowrap; }
 
     /* 오른쪽 패널 */
@@ -195,10 +199,12 @@
           <div id="band-note"></div>
         </div>
         <div class="tb-track">
+          <div class="rail"></div>
+          <div class="fill"></div>
           <div id="slider-band"></div>
           <input type="range" id="time-slider" aria-label="예측 시각 선택" />
-          <div class="ticks" id="slider-ticks"></div>
         </div>
+        <div class="ticks" id="slider-ticks"></div>
       </section>
     </div>
 
@@ -254,7 +260,7 @@
             <h3>지도 무늬</h3>
             <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 일부 음원 제외 또는 발전차 근거리</span></div>
             <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">계산 불가. 약풍 등이며 안전하다는 뜻은 아님</span></div>
-            <div class="ir"><span class="k"><i style="background:#B8C3CF;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대 위 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
+            <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
           </div>
         </div>
       </section>
@@ -271,6 +277,20 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen_design.js?v=13"></script>
+  <script type="module" src="./app/citizen_design.js?v=14"></script>
+  <script>
+    // 시간 막대의 채워진 부분(연한 하늘색) 폭을 손잡이 위치에 맞춰요
+    (function () {
+      const s = document.getElementById("time-slider");
+      const track = s.parentElement;
+      const upd = () => {
+        const max = Number(s.max) || 1, v = Number(s.value) || 0;
+        track.style.setProperty("--p", `calc(${(v / max) * 100}% - ${(v / max) * 16}px + 8px)`);
+      };
+      s.addEventListener("input", upd); s.addEventListener("change", upd);
+      new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["max", "value"] });
+      upd();
+    })();
+  </script>
 </body>
 </html>
