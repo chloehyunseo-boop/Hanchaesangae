@@ -76,21 +76,21 @@
     #slider-warning:empty, #band-note:empty { display: none; }
     .tb-head .spacer { flex: 1; }
     #band-note { font-size: 12px; color: var(--sub); }
-    #band-note i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: #A9B4C0; vertical-align: middle; margin-right: 6px; }
+    #band-note i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; background: #A9B4C0; vertical-align: middle; margin-right: 6px; }
     /* 막대: 바탕선 → 채워진 부분(연한 하늘) → 회색 구간(막대 위에 얹음) → 손잡이 순으로 겹침 */
-    .tb-track { margin-top: 8px; position: relative; height: 18px; --fill: #8CCBE6; }
-    .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; }
-    .tb-track .rail { background: #E1E6EC; }
+    .tb-track { margin-top: 8px; position: relative; height: 18px; --fill: #A9D6EC; }
+    .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 6px; height: 6px; border-radius: 3px; }
+    .tb-track .rail { background: #DCE6EF; }
     .tb-track .fill { right: auto; width: var(--p, 0%); background: var(--fill); }
-    #slider-band { display: flex; overflow: hidden; pointer-events: none; left: 8px; right: 8px; border-radius: 0; } /* 손잡이 중심이 움직이는 범위와 맞춤 */
+    #slider-band { display: flex; overflow: hidden; pointer-events: none; left: 9px; right: 9px; border-radius: 0; } /* 손잡이 중심이 움직이는 범위와 맞춤 */
     #slider-band .slider-seg { flex: 1; }
     #slider-band .slider-seg.impossible { background: #A9B4C0; }
     #time-slider { position: relative; z-index: 2; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
     #time-slider::-webkit-slider-runnable-track { height: 18px; background: transparent; }
     #time-slider::-moz-range-track { height: 18px; background: transparent; }
-    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; background: var(--fill); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(10,42,112,.18); }
-    #time-slider::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--fill); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(10,42,112,.18); }
-    .ticks { position: relative; height: 16px; margin: 4px 8px 0; font-size: 11.5px; color: var(--sub); }
+    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: 0; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+    #time-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); }
+    .ticks { position: relative; height: 16px; margin: 4px 9px 0; font-size: 11.5px; color: var(--sub); }
     .ticks span { position: absolute; top: 0; white-space: nowrap; }
 
     /* 오른쪽 패널 */
@@ -209,8 +209,8 @@
     </div>
 
     <aside>
-      <section class="box" aria-label="범례">
-        <h2 class="sec-title">범례</h2>
+      <section class="box" aria-label="지도 표시">
+        <h2 class="sec-title">지도 표시</h2>
         <div class="panel-sec">
           <label class="layer">
             <span class="layer-head"><input type="checkbox" id="toggle-noise" checked />소음 <small>dB(A)</small></span>
@@ -285,7 +285,7 @@
       const track = s.parentElement;
       const upd = () => {
         const max = Number(s.max) || 1, v = Number(s.value) || 0;
-        track.style.setProperty("--p", `calc(${(v / max) * 100}% - ${(v / max) * 16}px + 8px)`);
+        track.style.setProperty("--p", `calc(${(v / max) * 100}% - ${(v / max) * 18}px + 9px)`);
       };
       s.addEventListener("input", upd); s.addEventListener("change", upd);
       new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["max", "value"] });
