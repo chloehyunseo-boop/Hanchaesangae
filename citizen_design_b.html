@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>올팍 바람지도 — 시안 B</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <!-- 시안 B(하린 11/27): 지도를 화면 전체에 깔고 그 위에 패널을 띄우는 앱형 레이아웃.
+       citizen_design.html(시안 A)과 같은 app/citizen_design.js를 그대로 써요(요소 id 동일). 제출 화면 아님. -->
+  <style>
+    :root {
+      --k-blue: #0A2A70;   /* 한국체육산업개발 CI Blue */
+      --k-sky: #1B99C4;    /* CI Sky Blue */
+      --k-orange: #FF7F00; /* CI Orange */
+      --ink: #111A2B;
+      --sub: #5E6B7D;
+      --line: #E4E8EE;
+      --soft: #F3F6F9;
+      --r: 14px;
+      --shadow: 0 1px 2px rgba(17,26,43,.06), 0 6px 20px rgba(17,26,43,.08);
+      --side: 344px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: #E9EDF2; -webkit-font-smoothing: antialiased; overflow: hidden; }
+    button, input { font: inherit; color: inherit; }
+    :focus-visible { outline: 2px solid var(--k-sky); outline-offset: 2px; }
+    .skip { position: absolute; left: -9999px; }
+    .skip:focus { left: 16px; top: 16px; z-index: 3000; background: #fff; padding: 8px 12px; border-radius: 8px; }
+
+    /* 지도: 화면 전체 */
+    #map { position: fixed; inset: 0; z-index: 0; background: #E9EDF2; }
+    .leaflet-top.leaflet-left { top: 92px; left: 6px; }
+    .leaflet-bottom.leaflet-left { bottom: 128px; left: 6px; }
+    .leaflet-bottom.leaflet-right { right: calc(var(--side) + 22px); }
+    .leaflet-control-zoom { border: 0 !important; box-shadow: var(--shadow) !important; border-radius: 10px !important; overflow: hidden; }
+    .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; color: var(--ink) !important; border-color: var(--line) !important; }
+
+    .float { position: fixed; z-index: 1000; background: #fff; border-radius: var(--r); box-shadow: var(--shadow); }
+
+    /* 왼쪽 위: 서비스 이름 */
+    .brand { top: 16px; left: 16px; display: flex; align-items: center; gap: 12px; padding: 12px 18px 12px 14px; }
+    .brand svg { width: 34px; height: 34px; flex: none; }
+    .brand b { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.03em; color: var(--k-blue); }
+    .brand span { display: block; font-size: 12px; color: var(--sub); margin-top: 1px; }
+    .draft { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 1000; background: #FFF1E0; color: #8A4B00; font-size: 11px; padding: 4px 10px; border-radius: 999px; }
+
+    #layer-warning { position: fixed; z-index: 1000; top: 92px; left: 64px; max-width: 420px; background: var(--ink); color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 10px; }
+    #layer-warning:empty { display: none; }
+
+    /* 아래: 시간 */
+    .dock { left: 16px; right: calc(var(--side) + 32px); bottom: 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; padding: 14px 22px 12px 20px; }
+    .when small { display: block; font-size: 12px; color: var(--sub); font-weight: 600; }
+    #slider-label { font-size: 28px; font-weight: 800; letter-spacing: -.03em; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .now-btn { margin-top: 4px; border: 0; background: var(--soft); color: var(--k-blue); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+    .now-btn:hover { background: #E6EEF7; }
+    .now-btn i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--k-orange); margin-right: 5px; vertical-align: 1px; }
+    #time-slider { width: 100%; height: 28px; margin: 0; accent-color: var(--k-blue); cursor: pointer; }
+    #slider-band { display: flex; height: 3px; border-radius: 2px; overflow: hidden; }
+    #slider-band .slider-seg { flex: 1; }
+    #slider-band .slider-seg.impossible { background: #A3AEBB; }
+    .ticks { position: relative; height: 16px; margin-top: 4px; font-size: 12px; color: var(--sub); font-weight: 600; }
+    .ticks span { position: absolute; top: 0; white-space: nowrap; }
+    #band-note, #slider-warning { font-size: 12px; color: var(--sub); margin-top: 2px; }
+    #band-note:empty, #slider-warning:empty { display: none; }
+    #band-note i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; background: #A3AEBB; vertical-align: middle; margin-right: 5px; }
+
+    /* 오른쪽: 레이어·범례·정보 */
+    .side { top: 16px; right: 16px; bottom: 16px; width: var(--side); display: flex; flex-direction: column; overflow: hidden; }
+    .side-top { padding: 18px 18px 16px; border-bottom: 1px solid var(--line); }
+    .side h2 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: var(--sub); }
+
+    .layer { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .layer + .layer { margin-top: 8px; }
+    .layer:hover { border-color: #CDD6E1; }
+    .layer:has(input:checked) { border-color: var(--k-blue); background: #F7F9FD; }
+    .layer input { position: absolute; opacity: 0; pointer-events: none; }
+    .layer-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+    .layer-head small { font-weight: 500; color: var(--sub); font-size: 12px; }
+    .check { margin-left: auto; width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #C5CED9; display: grid; place-items: center; }
+    .layer:has(input:checked) .check { background: var(--k-blue); border-color: var(--k-blue); }
+    .layer:has(input:checked) .check::after { content: ""; width: 9px; height: 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px, -1px); }
+    .layer:has(input:focus-visible) { outline: 2px solid var(--k-sky); outline-offset: 2px; }
+    .scale { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 10px; }
+    .scale span { height: 8px; border-radius: 3px; }
+    .scale-lab { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 4px; font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+    .scale-lab b { color: var(--ink); font-weight: 700; margin-right: 3px; }
+    .layer:not(:has(input:checked)) .scale, .layer:not(:has(input:checked)) .scale-lab { opacity: .35; }
+    .marks { display: flex; gap: 14px; margin-top: 12px; font-size: 12px; color: var(--sub); }
+    .marks i { display: inline-block; width: 16px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+    .hatch { background: repeating-linear-gradient(45deg, #7E8A98 0 1.5px, transparent 1.5px 4.5px); border: 1px solid #C3CBD5; }
+    .dots { background-image: radial-gradient(#7E8A98 0.9px, transparent 1.1px); background-size: 4px 4px; border: 1px solid #C3CBD5; }
+
+    /* 탭 */
+    .tab-bar { display: flex; gap: 4px; padding: 12px 18px 0; }
+    .tab-btn { border: 0; background: none; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--sub); cursor: pointer; }
+    .tab-btn:hover { background: var(--soft); }
+    .tab-btn.active { background: var(--k-blue); color: #fff; }
+    .tab-scroll { flex: 1; overflow: auto; }
+    .tab-panel { padding: 10px 18px 18px; font-size: 13.5px; }
+    .tab-panel[hidden] { display: none; }
+    #forecast-sentences div, #auto-events div { padding: 10px 0; border-bottom: 1px solid var(--line); }
+    #forecast-sentences div:last-child, #auto-events div:last-child { border-bottom: 0; }
+    .info dl { margin: 0; display: grid; grid-template-columns: 52px 1fr; gap: 7px 12px; }
+    .info dt { color: var(--sub); font-weight: 600; }
+    .info dd { margin: 0; }
+    .info h3 { margin: 16px 0 6px; font-size: 13px; }
+    .info table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .info th, .info td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+    .info th { width: 2em; }
+    .side-foot { padding: 10px 18px 12px; border-top: 1px solid var(--line); font-size: 11px; color: var(--sub); }
+
+    /* 휴대폰: 지도 위, 나머지 아래로 쌓기 */
+    @media (max-width: 860px) {
+      body { overflow: auto; background: #fff; }
+      #map { position: relative; height: 62vh; }
+      .float { position: static; border-radius: 0; box-shadow: none; }
+      .brand { position: sticky; top: 0; z-index: 1001; border-bottom: 1px solid var(--line); }
+      .brand span { display: none; }
+      .draft { top: auto; bottom: 8px; }
+      #layer-warning { position: absolute; top: 76px; left: 12px; right: 12px; }
+      .leaflet-top.leaflet-left { top: 8px; }
+      .leaflet-bottom.leaflet-left { bottom: 8px; }
+      .leaflet-bottom.leaflet-right { right: 0; }
+      .dock { grid-template-columns: 1fr; gap: 10px; border-bottom: 1px solid var(--line); }
+      .side { width: auto; }
+      .tab-btn { min-height: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#time-slider">예측 시각으로 바로가기</a>
+  <div class="draft">시안 B · 제출 화면 아님</div>
+
+  <div id="map" role="region" aria-label="확산 지도" data-fit-pad="80,370,130,20"></div>
+  <div id="layer-warning"></div>
+
+  <header class="float brand">
+    <svg viewBox="0 0 32 32" fill="none" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 10h14a4 4 0 1 0-4-4" stroke="#0A2A70" />
+      <path d="M4 16h20a4 4 0 1 1-4 4" stroke="#1B99C4" />
+      <path d="M4 22h9" stroke="#FF7F00" />
+    </svg>
+    <div>
+      <b>올팍 바람지도</b>
+      <span>올림픽공원 공연 소음·발전차 배출가스 확산 예측</span>
+    </div>
+  </header>
+
+  <section class="float dock" aria-label="예측 시각">
+    <div class="when">
+      <small>예측 시각</small>
+      <div id="slider-label"></div>
+      <button type="button" class="now-btn" id="now-btn"><i></i>지금</button>
+    </div>
+    <div>
+      <input type="range" id="time-slider" aria-label="예측 시각 선택" />
+      <div id="slider-band"></div>
+      <div class="ticks" id="slider-ticks"></div>
+      <div id="band-note"></div>
+      <div id="slider-warning"></div>
+    </div>
+  </section>
+
+  <aside class="float side">
+    <div class="side-top">
+      <h2>지도 레이어</h2>
+      <label class="layer">
+        <input type="checkbox" id="toggle-noise" checked />
+        <span class="layer-head">소음 <small>dB(A)</small><span class="check"></span></span>
+        <span class="scale"><span style="background:rgba(253,216,53,0.75)"></span><span style="background:rgba(251,140,0,0.75)"></span><span style="background:rgba(198,40,40,0.8)"></span></span>
+        <span class="scale-lab"><span><b>약</b>45+</span><span><b>중</b>55+</span><span><b>강</b>65+</span></span>
+      </label>
+      <label class="layer">
+        <input type="checkbox" id="toggle-exhaust" checked />
+        <span class="layer-head">배출가스 <small>NO₂ ppm</small><span class="check"></span></span>
+        <span class="scale"><span style="background:rgba(206,147,216,0.75)"></span><span style="background:rgba(171,71,188,0.75)"></span><span style="background:rgba(106,27,154,0.8)"></span></span>
+        <span class="scale-lab"><span><b>약</b>0.002+</span><span><b>중</b>0.01+</span><span><b>강</b>0.05+</span></span>
+      </label>
+      <div class="marks"><span><i class="hatch"></i>등급 보류</span><span><i class="dots"></i>계산 불가</span></div>
+    </div>
+
+    <div class="tab-bar" role="tablist">
+      <button type="button" class="tab-btn" data-tab="forecast">요약</button>
+      <button type="button" class="tab-btn" data-tab="events">공연 일정</button>
+      <button type="button" class="tab-btn" data-tab="info">안내</button>
+    </div>
+    <div class="tab-scroll">
+      <div class="tab-panel" data-tab="forecast"><div id="forecast-sentences"></div></div>
+      <div class="tab-panel" data-tab="events"><div id="auto-events"></div></div>
+      <div class="tab-panel info" data-tab="info">
+        <dl>
+          <dt>기상</dt><dd>기상청 단기예보</dd>
+          <dt>공연</dt><dd>올림픽공원 공연 일정 자동 수집, 종료 시각 가정(3시간, 옥외 21:30)</dd>
+          <dt>음량</dt><dd>가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</dd>
+          <dt>발전차</dt><dd id="generator-count-note"></dd>
+          <dt>계산</dt><dd>소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</dd>
+        </dl>
+        <h3>단계의 의미</h3>
+        <table>
+          <tr><th>강</th><td>소음: 공단 옥외 공연 소음 기준(65 dB) 이상<br />배출가스: 대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</td></tr>
+          <tr><th>중</th><td>소음: 주거지역 낮 소음 환경기준(55 dB) 이상<br />배출가스: 대기환경기준의 10% 이상 50% 미만</td></tr>
+          <tr><th>약</th><td>소음: 주거지역 밤 소음 환경기준(45 dB) 이상<br />배출가스: 대기환경기준의 2% 이상 10% 미만</td></tr>
+        </table>
+        <h3>무늬</h3>
+        <dl>
+          <dt>빗금</dt><dd>등급 보류. 일부 음원 제외 또는 발전차 근거리</dd>
+          <dt>점무늬</dt><dd>계산 불가. 약풍 등(안전하다는 뜻 아님)</dd>
+          <dt>회색 막대</dt><dd>시간 막대 아래. 약풍으로 배출가스 계산 불가</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="side-foot">공연·발전차 기여분만 계산 · 기준 초과 판정 아님<br />자료 기상청 · 한국체육산업개발 · © OpenStreetMap, OpenFreeMap<br />2026 한국체육산업개발 공공데이터 활용 경진대회 출품작</div>
+  </aside>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
+  <script type="module" src="./app/citizen_design.js?v=11"></script>
+  <script>
+    // "지금" 버튼: 시간 막대를 처음(지금)으로 되돌려요
+    document.getElementById("now-btn").addEventListener("click", () => {
+      const s = document.getElementById("time-slider");
+      s.value = "0";
+      s.dispatchEvent(new Event("input"));
+      s.dispatchEvent(new Event("change"));
+    });
+  </script>
+</body>
+</html>

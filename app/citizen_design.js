@@ -151,7 +151,10 @@ async function main() {
   // 디자인 사본(11/27): 범례는 오른쪽 패널(html)로 옮겨서 지도 위 상자는 없앰.
   // 지도는 공원과 주요 장소 8곳이 한눈에 들어오게 맞춰요(양옆 여백 최소).
   const pl = getPlaces();
-  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false });
+  // 시안 B처럼 지도 위에 패널이 떠 있으면 #map의 data-fit-pad="위,오른쪽,아래,왼쪽"(px)만큼 비워 두고 맞춰요(넓은 화면만).
+  const padAttr = document.getElementById("map").dataset.fitPad;
+  const [pt, pr, pb, plft] = padAttr && window.innerWidth > 860 ? padAttr.split(",").map(Number) : [0, 0, 0, 0];
+  if (pl.length) map.fitBounds(L.latLngBounds(pl.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false, paddingTopLeft: [plft, pt], paddingBottomRight: [pr, pb] });
 
   let gpsMarker = null;
   let gpsAccuracyCircle = null;
