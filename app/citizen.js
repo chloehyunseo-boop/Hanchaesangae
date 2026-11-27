@@ -273,7 +273,7 @@ async function main() {
   const sentencesEl = document.getElementById("forecast-sentences");
   function refreshForecastSentences() {
     const series = getPlaceSeries();
-    const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)) });
+    const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
     sentencesEl.innerHTML = lines.length
       ? lines.map((l, i) => `<div>${i + 1}. ${l}</div>`).join("")
       : "<div>주요 장소 8곳에 '약' 이상으로 예보된 소음·배출가스가 없어요.</div>";

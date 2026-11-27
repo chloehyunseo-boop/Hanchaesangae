@@ -138,7 +138,7 @@ const josaRo = (word) => {
  *   series는 시각 순서대로(1시간 간격). now는 "오늘/내일" 표기 기준 시각(ISO).
  * @returns {string[]}
  */
-export function buildForecastSentences({ series, now, maxLines = MAX_LINES }) {
+export function buildForecastSentences({ series, now, maxLines = MAX_LINES, placeViewAvailable = true }) {
   if (!Array.isArray(series) || series.length === 0) return ["예보 자료가 아직 없어요."];
   const sorted = [...series].filter((s) => kstParts(s.hour)).sort((a, b) => Date.parse(a.hour) - Date.parse(b.hour));
 
@@ -220,7 +220,9 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES }) {
   lines.sort((a, b) => b.rank - a.rank || a.start - b.start);
   const out = lines.slice(0, maxLines).map((l) => `${l.text}.`.replace(/\)\.$/, ").").replace(/요\.$/, "요."));
   if (lines.length > maxLines) {
-    out[maxLines - 1] = `그 밖에 ${lines.length - maxLines + 1}건은 지도와 장소별 보기에 있어요.`;
+    out[maxLines - 1] = placeViewAvailable
+      ? `그 밖에 ${lines.length - maxLines + 1}건은 지도와 장소별 보기에 있어요.`
+      : `그 밖에 ${lines.length - maxLines + 1}건은 지도에 있어요.`;
   }
   return out;
 }
