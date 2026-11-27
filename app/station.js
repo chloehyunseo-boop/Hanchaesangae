@@ -19,7 +19,7 @@ import {
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildManualEventStageSources, buildCitizenGeneratorSources,
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage,
-  buildGeneratorSourcesFromTruckRecords, localInputToIso,
+  buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
 
 const NUM_HOURS = 72;
@@ -212,9 +212,17 @@ function renderTruckTable(onChange) {
 function renderAutoEvents(hourIso) {
   const el = document.getElementById("auto-events");
   const items = listTodaysRealEvents(state.events, hourIso);
-  el.innerHTML = items.length
-    ? items.map((e) => `<div>${e.site} — ${e.title} (${e.startTimeStr ? e.startTimeStr + " 시작" : "그날 시작 시각 모름"})${e.요일추정 ? " — 공연 시각은 공단 일정 페이지 문장에서 읽은 값이에요(요일별로 바뀔 수 있음)" : ""}</div>`).join("")
-    : "<div>지금 자동으로 찾은 실제 공연 일정이 없어요.</div>";
+  if (!items.length) {
+    el.innerHTML = "<p>지금 자동으로 찾은 실제 공연 일정이 없어요.</p>";
+    return;
+  }
+  const rows = items.map((e) => `<tr>
+    <td>${e.site}</td>
+    <td>${e.title}</td>
+    <td>${e.startTimeStr ? e.startTimeStr + " 시작" : "모름"}</td>
+    <td>${e.요일추정 ? "요일별 문장에서 읽음(바뀔 수 있음)" : ""}</td>
+  </tr>`).join("");
+  el.innerHTML = `<table><thead><tr><th>공연장</th><th>공연명</th><th>시작</th><th>비고</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderManualEventsTable(onChange) {
@@ -290,26 +298,26 @@ function renderImpactedLessons(lessons, date, cells) {
   const el = document.getElementById("impacted-lessons");
   const list = lessons?.강좌 ?? [];
   if (list.length === 0) {
-    el.textContent = "아직 강좌 자료가 없어요(수영장·테니스장 강좌정보 수집 전, data/lessons.json이 빈 자리예요).";
+    el.innerHTML = "<p>아직 강좌 자료가 없어요(수영장·테니스장 강좌정보 수집 전, data/lessons.json이 빈 자리예요).</p>";
     return;
   }
   const running = lessonsAtHour(list, date);
   if (running.length === 0) {
-    el.textContent = "이 시각엔 진행 중인 강좌가 없어요.";
+    el.innerHTML = "<p>이 시각엔 진행 중인 강좌가 없어요.</p>";
     return;
   }
-  const lines = running.map((l) => {
+  const rows = running.map((l) => {
     const feature = state.siteByName.get(l.site);
-    if (!feature) return `${l.name}(${l.site}) — 위치 자료 없음`;
+    if (!feature) return `<tr><td>${l.name}</td><td>${l.site}</td><td colspan="2">위치 자료 없음</td></tr>`;
     const [lon, lat] = feature.geometry.coordinates;
     const near = nearestPlace(DEFAULT_PLACE_NAMES.map((n) => ({ name: n, ...pt(n) })).filter((p) => p.lat), lat, lon, 9999);
     const key = near?.name ?? null;
     const c = key ? cells?.[key] : null;
     const noise = placeCellState(c?.noise);
     const exhaust = placeCellState(c?.exhaust);
-    return `${l.name}(${l.site}) — 소음: ${noise.text} / 배출가스: ${exhaust.text}`;
-  });
-  el.innerHTML = lines.map((s) => `<div>${s}</div>`).join("");
+    return `<tr><td>${l.name}</td><td>${l.site}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
+  }).join("");
+  el.innerHTML = `<table><thead><tr><th>강좌명</th><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function buildForecastCsv() {
@@ -342,6 +350,7 @@ async function main() {
   state.concaweData = concaweData;
   state.lessons = lessons;
   state.events = events;
+  initTabs({ defaultTab: "events" });
 
   const genNote = document.getElementById("generator-count-note");
   const genNoteText = state.assumptions?.발전차_기본대수?.화면_문구;

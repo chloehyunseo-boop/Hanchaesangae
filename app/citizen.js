@@ -16,7 +16,7 @@ import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
-  allCellsUnknown, uniformUnknownMessage,
+  allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
 
 const NUM_HOURS = 72;
@@ -127,6 +127,7 @@ function getPlaceSeries() {
 
 async function main() {
   await loadData();
+  initTabs({ defaultTab: "events" });
 
   // 11/27 하린 지시: 발전차 대수를 가정값으로 자동 채운다는 걸 화면에 명시
   const genNote = document.getElementById("generator-count-note");

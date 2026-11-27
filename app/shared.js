@@ -579,3 +579,18 @@ export function createGridWorker() {
     });
   };
 }
+
+// 기상청 레이더 화면처럼 탭으로 나눠서 한 번에 보이는 글자를 줄여요(11/27).
+// defaultTab을 안 주면 첫 번째 탭이 기본으로 열려요. onShow(tab)은 탭을 눌러 열 때마다 호출돼요
+// (지도가 들어있는 탭이면 L.Map#invalidateSize()를 그 안에서 불러 크기를 다시 맞춰요).
+export function initTabs({ defaultTab, onShow } = {}) {
+  const buttons = [...document.querySelectorAll(".tab-btn")];
+  const panels = [...document.querySelectorAll(".tab-panel")];
+  function show(tab) {
+    for (const b of buttons) b.classList.toggle("active", b.dataset.tab === tab);
+    for (const p of panels) p.hidden = p.dataset.tab !== tab;
+    onShow?.(tab);
+  }
+  for (const b of buttons) b.addEventListener("click", () => show(b.dataset.tab));
+  show(defaultTab ?? buttons[0]?.dataset.tab);
+}
