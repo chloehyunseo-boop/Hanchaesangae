@@ -259,7 +259,7 @@ async function main() {
     sliderBandEl.innerHTML = segs.join("");
     // 디자인 사본: 회색 칸이 있을 때만 무슨 뜻인지 한 줄 표시
     const noteEl = document.getElementById("band-note");
-    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍 · 배출가스 계산 불가 시간" : "";
+    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍 · 배출가스 계산 불가" : "";
   }
 
   const sentencesEl = document.getElementById("forecast-sentences");

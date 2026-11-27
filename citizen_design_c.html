@@ -68,18 +68,26 @@
     .leaflet-control-scale-line { border-color: var(--sub); color: var(--text); background: rgba(255,255,255,.85); }
 
     /* 예측 시각 */
-    .time-box { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 24px; align-items: center; padding: 10px 20px 8px; background: var(--tint); }
-    .h2 { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: var(--sub); }
-    #slider-label { font-size: 24px; font-weight: 700; color: var(--k-blue); letter-spacing: -.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    #time-slider { width: 100%; margin: 0; accent-color: var(--k-blue); height: 24px; cursor: pointer; }
-    #slider-band { display: flex; height: 3px; }
+    .time-box { padding: 12px 20px 10px; background: var(--tint); }
+    .tb-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .h2 { margin: 0; font-size: 13px; font-weight: 700; color: var(--sub); }
+    #slider-label { font-size: 22px; font-weight: 700; color: var(--k-blue); letter-spacing: -.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #slider-warning { font-size: 12px; color: var(--sub); }
+    #slider-warning:empty, #band-note:empty { display: none; }
+    .tb-head .spacer { flex: 1; }
+    #band-note { font-size: 12px; color: var(--sub); }
+    #band-note i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: #B8C3CF; vertical-align: middle; margin-right: 6px; }
+    .tb-track { margin-top: 8px; }
+    #slider-band { display: flex; height: 4px; margin: 0 9px 3px; border-radius: 2px; overflow: hidden; }
     #slider-band .slider-seg { flex: 1; }
-    #slider-band .slider-seg.impossible { background: #9AA5B1; }
-    .ticks { position: relative; height: 16px; font-size: 11.5px; color: var(--sub); margin-top: 3px; }
+    #slider-band .slider-seg.impossible { background: #B8C3CF; }
+    #time-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+    #time-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: #D3E3F1; }
+    #time-slider::-moz-range-track { height: 6px; border-radius: 3px; background: #D3E3F1; }
+    #time-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+    #time-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 4px solid var(--k-sky); }
+    .ticks { position: relative; height: 16px; margin: 4px 9px 0; font-size: 11.5px; color: var(--sub); }
     .ticks span { position: absolute; top: 0; white-space: nowrap; }
-    #band-note, #slider-warning { font-size: 12px; color: var(--sub); }
-    #band-note:empty, #slider-warning:empty { display: none; }
-    #band-note i { display: inline-block; width: 12px; height: 3px; background: #9AA5B1; vertical-align: middle; margin-right: 5px; }
 
     /* 오른쪽 패널 */
     aside { display: flex; flex-direction: column; gap: 14px; }
@@ -129,13 +137,13 @@
     .tab-panel[hidden] { display: none; }
     #forecast-sentences div, #auto-events div { padding: 8px 0; border-top: 1px solid var(--line-soft); }
     #forecast-sentences div:first-child, #auto-events div:first-child { border-top: 0; padding-top: 2px; }
-    .info dl { margin: 0; display: grid; grid-template-columns: 52px 1fr; gap: 6px 10px; }
-    .info dt { color: var(--sub); font-weight: 600; }
-    .info dd { margin: 0; }
-    .info table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    .info th, .info td { text-align: left; padding: 5px 4px; border-top: 1px solid var(--line-soft); vertical-align: top; }
-    .info th { width: 2em; font-weight: 700; }
-    .info h3 { margin: 14px 0 4px; font-size: 13px; }
+    .ig + .ig { margin-top: 18px; }
+    .ig h3 { margin: 0 0 2px; padding-bottom: 7px; border-bottom: 1px solid var(--line); font-size: 12.5px; font-weight: 700; color: var(--k-blue); }
+    .ir { display: grid; grid-template-columns: 62px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; line-height: 1.5; }
+    .ir:last-child { border-bottom: 0; padding-bottom: 0; }
+    .ir .k { font-weight: 700; display: flex; align-items: flex-start; gap: 6px; }
+    .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
+    .ir .v small { display: inline-block; min-width: 50px; color: var(--sub); font-size: 12px; }
 
     footer { border-top: 1px solid var(--line); background: #F5F6F8; }
     footer .inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 18px; font-size: 12px; color: var(--sub); }
@@ -146,7 +154,7 @@
       .page-head h1 { font-size: 19px; }
       main { grid-template-columns: 1fr; padding: 12px 14px 20px; gap: 12px; }
       #map { height: 58vh; }
-      .time-box { grid-template-columns: 1fr; gap: 8px; }
+      .time-box { padding: 12px 14px 10px; }
       .meta { display: none; }
       .htitle { font-size: 12px; padding-left: 10px; margin-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
       .brand b { font-size: 17px; }
@@ -179,16 +187,17 @@
         <div id="map"></div>
       </section>
       <section class="box time-box" aria-label="예측 시각">
-        <div>
+        <div class="tb-head">
           <h2 class="h2">예측 시각</h2>
           <div id="slider-label"></div>
-        </div>
-        <div>
-          <input type="range" id="time-slider" aria-label="예측 시각 선택" />
-          <div id="slider-band"></div>
-          <div class="ticks" id="slider-ticks"></div>
-          <div id="band-note"></div>
           <div id="slider-warning"></div>
+          <span class="spacer"></span>
+          <div id="band-note"></div>
+        </div>
+        <div class="tb-track">
+          <div id="slider-band"></div>
+          <input type="range" id="time-slider" aria-label="예측 시각 선택" />
+          <div class="ticks" id="slider-ticks"></div>
         </div>
       </section>
     </div>
@@ -227,25 +236,26 @@
           <div id="auto-events"></div>
         </div>
         <div class="tab-panel info" data-tab="info">
-          <dl>
-            <dt>기상</dt><dd>기상청 단기예보</dd>
-            <dt>공연</dt><dd>올림픽공원 공연 일정 자동 수집, 종료 시각 가정(3시간, 옥외 21:30)</dd>
-            <dt>음량</dt><dd>가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</dd>
-            <dt>발전차</dt><dd id="generator-count-note"></dd>
-            <dt>계산</dt><dd>소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</dd>
-          </dl>
-          <h3>단계의 의미</h3>
-          <table>
-            <tr><th>강</th><td>소음: 공단 옥외 공연 소음 기준(65 dB) 이상<br />배출가스: 대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</td></tr>
-            <tr><th>중</th><td>소음: 주거지역 낮 소음 환경기준(55 dB) 이상<br />배출가스: 대기환경기준의 10% 이상 50% 미만</td></tr>
-            <tr><th>약</th><td>소음: 주거지역 밤 소음 환경기준(45 dB) 이상<br />배출가스: 대기환경기준의 2% 이상 10% 미만</td></tr>
-          </table>
-          <h3>무늬</h3>
-          <dl>
-            <dt>빗금</dt><dd>등급 보류. 일부 음원 제외 또는 발전차 근거리</dd>
-            <dt>점무늬</dt><dd>계산 불가. 약풍 등(안전하다는 뜻 아님)</dd>
-            <dt>회색 막대</dt><dd>시간 막대 아래. 약풍으로 배출가스 계산 불가</dd>
-          </dl>
+          <div class="ig">
+            <h3>계산 근거</h3>
+            <div class="ir"><span class="k">기상</span><span class="v">기상청 단기예보</span></div>
+            <div class="ir"><span class="k">공연</span><span class="v">올림픽공원 공연 일정 자동 수집. 종료 시각은 가정(3시간, 옥외 21:30)</span></div>
+            <div class="ir"><span class="k">음량</span><span class="v">가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</span></div>
+            <div class="ir"><span class="k">발전차</span><span class="v" id="generator-count-note"></span></div>
+            <div class="ir"><span class="k">계산</span><span class="v">소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</span></div>
+          </div>
+          <div class="ig">
+            <h3>단계의 의미</h3>
+            <div class="ir"><span class="k">강</span><span class="v"><small>소음</small>공단 옥외 공연 소음 기준(65 dB) 이상<br /><small>배출가스</small>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></div>
+            <div class="ir"><span class="k">중</span><span class="v"><small>소음</small>주거지역 낮 소음 환경기준(55 dB) 이상<br /><small>배출가스</small>대기환경기준의 10% 이상 50% 미만</span></div>
+            <div class="ir"><span class="k">약</span><span class="v"><small>소음</small>주거지역 밤 소음 환경기준(45 dB) 이상<br /><small>배출가스</small>대기환경기준의 2% 이상 10% 미만</span></div>
+          </div>
+          <div class="ig">
+            <h3>지도 무늬</h3>
+            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 일부 음원 제외 또는 발전차 근거리</span></div>
+            <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">계산 불가. 약풍 등이며 안전하다는 뜻은 아님</span></div>
+            <div class="ir"><span class="k"><i style="background:#B8C3CF;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대 위 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
+          </div>
         </div>
       </section>
     </aside>
@@ -261,6 +271,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen_design.js?v=12"></script>
+  <script type="module" src="./app/citizen_design.js?v=13"></script>
 </body>
 </html>
