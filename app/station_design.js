@@ -213,22 +213,56 @@ function renderTruckTable(onChange) {
   }
 }
 
+// 공연 일정(하린 11/27): 선택 시각의 날짜만이 아니라 앞으로 2주를 날짜별로 묶어 보여줘요.
+// 날짜를 누르면 시간 막대가 그날 첫 공연 시각으로 이동해요(예보 범위 72시간 안일 때만).
+const SCHEDULE_DAYS = 14;
+let scheduleClickBound = false;
 function renderAutoEvents(hourIso) {
   const el = document.getElementById("auto-events");
-  const { y: _y, m: _m, d: _d } = kstParts(new Date(hourIso));
-  const dayStr = `${_y}-${_m}-${_d}`;
-  const manual = state.manualEvents.filter((e) => e.title && e.site && e.날짜 === dayStr && e.시작)
-    .map((e) => ({ title: e.title, site: e.site, startTimeStr: e.시작, 수동: true }));
-  const items = [...listTodaysRealEvents(state.events, hourIso), ...manual]
-    .sort((a, b) => String(a.startTimeStr ?? "99").localeCompare(String(b.startTimeStr ?? "99")));
-  const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
-    .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
-  const head = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
-  el.innerHTML = head + (items.length
-    ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
-    : `<div style="color:var(--sub)">이 날짜의 자동 수집 공연 없음</div>`);
+  const ymd = (d) => { const { y, m, d: dd } = kstParts(d); return `${y}-${m}-${dd}`; };
+  const selDay = ymd(new Date(hourIso));
+  const start = hourSlotDate(0);
+  const fmt = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" });
+  const blocks = [];
+  for (let i = 0; i < SCHEDULE_DAYS; i++) {
+    const day = ymd(new Date(start.getTime() + i * 86400e3));
+    const auto = listTodaysRealEvents(state.events, `${day}T12:00:00+09:00`);
+    const manual = state.manualEvents.filter((e) => e.title && e.site && e.날짜 === day && e.시작)
+      .map((e) => ({ title: e.title, site: e.site, startTimeStr: e.시작, 수동: true }));
+    const items = [...auto, ...manual].sort((p, q) => String(p.startTimeStr ?? "99").localeCompare(String(q.startTimeStr ?? "99")));
+    if (!items.length) continue;
+    // 그날 첫 공연 시각(없으면 그날 첫 시간)에 해당하는 시간 막대 위치
+    const firstHour = items.find((x) => x.startTimeStr)?.startTimeStr?.slice(0, 2) ?? null;
+    let offset = -1;
+    for (let o = 0; o < NUM_HOURS; o++) {
+      const d = hourSlotDate(o);
+      if (ymd(d) !== day) continue;
+      if (offset < 0) offset = o;
+      if (firstHour && kstParts(d).h === firstHour) { offset = o; break; }
+    }
+    const dp = Object.fromEntries(fmt.formatToParts(new Date(`${day}T12:00:00+09:00`)).map((x) => [x.type, x.value]));
+    const label = `${dp.month}월 ${dp.day}일 (${dp.weekday})`;
+    const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예보 범위 밖";
+    blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
+      <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${label}</b><small>${hint}</small></button>
+      ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${e.title}</span></div>`).join("")}
+    </section>`);
+  }
+  el.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">앞으로 2주 공연 없음</p>`;
+  if (!scheduleClickBound) {
+    scheduleClickBound = true;
+    el.addEventListener("click", (e) => {
+      const btn = e.target.closest(".day-head[data-offset]");
+      if (!btn) return;
+      const slider = document.getElementById("time-slider");
+      slider.value = btn.dataset.offset;
+      slider.dispatchEvent(new Event("input"));
+      slider.dispatchEvent(new Event("change"));
+    });
+  }
 }
 
+const editingEventIds = new Set(); // 지금 펼쳐서 고치는 중인 공연(저장 전)
 function renderManualEventsTable(onChange) {
   // 11/27 하린: 카드에서 고친 내용은 '저장'을 눌러야 반영돼요(실수로 반쯤 입력된 값이 계산에 들어가지 않게).
   // 시작 시각은 브라우저마다 다르게 동작하는 시계 입력 대신 '시'·'분' 선택으로 받아요(Safari에서 입력이 안 되던 문제).
@@ -238,6 +272,32 @@ function renderManualEventsTable(onChange) {
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
   for (const ev of state.manualEvents) {
+    const saved = ev.title && ev.site && ev.날짜 && ev.시작;
+    if (saved && !editingEventIds.has(ev.id)) {
+      // 저장된 공연: 한 줄 요약 + 수정·삭제
+      const tr = document.createElement("tr");
+      tr.className = "compact";
+      const td = document.createElement("td");
+      const [, mm, dd] = ev.날짜.split("-");
+      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${ev.시작}</b> · ${ev.site}<br><span>${ev.title}${ev.소요분 ? ` · ${ev.소요분}분` : ""}</span></div>`;
+      const btns = document.createElement("div");
+      btns.className = "ev-btns";
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.textContent = "수정";
+      edit.addEventListener("click", () => { editingEventIds.add(ev.id); renderManualEventsTable(onChange); });
+      const del = document.createElement("button");
+      del.type = "button"; del.textContent = "삭제";
+      del.addEventListener("click", () => {
+        state.manualEvents = state.manualEvents.filter((x) => x.id !== ev.id);
+        renderManualEventsTable(onChange);
+        onChange();
+      });
+      btns.append(edit, del);
+      td.appendChild(btns);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      continue;
+    }
     const draft = { title: ev.title ?? "", site: ev.site ?? "", 날짜: ev.날짜 ?? "", 시작: ev.시작 ?? "", 소요분: ev.소요분 ?? "" };
     const tr = document.createElement("tr");
     const status = document.createElement("span");
@@ -290,8 +350,8 @@ function renderManualEventsTable(onChange) {
       const dur = draft.소요분 === "" ? null : Number(draft.소요분);
       if (dur !== null && !(Number.isFinite(dur) && dur > 0)) { paint("소요(분)는 1 이상 숫자"); return; }
       Object.assign(ev, { title: draft.title, site: draft.site, 날짜: draft.날짜, 시작: draft.시작, 소요분: dur });
-      draft.소요분 = dur ?? "";
-      paint();
+      editingEventIds.delete(ev.id);
+      renderManualEventsTable(onChange); // 저장하면 입력칸을 접고 한 줄 요약으로
       onChange();
     });
     const delBtn = document.createElement("button");
