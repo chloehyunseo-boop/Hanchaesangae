@@ -1,3 +1,4 @@
+// 11/27 하린 확인: 디자인 시안(case_design.html + app/case_design.js)을 그대로 옮겨 왔어요. 계산 로직은 그대로.
 // app/case.js — 사례 재현 화면(case.html), 하린 라인 (로드맵 11/26 "2024-10-12 재현 데모 모드").
 //
 // 시민 지도(main.js)·공단 화면(agency.js)은 건드리지 않고, 같은 부품(shared.js의 지도 칸 그리기·
@@ -14,8 +15,9 @@ import { placeCellsForHour, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.
 import { placeCellState } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, CanvasCellLayer, createGridWorker, loadCommonData,
-  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage,
+  buildDemoStageSources, allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
+import { ContourCellLayer } from "./contour_layer_design.js";
 
 const HOURS = [16, 17, 18, 19, 20, 21];
 const DEFAULT_HOUR = 18;
@@ -162,13 +164,20 @@ async function main() {
 
   const computeHourInWorker = createGridWorker();
   const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15 });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  L.maplibreGL({
+    style: "https://tiles.openfreemap.org/styles/bright",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
-  const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
+  const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
+  L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+  window.addEventListener("resize", () => map.invalidateSize());
+  initTabs({ defaultTab: "weather" });
+  map.options.zoomSnap = 0.25;
+  const fitPts = DEFAULT_PLACE_NAMES.map((n) => coords(n));
+  map.fitBounds(L.latLngBounds(fitPts.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false });
   for (const ev of caseData.공연) {
     const c = coords(ev.음원좌표);
-    L.circleMarker([c.lat, c.lon], { radius: 6, color: "#1a237e", weight: 2, fillOpacity: 0.2 })
+    L.circleMarker([c.lat, c.lon], { radius: 6, color: "#0A2A70", weight: 2, fillColor: "#fff", fillOpacity: 1 })
       .bindTooltip(`${ev.이름} ${ev.시작}~${ev.끝}`).addTo(map);
   }
 
@@ -176,6 +185,8 @@ async function main() {
   slider.min = 0; slider.max = HOURS.length - 1; slider.step = 1;
   slider.value = HOURS.indexOf(DEFAULT_HOUR);
   const band = document.getElementById("news-band");
+  const ticksEl = document.getElementById("slider-ticks");
+  if (ticksEl) ticksEl.innerHTML = HOURS.map((h, i) => `<span style="left:${(i / (HOURS.length - 1)) * 100}%;transform:translateX(${i === 0 ? "0" : i === HOURS.length - 1 ? "-100%" : "-50%"})">${h}시</span>`).join("");
   for (const h of HOURS) {
     const seg = document.createElement("span");
     if (h * 60 < NEWS_TO_MIN && (h + 1) * 60 > NEWS_FROM_MIN) seg.className = "news";
@@ -187,6 +198,7 @@ async function main() {
     const my = ++seq;
     const hh = HOURS[Number(slider.value)];
     document.getElementById("slider-label").textContent = `10/12 ${hh}~${hh + 1}시`;
+    slider.dispatchEvent(new Event("change")); // 채워진 막대 폭 갱신(화면 스크립트)
     renderSide(hh);
     const warnEl = document.getElementById("layer-warning");
     if (!state.cache.has(`${hh}|${state.excludeDome}`)) warnEl.textContent = "지도 계산 중이에요(바람 방향을 여러 개 돌려 보느라 20~30초 걸려요)…";
