@@ -145,6 +145,8 @@ async function main() {
   const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+  // 11/27: 컴퓨터 화면 레이아웃(지도+오른쪽 박스)은 지도 칸 크기가 창 크기에 따라 바뀌어서 필요
+  window.addEventListener("resize", () => map.invalidateSize());
 
   const MapLegend = L.Control.extend({
     options: { position: "topright" },

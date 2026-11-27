@@ -222,7 +222,7 @@ function renderAutoEvents(hourIso) {
     <td>${e.startTimeStr ? e.startTimeStr + " 시작" : "모름"}</td>
     <td>${e.요일추정 ? "요일별 문장에서 읽음(바뀔 수 있음)" : ""}</td>
   </tr>`).join("");
-  el.innerHTML = `<table><thead><tr><th>공연장</th><th>공연명</th><th>시작</th><th>비고</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>공연장</th><th>공연명</th><th>시작</th><th>비고</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderManualEventsTable(onChange) {
@@ -317,7 +317,7 @@ function renderImpactedLessons(lessons, date, cells) {
     const exhaust = placeCellState(c?.exhaust);
     return `<tr><td>${l.name}</td><td>${l.site}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
   }).join("");
-  el.innerHTML = `<table><thead><tr><th>강좌명</th><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table>`;
+  el.innerHTML = `<div class="table-scroll"><table><thead><tr><th>강좌명</th><th>장소</th><th>소음</th><th>배출가스</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 async function buildForecastCsv() {
@@ -368,6 +368,8 @@ async function main() {
   const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
+  // 11/27: 컴퓨터 화면 레이아웃(지도+오른쪽 박스)은 지도 칸 크기가 창 크기에 따라 바뀌어서 필요
+  window.addEventListener("resize", () => map.invalidateSize());
   const MapLegend = L.Control.extend({
     options: { position: "topright" },
     onAdd() {
