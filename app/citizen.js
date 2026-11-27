@@ -128,6 +128,11 @@ function getPlaceSeries() {
 async function main() {
   await loadData();
 
+  // 11/27 하린 지시: 발전차 대수를 가정값으로 자동 채운다는 걸 화면에 명시
+  const genNote = document.getElementById("generator-count-note");
+  const genNoteText = state.assumptions?.발전차_기본대수?.화면_문구;
+  if (genNote && genNoteText) genNote.textContent = genNoteText;
+
   const map = L.map("map", { center: [PARK_CENTER.lat, PARK_CENTER.lon], zoom: 15 });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,

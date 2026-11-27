@@ -132,6 +132,41 @@ export function buildRealEventStageSources(events, siteByName, volumePreset, ass
   return sources;
 }
 
+// 11/26 공단 화면(최종판, station.js) 요청: agency.html의 "공연 일정 — 수동 입력" 표는
+// 지금까지 "보기+입력"만 하고 실제 계산엔 안 들어갔는데(§5 참고), 이제 연결해요. 수동 입력은
+// 공단이 직접 날짜·시작·소요분을 넣으니 스크래핑 자유문장보다 더 정확해요 — 소요분이 있으면
+// 그대로 쓰고, 없을 때만 buildRealEventStageSources와 같은 가정(3시간/21:30)을 써요.
+export function buildManualEventStageSources(manualEvents, siteByName, volumePreset, assumptions, hourIso) {
+  const sources = [];
+  if (!manualEvents?.length) return sources;
+  const { y, m, d } = kstParts(new Date(hourIso));
+  const dateStr = `${y}-${m}-${d}`;
+  for (const ev of manualEvents) {
+    if (!ev.site || !ev.날짜 || ev.날짜 !== dateStr) continue;
+    const params = venueSourceParams(ev.site, siteByName, volumePreset, assumptions);
+    if (!params) continue;
+    const startMs = ev.시작 ? new Date(`${dateStr}T${ev.시작}:00+09:00`).getTime() : NaN;
+    if (!ev.시작 || !Number.isFinite(startMs)) {
+      sources.push({ ...params, time: { start: null, end: null, 출처: "미확인" } });
+      continue;
+    }
+    const durationMs = Number.isFinite(ev.소요분) && ev.소요분 > 0 ? ev.소요분 * 60000 : PERFORMANCE_ASSUMED_DURATION_MS;
+    let endMs = startMs + durationMs;
+    if (!INDOOR_VENUE_NAMES.has(ev.site)) {
+      const cutoffMs = new Date(`${dateStr}T${OUTDOOR_CUTOFF_HHMM}+09:00`).getTime();
+      if (Number.isFinite(cutoffMs)) endMs = Math.min(endMs, cutoffMs);
+    }
+    sources.push({
+      ...params,
+      time: {
+        start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(),
+        출처: Number.isFinite(ev.소요분) && ev.소요분 > 0 ? "공단화면수동입력" : "공단화면수동입력_종료시각가정(3시간 또는 21:30 중 먼저)",
+      },
+    });
+  }
+  return sources;
+}
+
 /** 화면에 "자동으로 반영된 실제 공연 일정"을 보여줄 목록(제목·장소·그날 상태)을 만들어요 —
  * buildRealEventStageSources와 같은 날짜·제외 규칙을 쓰지만, 엔진 입력이 아니라 사람이 읽을
  * 텍스트만 돌려줘요(11/26). */
