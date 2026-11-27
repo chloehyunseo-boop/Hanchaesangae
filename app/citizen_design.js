@@ -20,6 +20,7 @@ import {
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
   allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
+import { ContourCellLayer } from "./contour_layer_design.js"; // 디자인 사본: 블러 대신 등치선 면
 
 const NUM_HOURS = 72;
 const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가한 장소"는 항상 없음
@@ -143,8 +144,8 @@ async function main() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  const noiseLayer = new CanvasCellLayer({ palette: NOISE_PALETTE }).addTo(map);
-  const exhaustLayer = new CanvasCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
+  const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
+  const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
 
