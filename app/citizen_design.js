@@ -199,8 +199,8 @@ async function main() {
   function renderAutoEvents(hourIso) {
     const items = listTodaysRealEvents(state.events, hourIso);
     autoEventsEl.innerHTML = items.length
-      ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--muted)">${e.title}</span></div>`).join("")
-      : "<div style=\"color:var(--muted)\">이 날짜의 공연 없음</div>";
+      ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
+      : "<div style=\"color:var(--sub)\">이 날짜의 공연 없음</div>";
   }
 
   let refreshSeq = 0;
@@ -265,7 +265,7 @@ async function main() {
     const lines = buildForecastSentences({ series, now: hourSlotIso(hourSlotDate(0)), placeViewAvailable: false });
     sentencesEl.innerHTML = lines.length
       ? lines.map((l) => `<div>${l}</div>`).join("")
-      : "<div style=\"color:var(--muted)\">주요 장소 8곳 모두 '약' 미만</div>";
+      : "<div style=\"color:var(--sub)\">주요 장소 8곳 모두 '약' 미만</div>";
   }
 
   sliderLabel.textContent = formatSlotLabel(hourSlotDate(0));
