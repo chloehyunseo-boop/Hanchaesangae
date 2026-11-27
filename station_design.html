@@ -178,6 +178,9 @@
     .mini th, .mini td { text-align: left; padding: 6px 4px; border-top: 1px solid var(--line-soft); vertical-align: top; }
     .mini th { color: var(--sub); font-weight: 600; border-top: 0; padding-top: 0; }
     #impacted-lessons p, #auto-events p { margin: 0; color: var(--sub); font-size: 13px; }
+    #impacted-lessons { max-height: 260px; overflow: auto; }
+    .mini td:nth-child(3), .mini td:nth-child(4) { white-space: nowrap; }
+    .mini thead th { position: sticky; top: 0; background: #fff; }
 
     .manage { max-width: 1440px; margin: 0 auto 32px; padding: 0 20px; }
     .manage .frame { border: 1px solid var(--line); }
