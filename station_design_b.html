@@ -295,6 +295,19 @@
       .col-center #map { height: 58vh; }
       .col-left .scroll { overflow: visible; }
     }
+
+    /* 공연 추가 카드: 시·분 선택, 저장 버튼, 상태 */
+    .time-pick { display: flex; gap: 6px; }
+    .time-pick select { flex: 1; }
+    .ev-actions { display: flex; align-items: center; gap: 6px; width: 100%; }
+    .ev-status { flex: 1; font-size: 12px; }
+    .ev-status[data-state="ok"] { color: #1E7B45; }
+    .ev-status[data-state="ok"]::before { content: "● "; }
+    .ev-status[data-state="dirty"] { color: #B26A00; }
+    .ev-status[data-state="error"] { color: #C0392B; }
+    .cards td:last-child .ev-actions button.save { background: var(--k-blue); border-color: var(--k-blue); color: #fff; }
+    .cards td:last-child .ev-actions button.save:hover { background: #0D3590; color: #fff; }
+    #auto-events .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 3px; background: var(--tint); color: var(--k-blue); border: 1px solid var(--line); vertical-align: 1px; }
   </style>
 </head>
 <body>
@@ -439,7 +452,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station_design.js?v=4"></script>
+  <script type="module" src="./app/station_design.js?v=5"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {

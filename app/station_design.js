@@ -215,45 +215,85 @@ function renderTruckTable(onChange) {
 
 function renderAutoEvents(hourIso) {
   const el = document.getElementById("auto-events");
-  const items = listTodaysRealEvents(state.events, hourIso);
+  const { y: _y, m: _m, d: _d } = kstParts(new Date(hourIso));
+  const dayStr = `${_y}-${_m}-${_d}`;
+  const manual = state.manualEvents.filter((e) => e.title && e.site && e.날짜 === dayStr && e.시작)
+    .map((e) => ({ title: e.title, site: e.site, startTimeStr: e.시작, 수동: true }));
+  const items = [...listTodaysRealEvents(state.events, hourIso), ...manual]
+    .sort((a, b) => String(a.startTimeStr ?? "99").localeCompare(String(b.startTimeStr ?? "99")));
   const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
     .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
   const head = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
   el.innerHTML = head + (items.length
-    ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
+    ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
     : `<div style="color:var(--sub)">이 날짜의 자동 수집 공연 없음</div>`);
 }
 
 function renderManualEventsTable(onChange) {
+  // 11/27 하린: 카드에서 고친 내용은 '저장'을 눌러야 반영돼요(실수로 반쯤 입력된 값이 계산에 들어가지 않게).
+  // 시작 시각은 브라우저마다 다르게 동작하는 시계 입력 대신 '시'·'분' 선택으로 받아요(Safari에서 입력이 안 되던 문제).
   const tbody = document.getElementById("event-rows");
   tbody.innerHTML = "";
   const venueNames = [...state.siteByName.keys()];
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
   for (const ev of state.manualEvents) {
+    const draft = { title: ev.title ?? "", site: ev.site ?? "", 날짜: ev.날짜 ?? "", 시작: ev.시작 ?? "", 소요분: ev.소요분 ?? "" };
     const tr = document.createElement("tr");
+    const status = document.createElement("span");
+    status.className = "ev-status";
+    const isSaved = () => ev.title && ev.site && ev.날짜 && ev.시작;
+    const dirty = () => (draft.title || "") !== (ev.title ?? "") || draft.site !== (ev.site ?? "") || draft.날짜 !== (ev.날짜 ?? "")
+      || draft.시작 !== (ev.시작 ?? "") || String(draft.소요분 ?? "") !== String(ev.소요분 ?? "");
+    const paint = (msg) => {
+      if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
+      if (dirty()) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
+      else if (isSaved()) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
+      else { status.textContent = "입력 필요"; status.dataset.state = "dirty"; }
+    };
 
     const titleInput = document.createElement("input");
-    titleInput.type = "text"; titleInput.style.width = "8em"; titleInput.placeholder = "공연명";
-    titleInput.value = ev.title ?? "";
-    titleInput.addEventListener("change", () => { ev.title = titleInput.value || null; onChange(); });
+    titleInput.type = "text"; titleInput.placeholder = "공연명"; titleInput.value = draft.title;
+    titleInput.addEventListener("input", () => { draft.title = titleInput.value.trim(); paint(); });
 
     const siteSel = document.createElement("select");
     siteSel.innerHTML = `<option value="">위치 고르기</option>` + venueNames.map((n) => `<option value="${n}">${n}</option>`).join("");
-    siteSel.value = ev.site ?? "";
-    siteSel.addEventListener("change", () => { ev.site = siteSel.value || null; onChange(); });
+    siteSel.value = draft.site;
+    siteSel.addEventListener("change", () => { draft.site = siteSel.value; paint(); });
 
     const dateInput = document.createElement("input");
-    dateInput.type = "date"; dateInput.value = ev.날짜 ?? "";
-    dateInput.addEventListener("change", () => { ev.날짜 = dateInput.value || null; onChange(); });
+    dateInput.type = "date"; dateInput.value = draft.날짜;
+    const onDate = () => { draft.날짜 = dateInput.value; paint(); };
+    dateInput.addEventListener("input", onDate); dateInput.addEventListener("change", onDate);
 
-    const startInput = document.createElement("input");
-    startInput.type = "time"; startInput.value = ev.시작 ?? "";
-    startInput.addEventListener("change", () => { ev.시작 = startInput.value || null; onChange(); });
+    const timeWrap = document.createElement("div");
+    timeWrap.className = "time-pick";
+    const hSel = document.createElement("select");
+    const mSel = document.createElement("select");
+    hSel.innerHTML = `<option value="">시</option>` + hours.map((h) => `<option value="${h}">${h}시</option>`).join("");
+    mSel.innerHTML = mins.map((m) => `<option value="${m}">${m}분</option>`).join("");
+    if (draft.시작) { const [hh, mm] = draft.시작.split(":"); hSel.value = hh; mSel.value = mins.includes(mm) ? mm : "00"; }
+    const onTime = () => { draft.시작 = hSel.value ? `${hSel.value}:${mSel.value}` : ""; paint(); };
+    hSel.addEventListener("change", onTime); mSel.addEventListener("change", onTime);
+    timeWrap.append(hSel, mSel);
 
     const durInput = document.createElement("input");
-    durInput.type = "number"; durInput.min = "1"; durInput.style.width = "4.5em"; durInput.placeholder = "분";
-    durInput.value = ev.소요분 ?? "";
-    durInput.addEventListener("change", () => { const v = Number(durInput.value); ev.소요분 = durInput.value === "" ? null : (Number.isFinite(v) ? v : null); onChange(); });
+    durInput.type = "number"; durInput.min = "1"; durInput.placeholder = "비우면 180"; durInput.value = draft.소요분;
+    durInput.addEventListener("input", () => { draft.소요분 = durInput.value; paint(); });
 
+    const actions = document.createElement("div");
+    actions.className = "ev-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
+    saveBtn.addEventListener("click", () => {
+      if (!draft.title || !draft.site || !draft.날짜 || !draft.시작) { paint("공연명·위치·날짜·시작 시각을 모두 넣어 주세요"); return; }
+      const dur = draft.소요분 === "" ? null : Number(draft.소요분);
+      if (dur !== null && !(Number.isFinite(dur) && dur > 0)) { paint("소요(분)는 1 이상 숫자"); return; }
+      Object.assign(ev, { title: draft.title, site: draft.site, 날짜: draft.날짜, 시작: draft.시작, 소요분: dur });
+      draft.소요분 = dur ?? "";
+      paint();
+      onChange();
+    });
     const delBtn = document.createElement("button");
     delBtn.type = "button"; delBtn.textContent = "삭제";
     delBtn.addEventListener("click", () => {
@@ -261,12 +301,14 @@ function renderManualEventsTable(onChange) {
       renderManualEventsTable(onChange);
       onChange();
     });
+    actions.append(status, delBtn, saveBtn);
 
-    for (const el of [titleInput, siteSel, dateInput, startInput, durInput, delBtn]) {
+    for (const el of [titleInput, siteSel, dateInput, timeWrap, durInput, actions]) {
       const td = document.createElement("td");
       td.appendChild(el);
       tr.appendChild(td);
     }
+    paint();
     tbody.appendChild(tr);
   }
 }
