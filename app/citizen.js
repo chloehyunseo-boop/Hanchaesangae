@@ -22,6 +22,7 @@ import {
 } from "./shared.js?v=20261128p";
 import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261128a"; // 11/28: 공연 일정 수집 실패·멈춤 안내
 import { ContourCellLayer } from "./contour_layer.js?v=20261128p"; // 디자인 사본: 블러 대신 등치선 면
+import { setupDaySlider } from "./day_slider.js?v=20261128s"; // 11/28: 휴대폰에서 시간 막대 하루씩
 import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { stageActiveMinutes } from "../engine/noise.js";
@@ -260,6 +261,7 @@ async function main() {
   autoEventsEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".day-head[data-offset]");
     if (!btn) return;
+    if (window.__daySlider) { window.__daySlider.setOffset(Number(btn.dataset.offset)); return; } // 11/28 휴대폰 하루 보기
     slider.value = btn.dataset.offset;
     slider.dispatchEvent(new Event("input"));
     slider.dispatchEvent(new Event("change"));
@@ -357,7 +359,9 @@ async function main() {
       if (lab.endsWith(" 00시") && (o - marks[marks.length - 1][0]) / (NUM_HOURS - 1) >= 0.1) marks.push([o, lab.replace(" 00시", "")]); // 앞 눈금과 너무 가까우면 생략(겹침 방지)
     }
     ticksEl.innerHTML = marks.map(([o, m]) => `<span style="left:${(o / (NUM_HOURS - 1)) * 100}%;${o === 0 ? "" : "transform:translateX(-50%)"}">${m}</span>`).join("");
-  }
+  }  // 11/28 하린: 휴대폰(640px 이하)에서는 날짜 버튼 + 그날 시간만 보이는 막대
+  window.__daySlider = setupDaySlider({ slider, bandEl: document.getElementById("slider-band"), ticksEl, numHours: NUM_HOURS, hourSlotDate, kstParts });
+
   slider.addEventListener("change", refresh);
   slider.addEventListener("input", (e) => {
     const offset = Number(e.target.value);

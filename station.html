@@ -355,6 +355,14 @@
     .gen-pin-wrap { display: flex !important; justify-content: center; align-items: center; }
     .mk-gen { display: inline-flex; align-items: center; justify-content: center; height: 14px; padding: 0 3px; border-radius: 3px; background: #3D2466; vertical-align: -2px; margin-right: 4px; }
     .mk-gen svg { width: 15px; height: 10px; display: block; } .mk-gen .cut { fill: #3D2466; } .mk-gen .whl { fill: #fff; stroke: #3D2466; stroke-width: 1.2; }
+    /* 11/28: 휴대폰 시간 막대 하루씩 보기(app/day_slider.js) — 넓은 화면에선 JS가 숨김 */
+    .day-chips { display: flex; gap: 6px; margin: 10px 0 2px; overflow-x: auto; scrollbar-width: none; }
+    .day-chips::-webkit-scrollbar { display: none; }
+    .day-chips button { flex: none; height: 30px; padding: 0 11px; border: 1px solid var(--line); border-radius: 15px; background: #fff; color: var(--sub); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+    .day-chips button b { color: var(--text); font-weight: 700; }
+    .day-chips button small { font-size: 11.5px; }
+    .day-chips button.on { background: var(--k-blue); border-color: var(--k-blue); color: #fff; }
+    .day-chips button.on b { color: #fff; }
   </style>
 </head>
 <body>
@@ -508,7 +516,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station.js?v=20261128r"></script>
+  <script type="module" src="./app/station.js?v=20261128s"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {
@@ -522,11 +530,12 @@
       const s = document.getElementById("time-slider");
       const track = s.parentElement;
       const upd = () => {
-        const max = Number(s.max) || 1, v = Number(s.value) || 0;
-        track.style.setProperty("--p", `calc(${(v / max) * 100}% - ${(v / max) * 18}px + 9px)`);
+        const min = Number(s.min) || 0, max = Number(s.max) || 0, v = Number(s.value) || 0;
+        const r = max > min ? (v - min) / (max - min) : 0; // 11/28: 휴대폰 하루 보기에선 min이 0이 아님
+        track.style.setProperty("--p", `calc(${r * 100}% - ${r * 18}px + 9px)`);
       };
       s.addEventListener("input", upd); s.addEventListener("change", upd);
-      new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["max", "value"] });
+      new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["min", "max", "value"] });
       upd();
     })();
   </script>
