@@ -16,6 +16,7 @@
 
 import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128d";
 import { generatorActivityAtHour } from "../engine/combine.js";
+import { stageActiveMinutes } from "../engine/noise.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
@@ -838,17 +839,20 @@ async function main() {
 
   const sliderBandEl = document.getElementById("slider-band");
   // 11/28 친구 요청: 드래그하다 지도가 비어 보이면 "공연이 없어서"인지 "계산 중"인지
-  // 구분이 안 돼요 — 공연·발전차 중 하나라도 있는 시간은 노란 칸으로 미리 표시해요
-  // (impossible이 아니면, 즉 지도에 뭔가 뜰 가능성이 있는 시간만).
+  // 구분이 안 돼요 — 공연·발전차 중 하나라도 "그 시각에 실제로 가동 중"이면 노란 칸으로
+  // 미리 표시해요(impossible이 아니면). buildStageSources/buildGeneratorSources는 그날
+  // 등록된 음원을 전부 돌려줄 뿐 그 시각 가동 여부는 안 걸러서(공연 당일 이른 아침에도
+  // 노랗게 보이는 버그, 11/29 발견) stageActiveMinutes/generatorActivityAtHour로 한 번 더
+  // 걸러요 — 실제 엔진이 그 칸을 계산할 때 쓰는 것과 같은 기준이에요.
   function refreshSliderBand() {
     const segs = [];
     for (let offset = 0; offset < NUM_HOURS; offset++) {
       const weather = resolveWeather(hourSlotDate(offset));
       const hourIso = hourSlotIso(hourSlotDate(offset));
-      const hasGenerators = buildGeneratorSources(hourIso).length > 0;
-      const hasStage = buildStageSources(hourIso).length > 0;
-      const impossible = hasGenerators && weather && weather.wsd10m < 1.0;
-      const active = !impossible && (hasGenerators || hasStage);
+      const activeGenerators = buildGeneratorSources(hourIso).some((g) => generatorActivityAtHour(g, hourIso) === "active");
+      const activeStage = buildStageSources(hourIso).some((s) => stageActiveMinutes(s, hourIso).activeMinutes > 0);
+      const impossible = activeGenerators && weather && weather.wsd10m < 1.0;
+      const active = !impossible && (activeGenerators || activeStage);
       const cls = impossible ? " impossible" : active ? " active" : "";
       const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "공연·발전차 있음" : "";
       segs.push(`<div class="slider-seg${cls}" title="${title}"></div>`);
