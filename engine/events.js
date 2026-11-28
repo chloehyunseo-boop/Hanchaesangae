@@ -193,6 +193,7 @@ const SITE_KEYWORDS = [
   ["KSPO DOME", "KSPO DOME"],
   ["체조경기장", "KSPO DOME"],
   ["핸드볼", "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)"],
+  ["티켓링크", "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)"], // 11/28: 괄호 없이 "티켓링크 라이브 아레나"로만 적힌 경우
   ["우리금융아트홀", "우리금융아트홀"],
   ["K아트홀", "올림픽공원 K아트홀"],
   ["올림픽홀", "올림픽홀"],
@@ -299,16 +300,24 @@ export function parseDateRange(text) {
  */
 export function parseDailyStartTimes(timeText) {
   if (typeof timeText !== "string") return {};
-  const re = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\([^)]*\))?\s*(?:(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?|(\d{1,2})\s*(AM|PM))/gi;
+  // 11/28: "9:00:00PM(KST)"·"07:00:00PM(KST)"·"7:30PM(KST)"처럼 콜론 붙은 영문 시각(초 포함
+  // 가능, 뒤에 "(KST)" 등 꼬리말은 그냥 안 먹고 둬도 매치엔 지장 없음)도 읽게 세 번째 갈래 추가.
+  const re = /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\([^)]*\))?\s*(?:(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?|(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)|(\d{1,2})\s*(AM|PM))/gi;
   const out = {};
   for (const m of timeText.matchAll(re)) {
-    const [, y, mo, d, ampmKo, hKoRaw, minRaw, hEnRaw, ampmEn] = m;
+    const [, y, mo, d, ampmKo, hKoRaw, minRaw, hColonRaw, minColonRaw, ampmColon, hEnRaw, ampmEn] = m;
     let h, min;
     if (ampmKo) {
       h = Number(hKoRaw);
       if (ampmKo === "오후" && h !== 12) h += 12;
       if (ampmKo === "오전" && h === 12) h = 0;
       min = minRaw ? Number(minRaw) : 0;
+    } else if (hColonRaw) {
+      h = Number(hColonRaw);
+      const pm = ampmColon.toUpperCase() === "PM";
+      if (pm && h !== 12) h += 12;
+      if (!pm && h === 12) h = 0;
+      min = Number(minColonRaw);
     } else {
       h = Number(hEnRaw);
       const pm = ampmEn.toUpperCase() === "PM";
@@ -337,17 +346,21 @@ const WEEKDAY_CHAR_TO_INDEX = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 
  */
 export function parseWeekdayGroupedTimes(timeText) {
   if (typeof timeText !== "string") return {};
-  const groupRe = /([월화수목금토일]{1,3})\s*((?:\d{1,2}시(?:\s*\d{1,2}분)?\s*,?\s*)+)/g;
-  const timeRe = /(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
+  // 11/28: "목 오후 7시 30분 / 금 오후 6시"처럼 요일 뒤에 "오전/오후"가 붙는 경우도 읽게 함.
+  const groupRe = /([월화수목금토일]{1,3})\s*((?:(?:오전|오후)\s*)?(?:\d{1,2}시(?:\s*\d{1,2}분)?\s*,?\s*)+)/g;
+  const timeRe = /(?:(오전|오후)\s*)?(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
   const byWeekday = {};
   for (const gm of timeText.matchAll(groupRe)) {
     const days = [...gm[1]].map((ch) => WEEKDAY_CHAR_TO_INDEX[ch]).filter((n) => n !== undefined);
     if (days.length === 0) continue;
     const times = [];
     for (const tm of gm[2].matchAll(timeRe)) {
-      const h = Number(tm[1]);
+      const ampmKo = tm[1];
+      let h = Number(tm[2]);
+      if (ampmKo === "오후" && h !== 12) h += 12;
+      if (ampmKo === "오전" && h === 12) h = 0;
       if (h < 0 || h > 23) continue;
-      const min = tm[2] ? Number(tm[2]) : 0;
+      const min = tm[3] ? Number(tm[3]) : 0;
       times.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
     }
     if (times.length === 0) continue;
@@ -398,6 +411,49 @@ export function expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝) 
 }
 
 /**
+ * "2026.12.18. FRI 7PM / 12.19 SAT 6PM / 12.20 SUN 5PM(KST)"나 "12.24(목) 8PM 12.25(금) 5PM"
+ * 처럼, "YYYY년 M월 D일" 형식이 아니라 점으로 적은 날짜(연도는 맨 앞에만 있거나 아예 없음) +
+ * 영문 AM/PM 시각으로 된 자유문장을 읽어요(11/28). parseDailyStartTimes는 "년·월·일" 글자가
+ * 없으면 못 읽는 형식이에요. 요일 표기(영문 3글자 "FRI"나 한글 괄호 "(목)")는 그냥 건너뛰고,
+ * 날짜·시각만 믿어요. 연도가 안 적힌 항목은 바로 앞에 나온 연도를 이어서 쓰되, 월이 갑자기
+ * 작아지면(예: 12월 → 1월) 해를 넘긴 걸로 보고 1년 더해요 — 지어내는 게 아니라 "12월 다음은
+ * 1월"이라는 달력 순서를 따르는 거예요. 그래도 첫 항목에 연도가 아예 없으면 기간시작의
+ * 연도를 빌려요.
+ * @param {string|null} timeText
+ * @param {string|null} 기간시작 "YYYY-MM-DD" — 연도를 하나도 못 찾았을 때의 출발점
+ * @returns {Record<string,string>} {"YYYY-MM-DD": "HH:MM"} — 못 읽으면 빈 객체.
+ */
+export function parseShortDateTimes(timeText, 기간시작) {
+  if (typeof timeText !== "string") return {};
+  const re = /(?:(\d{4})\s*\.\s*)?(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?\s*(?:\([^)]*\)\s*)?(?:[A-Z]{3}\s+)?(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/gi;
+  const out = {};
+  let year = 기간시작 ? Number(기간시작.slice(0, 4)) : null;
+  let lastMonth = null;
+  for (const m of timeText.matchAll(re)) {
+    const [, yRaw, moRaw, dRaw, hRaw, minRaw, ampm] = m;
+    const mo = Number(moRaw);
+    const d = Number(dRaw);
+    if (yRaw) {
+      year = Number(yRaw);
+    } else if (year === null) {
+      continue; // 연도를 하나도 못 구하면(기간시작도 없음) 지어내지 않고 건너뜀
+    } else if (lastMonth !== null && mo < lastMonth) {
+      year += 1; // 12월 다음에 1월이 나오면 해가 바뀐 것
+    }
+    lastMonth = mo;
+    let h = Number(hRaw);
+    const pm = ampm.toUpperCase() === "PM";
+    if (pm && h !== 12) h += 12;
+    if (!pm && h === 12) h = 0;
+    const min = minRaw ? Number(minRaw) : 0;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23) continue;
+    const dateKey = `${year}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    out[dateKey] = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  }
+  return out;
+}
+
+/**
  * 일정안내 페이지 HTML → EventRecord[]로 바꿔요(11/25 실제 페이지로 구조 확인). 맨 위
  * "앞으로 있을 공연" 영역(id="rowSpace")만 읽고, 그 아래 "지난 공연"(class="last") 구간은
  * 안 읽어요. 공연마다 요일별 시간이 다르게 적혀 있어서(예: "수목금 19시30분/토 15시,19시")
@@ -437,8 +493,13 @@ function buildUpcomingItem({ spatial, title, dateText, timeText, durationText = 
   let 일자별시작 = parseDailyStartTimes(timeText);
   let 일자별최종공연시작 = {};
   let 공연요일 = null;
-  // 11/27: 날짜가 박힌 형식("2026년 11월 27일(금) 8PM")으로 하나도 못 읽었으면, 요일만
-  // 적힌 자유문장("수목금 19시 30분 / 토 15시, 19시 / 일 14시")으로 다시 시도해요.
+  // 11/28: "년·월·일" 형식이 아니라 "2026.12.18. FRI 7PM"·"12.24(목) 8PM"처럼 점으로 적은
+  // 날짜+영문 AM/PM이면 parseDailyStartTimes가 못 읽어요 — 다음으로 이 형식을 시도해요.
+  if (Object.keys(일자별시작).length === 0) {
+    일자별시작 = parseShortDateTimes(timeText, 기간시작);
+  }
+  // 11/27: 그래도 못 읽었으면(날짜 자체가 없고 요일만 적힌 자유문장, "수목금 19시 30분 /
+  // 토 15시, 19시 / 일 14시") 요일 묶음으로 다시 시도해요.
   if (Object.keys(일자별시작).length === 0) {
     const expanded = expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝);
     일자별시작 = expanded.일자별시작;
