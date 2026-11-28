@@ -484,7 +484,11 @@ function renderManualEventsTable(onChange) {
   tbody.innerHTML = "";
   // 11/28 친구 요청: site.geojson엔 공연장 외에 소음 수음점용 아파트(풍납극동아파트 등)도
   // 같이 들어있어서 "공연 위치" 목록에 섞여 나왔어요 — 공연 위치가 아니라서 빼요.
-  const venueNames = [...state.siteByName.keys()].filter((n) => !n.includes("아파트"));
+  // 11/29 하린: 공연 추가 위치는 공연장·무대만. 주거지·강습 영향(수영장)은 공연장이 아니라 빼고,
+  // K아트홀은 11/27 계산 대상에서 제외해서 뺐어요.
+  const venueNames = [...state.siteByName.entries()]
+    .filter(([n, f]) => /^(공연장|음원)/.test(f.properties?.type ?? "") && n !== "올림픽공원 K아트홀")
+    .map(([n]) => n);
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
   for (const ev of state.manualEvents) {
