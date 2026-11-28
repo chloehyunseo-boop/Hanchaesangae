@@ -24,11 +24,16 @@ import {
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261128a"; // 11/28: 공연 일정 수집 실패·멈춤 안내
 import { ContourCellLayer } from "./contour_layer.js";
 import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;
+// 11/28 최종 점검: 공연명·장소는 공단 홈페이지 글(자동 수집)이나 공단 직원이 입력한 글이라 그대로 innerHTML에
+// 넣으면 '<오페라의 유령>'처럼 꺾쇠가 든 이름이 깨지거나 스크립트가 실행돼요. 화면에 넣기 전에 이스케이프해요.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 const STORAGE_KEY = "olpak_station_trucks_v1";
 const EVENTS_STORAGE_KEY = "olpak_station_manual_events_v1";
 const NOGEN_STORAGE_KEY = "olpak_station_no_generator_v1";
@@ -270,15 +275,16 @@ function renderTruckTable(onChange) {
       const td = document.createElement("td");
       const parts = [`${t.발전기수 ?? "대수 모름"}${t.발전기수 ? "대" : ""}`, t.인증등급 && t.인증등급 !== "모름" ? t.인증등급 : "등급 모름", t.엔진출력_kW ? `${t.엔진출력_kW}kW` : "출력 모름"];
       let head, when;
-      if (occ) {
-        const r = resolveTruck(t, occs);
-        head = `${fmtMD(occ.day)} ${occ.시작 ?? ""} · ${occ.site}`;
+      const r = occ ? resolveTruck(t, occs) : null; // 장소 미확인 공연이면 null(독립 검토 11/28: 이때 r.셋업시작을 읽다 화면이 죽었음)
+      if (occ && r) {
+        head = `${fmtMD(occ.day)} ${occ.시작 ?? ""} · ${esc(occ.site)}`;
         when = r?.시간미확인 ? "공연 시각 미확인 → 가동 시간 모름(그 칸은 계산 안 함)"
           : `가동 ${r.셋업시작 ? `${fmtLocal(r.셋업시작)}부터(셋업)` : `${fmtLocal(isoToLocalInput(new Date(new Date(`${r.시작시각}:00+09:00`).getTime() - 2 * 3600e3).toISOString()))}부터(공연 2시간 전)`} ~ ${fmtLocal(r.종료시각) || "종료 미상"}`;
-        head += ` · ${occ.title}`;
+        head += ` · ${esc(occ.title)}`;
       } else {
-        head = t.공연표시 ? `${fmtMD(t.공연표시.day)} · ${t.공연표시.site} · ${t.공연표시.title}` : "공연 정보 없음";
-        when = "고른 공연이 목록에 없어 계산에서 빠짐(지난 공연이거나 일정 삭제)";
+        head = occ ? `${fmtMD(occ.day)} ${occ.시작 ?? ""} · 장소 미확인 · ${esc(occ.title)}`
+          : t.공연표시 ? `${fmtMD(t.공연표시.day)} · ${esc(t.공연표시.site)} · ${esc(t.공연표시.title)}` : "공연 정보 없음";
+        when = occ ? "공연 장소 미확인 → 계산에서 빠짐" : "고른 공연이 목록에 없어 계산에서 빠짐(지난 공연이거나 일정 삭제)";
       }
       td.innerHTML = `<div class="ev-sum"><b>${head}</b><br><span>${parts.join(" · ")} · ${when}</span></div>`;
       const btns = document.createElement("div");
@@ -305,7 +311,7 @@ function renderTruckTable(onChange) {
       if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
       if (dirty()) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
       else if (t.공연키) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
-      else { status.textContent = t.site ? "공연을 골라 주세요(예전 입력)" : "입력 필요"; status.dataset.state = "dirty"; }
+      else { status.textContent = t.site ? "공연 선택 필요(예전 입력)" : "입력 필요"; status.dataset.state = "dirty"; }
     };
 
     // 공연 고르기: 날짜별로 묶어서(앞으로 2주)
@@ -313,7 +319,7 @@ function renderTruckTable(onChange) {
     const byDay = new Map();
     for (const o of occs) { if (!byDay.has(o.day)) byDay.set(o.day, []); byDay.get(o.day).push(o); }
     occSel.innerHTML = `<option value="">공연 고르기</option>` + [...byDay].map(([day, list]) =>
-      `<optgroup label="${fmtMD(day)}">${list.map((o) => `<option value="${o.key}">${occLabel(o).replace(/"/g, "&quot;")}</option>`).join("")}</optgroup>`).join("");
+      `<optgroup label="${fmtMD(day)}">${list.map((o) => `<option value="${esc(o.key)}">${esc(occLabel(o))}</option>`).join("")}</optgroup>`).join("");
     occSel.value = draft.공연키;
     if (draft.공연키 && occSel.value !== draft.공연키) occSel.value = ""; // 목록에서 사라진 공연
     occSel.addEventListener("change", () => { draft.공연키 = occSel.value; paint(); });
@@ -338,7 +344,7 @@ function renderTruckTable(onChange) {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
     saveBtn.addEventListener("click", () => {
-      if (!draft.공연키) { paint("공연을 골라 주세요"); return; }
+      if (!draft.공연키) { paint("공연 선택 필요"); return; }
       const num = (v) => (v === "" || v === null ? null : Number(v));
       const cnt = num(draft.발전기수), kw = num(draft.엔진출력_kW);
       if (cnt !== null && !(Number.isInteger(cnt) && cnt >= 1 && cnt <= 4)) { paint("발전기 수는 1~4"); return; }
@@ -399,10 +405,10 @@ function renderAutoEvents(hourIso) {
     const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예측 범위 밖";
     blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
       <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${label}</b><small>${hint}</small></button>
-      ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${e.title}</span></div>`).join("")}
+      ${items.map((e) => `<div class="ev"><b>${esc(e.startTimeStr ?? "시각 미상")}</b> · ${esc(e.site)}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${esc(e.title)}</span></div>`).join("")}
     </section>`);
   }
-  el.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">앞으로 2주 공연 없음</p>`;
+  el.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">${esc(eventsEmptyMessage(state.events))}</p>`;
   if (!scheduleClickBound) {
     scheduleClickBound = true;
     el.addEventListener("click", (e) => {
@@ -433,7 +439,7 @@ function renderManualEventsTable(onChange) {
       tr.className = "compact";
       const td = document.createElement("td");
       const [, mm, dd] = ev.날짜.split("-");
-      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${ev.시작}</b> · ${ev.site}<br><span>${ev.title}${ev.소요분 ? ` · ${ev.소요분}분` : ""} · ${ev.셋업 ? `셋업 ${fmtLocal(ev.셋업)}부터 발전차 가동` : "발전차 공연 2시간 전부터"}</span></div>`;
+      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${esc(ev.시작)}</b> · ${esc(ev.site)}<br><span>${esc(ev.title)}${ev.소요분 ? ` · ${ev.소요분}분` : ""} · ${ev.셋업 ? `셋업 ${fmtLocal(ev.셋업)}부터 발전차 가동` : "발전차 공연 2시간 전부터"}</span></div>`;
       const btns = document.createElement("div");
       btns.className = "ev-btns";
       const edit = document.createElement("button");
@@ -517,10 +523,10 @@ function renderManualEventsTable(onChange) {
     const saveBtn = document.createElement("button");
     saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
     saveBtn.addEventListener("click", () => {
-      if (!draft.title || !draft.site || !draft.날짜 || !draft.시작) { paint("공연명·위치·날짜·시작 시각을 모두 넣어 주세요"); return; }
+      if (!draft.title || !draft.site || !draft.날짜 || !draft.시작) { paint("공연명·위치·날짜·시작 시각 모두 입력 필요"); return; }
       const dur = draft.소요분 === "" ? null : Number(draft.소요분);
       if (dur !== null && !(Number.isFinite(dur) && dur > 0)) { paint("소요(분)는 1 이상 숫자"); return; }
-      if (draft.셋업 === "__partial") { paint("셋업은 날짜와 시를 함께 넣어 주세요"); return; }
+      if (draft.셋업 === "__partial") { paint("셋업은 날짜와 시 함께 입력 필요"); return; }
       if (draft.셋업 && draft.셋업 > `${draft.날짜}T${draft.시작}`) { paint("셋업은 공연 시작보다 앞이어야 함"); return; }
       Object.assign(ev, { title: draft.title, site: draft.site, 날짜: draft.날짜, 시작: draft.시작, 소요분: dur, 셋업: draft.셋업 || null });
       editingEventIds.delete(ev.id);
@@ -652,14 +658,14 @@ function renderImpactedLessons(lessons, date, cells) {
   }
   const rows = running.map((l) => {
     const feature = state.siteByName.get(l.site);
-    if (!feature) return `<tr><td>${l.name}</td><td>${l.site}</td><td colspan="2">위치 자료 없음</td></tr>`;
+    if (!feature) return `<tr><td>${esc(l.name)}</td><td>${esc(l.site)}</td><td colspan="2">위치 자료 없음</td></tr>`;
     const [lon, lat] = feature.geometry.coordinates;
     const near = nearestPlace(DEFAULT_PLACE_NAMES.map((n) => ({ name: n, ...pt(n) })).filter((p) => p.lat), lat, lon, 9999);
     const key = near?.name ?? null;
     const c = key ? cells?.[key] : null;
     const noise = placeCellState(c?.noise);
     const exhaust = placeCellState(c?.exhaust);
-    return `<tr><td>${l.name}</td><td>${l.site}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
+    return `<tr><td>${esc(l.name)}</td><td>${esc(l.site)}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
   }).join("");
   el.innerHTML = `<table class="mini"><thead><tr><th>강좌</th><th>장소</th><th>소음</th><th>배출</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -695,6 +701,7 @@ async function main() {
   state.concaweData = concaweData;
   state.lessons = lessons;
   state.events = events;
+  setupEventsNotice(events);
   initTabs({ defaultTab: "events" });
 
   const genNote = document.getElementById("generator-count-note");
@@ -797,7 +804,7 @@ async function main() {
     btn.textContent = "만드는 중…(72시간 계산)";
     try {
       const csv = await buildForecastCsv();
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }) // BOM: 엑셀에서 한글이 안 깨지게;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -818,8 +825,10 @@ async function main() {
   const warningEl = document.getElementById("slider-warning");
 
   const layerWarningEl = document.getElementById("layer-warning");
-  function renderLayerWarnings(cells, weather) {
+  function renderLayerWarnings(cells, weather, warning = null) {
     const lines = [];
+    // 11/28 독립 검토: 기상 자료가 없는 시각엔 지도가 빈칸인데 안내가 슬라이더 옆 작은 글씨뿐이었어요.
+    if (warning) lines.push(`${esc(warning)}. 안전하다는 뜻은 아님`);
     for (const key of ["exhaust", "noise"]) {
       const layerCells = cells.filter((c) => c.layer === key);
       if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
@@ -854,7 +863,7 @@ async function main() {
     if (mySeq !== refreshSeq) return;
     warningEl.textContent = warning ?? "";
     const weatherForWarning = resolveWeather(date);
-    renderLayerWarnings(cells, weatherForWarning);
+    renderLayerWarnings(cells, weatherForWarning, warning);
     const noiseCells = cells.filter((c) => c.layer === "noise");
     const exhaustCells = cells.filter((c) => c.layer === "exhaust");
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);

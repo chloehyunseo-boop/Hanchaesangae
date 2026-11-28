@@ -157,13 +157,13 @@ export function mergeForecasts(ultraItems, vilageItems, now) {
  * "발표 시각 다음 시간"부터만 값이 있어요(예: 08시 발표 → 09시부터). 그래서 새 발표를 받은 갱신에서는
  * 지금 시각의 기온(TMP)이 빠져, 엔진이 그 시각 지도 전체를 '계산 불가'로 비웠어요(11/26~28 30번 중 8번).
  * 새로 받은 예보에 없는 (시각, 항목)만 직전 갱신 파일 값으로 채워요. 새 값이 있으면 항상 새 값이 이겨요.
- * 채우는 범위는 지금 시(정각)부터 6시간까지만이에요(오래된 값이 계속 남지 않게).
+ * 채우는 범위는 지금 시(정각)부터 6시간까지만이에요(오래된 값이 계속 남지 않게). 단기예보 호출 자체가 실패한 갱신만 hours를 늘려 직전 값을 이어 받아요(독립 검토 11/28).
  * 채운 값에는 유지: "직전갱신"을 붙여요(지어낸 값이 아니라 기상청이 직전에 준 예보값).
  */
-export function carryOverMissing(newItems, prevItems, now) {
+export function carryOverMissing(newItems, prevItems, now, { hours = 6 } = {}) {
   const fmt = (d) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}${pad2(d.getHours())}00`;
   const from = fmt(now);
-  const to = fmt(new Date(now.getTime() + 6 * 60 * 60 * 1000));
+  const to = fmt(new Date(now.getTime() + hours * 60 * 60 * 1000));
   const key = (it) => `${it.fcstDate}${it.fcstTime}:${it.category}`;
   const have = new Set(newItems.map(key));
   const out = [...newItems];

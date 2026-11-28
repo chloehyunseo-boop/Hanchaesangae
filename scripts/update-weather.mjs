@@ -32,7 +32,7 @@ async function main() {
   try {
     prevItems = JSON.parse(await readFile(new URL("../data/weather.json", import.meta.url), "utf8")).예보 ?? [];
   } catch { /* 첫 실행 등 — 채울 값 없음 */ }
-  const 예보 = carryOverMissing(mergeForecasts(ultraItems, vilageItems, now), prevItems, now);
+  const 예보 = carryOverMissing(mergeForecasts(ultraItems, vilageItems, now), prevItems, now, { hours: vilage.ok ? 6 : 96 });
 
   const record = {
     _설명: "GitHub Actions가 매시 50분에 갱신해요. 값이 없는 시각은 비워 둬요(임의로 채우지 않음).",
