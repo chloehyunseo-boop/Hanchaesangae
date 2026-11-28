@@ -442,13 +442,26 @@ export const CanvasCellLayer = L.Layer.extend({
     map.getPanes().overlayPane.appendChild(this._overlayCanvas); // 무늬가 칠 위에 오게 나중에 붙여요
     map.on("moveend zoomend resize", this._reset, this);
     map.on("zoomanim", this._animateZoom, this);
+    // 11/28 하린 발견(휴대폰 카톡·사파리): 두 손가락으로 확대·축소(핀치)하는 동안 Leaflet은
+    // zoomanim 대신 'zoom' 이벤트만 계속 보내요. 이걸 안 받아서 손을 뗄 때까지 칸 그림이 옛 배율로
+    // 남아 지도 위에서 미끄러졌어요. 'zoom'마다 같은 방식(배율·위치 CSS transform)으로 따라가요.
+    map.on("zoom", this._onZoom, this);
     this._reset();
+  },
+  _onZoom() {
+    if (!this._map || !this._topLeftLatLng || this._zoomAtReset === undefined) return;
+    const zoom = this._map.getZoom();
+    const scale = this._map.getZoomScale(zoom, this._zoomAtReset);
+    const newTopLeft = this._map._latLngToNewLayerPoint(this._topLeftLatLng, zoom, this._map.getCenter());
+    L.DomUtil.setTransform(this._fillCanvas, newTopLeft, scale);
+    L.DomUtil.setTransform(this._overlayCanvas, newTopLeft, scale);
   },
   onRemove(map) {
     map.getPanes().overlayPane.removeChild(this._fillCanvas);
     map.getPanes().overlayPane.removeChild(this._overlayCanvas);
     map.off("moveend zoomend resize", this._reset, this);
     map.off("zoomanim", this._animateZoom, this);
+    map.off("zoom", this._onZoom, this);
   },
   // 줌 애니메이션 도중(끝나기 전) 호출돼요 — 이미 그려둔 래스터(캔버스 둘 다)를 목표 줌·중심에
   // 맞는 자리로 옮기고 배율만 CSS transform으로 미리 맞춰서, 다른 Leaflet 레이어(타일 등)와
@@ -456,7 +469,7 @@ export const CanvasCellLayer = L.Layer.extend({
   // 좌표로 다시 그려서 흐려 보이던 배율 확대/축소를 또렷하게 바꿔요.
   _animateZoom(e) {
     if (!this._map || !this._topLeftLatLng) return;
-    const scale = this._map.getZoomScale(e.zoom, this._map.getZoom());
+    const scale = this._map.getZoomScale(e.zoom, this._zoomAtReset ?? this._map.getZoom());
     const newTopLeft = this._map._latLngToNewLayerPoint(this._topLeftLatLng, e.zoom, e.center);
     L.DomUtil.setTransform(this._fillCanvas, newTopLeft, scale);
     L.DomUtil.setTransform(this._overlayCanvas, newTopLeft, scale);
@@ -475,6 +488,7 @@ export const CanvasCellLayer = L.Layer.extend({
     L.DomUtil.setTransform(this._fillCanvas, topLeft, 1);
     L.DomUtil.setTransform(this._overlayCanvas, topLeft, 1);
     this._topLeftLatLng = this._map.containerPointToLatLng([0, 0]); // 다음 줌 애니메이션이 따라갈 기준점
+    this._zoomAtReset = this._map.getZoom(); // 그린 시점의 줌(핀치·애니메이션 배율 기준)
     const size = this._map.getSize();
     this._fillCanvas.width = size.x;
     this._fillCanvas.height = size.y;

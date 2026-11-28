@@ -23,9 +23,9 @@ import {
   buildRealEventStageSources, buildManualEventStageSources, buildCitizenGeneratorSources,
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
-} from "./shared.js";
+} from "./shared.js?v=20261128p";
 import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261128a"; // 11/28: 공연 일정 수집 실패·멈춤 안내
-import { ContourCellLayer } from "./contour_layer.js";
+import { ContourCellLayer } from "./contour_layer.js?v=20261128p";
 import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
 
