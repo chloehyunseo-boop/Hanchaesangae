@@ -38,6 +38,7 @@ const shortName = (n) => SHORT_NAME[n] ?? n.replace(/^올림픽공원\s*/, "");
 const LAYER_SUBJECT = { exhaust: "발전차 배출가스가", noise: "공연 소음이" };
 const LAYER_TOPIC = { exhaust: "배출가스", noise: "소음" };
 const LAYER_TOPIC_SUBJ = { exhaust: "배출가스가", noise: "소음이" };
+const LAYER_NAME = { exhaust: "발전차 배출가스", noise: "공연 소음" }; // 11/28 개조식 문장용
 const LEVEL_RANK = { 강: 3, 중: 2, 약: 1 };
 
 /** 기상청 VEC(바람이 불어오는 방향, 도) → 16방위 한글 이름. 범위 밖·숫자 아님이면 null */
@@ -139,7 +140,7 @@ const josaRo = (word) => {
  * @returns {string[]}
  */
 export function buildForecastSentences({ series, now, maxLines = MAX_LINES, placeViewAvailable = true }) {
-  if (!Array.isArray(series) || series.length === 0) return ["예측 자료가 아직 없어요."];
+  if (!Array.isArray(series) || series.length === 0) return ["예측 자료 없음"];
   const sorted = [...series].filter((s) => kstParts(s.hour)).sort((a, b) => Date.parse(a.hour) - Date.parse(b.hour));
 
   // 1) 장소·레이어별로 같은 상태가 이어지는 시간대를 묶어요
@@ -188,41 +189,42 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES, plac
     const where = g.places.length >= 4 && g.places.length === allPlaces ? "주요 장소 전체" : g.places.map(shortName).join("·");
     if (g.state.kind === "level") {
       const lv = g.state.level;
-      const windPart = g.wind ? `${josaRo(g.wind)} ` : "";
+      const windPart = g.wind ? `${g.wind}, ` : "";
       let text;
       if (g.state.atLeast) {
-        text = `${when} ${windPart}${LAYER_SUBJECT[g.layer]} ${where} 쪽으로 '${lv}' 이상 퍼질 것으로 보여요(발전차 바로 옆이라 정확한 값은 불확실해요)`;
+        text = `${when} ${windPart}${LAYER_NAME[g.layer]} ${where} 쪽 '${lv}' 이상 확산 예상(발전차 바로 옆, 정확한 값 불확실)`;
       } else if (lv === "강") {
-        text = `${when} ${windPart}${LAYER_SUBJECT[g.layer]} ${where} 쪽으로 퍼질 가능성이 커요('강')`;
+        text = `${when} ${windPart}${LAYER_NAME[g.layer]} ${where} 쪽 확산 가능성 큼('강')`;
       } else if (lv === "중") {
-        text = `${when} ${windPart}${LAYER_SUBJECT[g.layer]} ${where} 쪽으로 퍼질 수 있어요('중')`;
+        text = `${when} ${windPart}${LAYER_NAME[g.layer]} ${where} 쪽 확산 가능('중')`;
       } else {
-        text = `${when} ${where}에도 ${LAYER_TOPIC_SUBJ[g.layer]} 약하게 닿을 수 있어요('약')`;
+        text = `${when} ${windPart}${LAYER_TOPIC[g.layer]} ${where}까지 약하게 도달 가능('약')`;
       }
       lines.push({ text, rank: LEVEL_RANK[lv] * 10, start: g.startIdx });
     } else {
       const r = g.state.reason;
       const text =
-        r === "약풍" ? (where === "주요 장소 전체" ? `${eunNeun(when)} 바람이 너무 약해 ${LAYER_TOPIC_SUBJ[g.layer]} 어디로 퍼질지 계산하지 못했어요. 안전하다는 뜻은 아니에요(지도 회색)` : `${eunNeun(when)} 바람이 너무 약해 ${where} 쪽 ${LAYER_TOPIC[g.layer]} 퍼짐을 계산하지 못했어요. 안전하다는 뜻은 아니에요(지도 회색)`) :
-        r === "근거리" ? `${when} ${eunNeun(where)} 발전차 바로 옆이라 단계를 정하지 않았어요(지도 빗금)` :
-        r === "시간미확인" ? `${when} 가동 시간을 모르는 ${g.layer === "exhaust" ? "발전차가" : "공연이"} 있어 ${where} 쪽 ${LAYER_TOPIC[g.layer]}${hasJong(LAYER_TOPIC[g.layer]) ? "을" : "를"} 계산하지 않았어요` :
-        r === "일부제외" ? `${when} ${where} 쪽 ${eunNeun(LAYER_TOPIC[g.layer])} 일부 공연 정보가 빠져 단계를 정하지 않았어요` :
-        `${when} ${where} 쪽 ${eunNeun(LAYER_TOPIC[g.layer])} 입력 정보가 부족해 계산하지 못했어요`;
+        r === "약풍" ? (where === "주요 장소 전체" ? `${when} 약풍, ${LAYER_TOPIC[g.layer]} 확산 방향 계산 불가. 안전하다는 뜻은 아님(지도 회색)` : `${when} 약풍, ${where} 쪽 ${LAYER_TOPIC[g.layer]} 확산 계산 불가. 안전하다는 뜻은 아님(지도 회색)`) :
+        r === "근거리" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 발전차 바로 옆이라 단계 보류(지도 빗금)` :
+        r === "시간미확인" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 계산 안 함(가동 시간 모르는 ${g.layer === "exhaust" ? "발전차" : "공연"} 있음)` :
+        r === "일부제외" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 단계 보류(일부 공연 정보 빠짐)` :
+        `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 계산 불가(입력 정보 부족)`;
       lines.push({ text, rank: 15, start: g.startIdx }); // 모름은 '중'과 '약' 사이 우선순위
     }
   }
 
   if (lines.length === 0) {
     const s0 = sorted[0].hour, n = sorted.length;
-    return [`${spanText(s0, n, now)} 주요 장소에 '약' 이상으로 예측된 소음·배출가스가 없어요.`];
+    return [`${spanText(s0, n, now)} 주요 장소에 '약' 이상 예측된 소음·배출가스 없음`];
   }
   // 강 → 이상 등급 → 중 → 모름 → 약, 같은 순위면 이른 시각 먼저
   lines.sort((a, b) => b.rank - a.rank || a.start - b.start);
-  const out = lines.slice(0, maxLines).map((l) => `${l.text}.`.replace(/\)\.$/, ").").replace(/요\.$/, "요."));
+  // 11/28 하린: 개조식(마침표 없음)으로 통일 — 안내 탭 문구와 같은 말투
+  const out = lines.slice(0, maxLines).map((l) => l.text);
   if (lines.length > maxLines) {
     out[maxLines - 1] = placeViewAvailable
-      ? `그 밖에 ${lines.length - maxLines + 1}건은 지도와 장소별 보기에 있어요.`
-      : `그 밖에 ${lines.length - maxLines + 1}건은 지도에 있어요.`;
+      ? `그 밖에 ${lines.length - maxLines + 1}건은 지도·장소별 보기에서 확인`
+      : `그 밖에 ${lines.length - maxLines + 1}건은 지도에서 확인`;
   }
   return out;
 }

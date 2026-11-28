@@ -16,19 +16,19 @@ ok(windName(NaN) === null && windName(undefined) === null, "풍향 없음 → nu
 {
   const series = [19, 20, 21].map((h) => ({ hour: H(24, h), weather: { windVecFromDeg: 315 }, cellsByPlace: { 올림픽수영장: { exhaust: ex("강"), noise: null } } }));
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out.length === 1 && out[0] === "내일 19~22시 북서풍으로 발전차 배출가스가 수영장 쪽으로 퍼질 가능성이 커요('강').", "연속 3시간 묶기 + 내일", out[0]);
+  ok(out.length === 1 && out[0] === "내일 19~22시 북서풍, 발전차 배출가스 수영장 쪽 확산 가능성 큼('강')", "연속 3시간 묶기 + 내일", out[0]);
 }
 // 2) 같은 시간·단계의 장소를 합치기
 {
   const series = [{ hour: H(23, 20), weather: { windVecFromDeg: 270 }, cellsByPlace: { 올림픽수영장: { exhaust: ex("중") }, "올림픽공원 테니스경기장": { exhaust: ex("중") } } }];
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out[0] === "20~21시 서풍으로 발전차 배출가스가 수영장·테니스장 쪽으로 퍼질 수 있어요('중').", "장소 합치기", out[0]);
+  ok(out[0] === "20~21시 서풍, 발전차 배출가스 수영장·테니스장 쪽 확산 가능('중')", "장소 합치기", out[0]);
 }
 // 3) 아무것도 없음
 {
   const series = [17, 18].map((h) => ({ hour: H(23, h), weather: { windVecFromDeg: 90 }, cellsByPlace: { 장미광장: { exhaust: ex(null), noise: no(null) } } }));
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out.length === 1 && out[0].includes("'약' 이상으로 예측된 소음·배출가스가 없어요"), "예보 없음 문장", out[0]);
+  ok(out.length === 1 && out[0].includes("'약' 이상 예측된 소음·배출가스 없음"), "예보 없음 문장", out[0]);
 }
 // 4) 강이 먼저, 6줄 이상이면 5줄째가 '그 밖에'
 {
