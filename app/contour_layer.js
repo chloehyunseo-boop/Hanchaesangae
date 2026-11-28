@@ -13,7 +13,7 @@
 //     회색 면 모양 안에만 그려요. 빗금은 연하게, 점무늬와는 구분되게(빗금 = 옅은 바탕 + 가는 사선,
 //     점무늬 = 회색 바탕 + 진한 점).
 
-import { CanvasCellLayer } from "./shared.js";
+import { CanvasCellLayer } from "./shared.js?v=20261128p";
 
 const RANK = { 약: 1, 중: 2, 강: 3 };
 const HATCH_FILL = "rgba(120,120,120,0.16)"; // 빗금 구역 바탕(연하게)
