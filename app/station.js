@@ -837,18 +837,30 @@ async function main() {
   }
 
   const sliderBandEl = document.getElementById("slider-band");
+  // 11/28 친구 요청: 드래그하다 지도가 비어 보이면 "공연이 없어서"인지 "계산 중"인지
+  // 구분이 안 돼요 — 공연·발전차 중 하나라도 있는 시간은 노란 칸으로 미리 표시해요
+  // (impossible이 아니면, 즉 지도에 뭔가 뜰 가능성이 있는 시간만).
   function refreshSliderBand() {
     const segs = [];
     for (let offset = 0; offset < NUM_HOURS; offset++) {
       const weather = resolveWeather(hourSlotDate(offset));
       const hourIso = hourSlotIso(hourSlotDate(offset));
       const hasGenerators = buildGeneratorSources(hourIso).length > 0;
+      const hasStage = buildStageSources(hourIso).length > 0;
       const impossible = hasGenerators && weather && weather.wsd10m < 1.0;
-      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "약풍이어서 배출가스 계산 불가" : ""}"></div>`);
+      const active = !impossible && (hasGenerators || hasStage);
+      const cls = impossible ? " impossible" : active ? " active" : "";
+      const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "공연·발전차 있음" : "";
+      segs.push(`<div class="slider-seg${cls}" title="${title}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
     const noteEl = document.getElementById("band-note");
-    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍이어서 배출가스 계산 불가" : "";
+    if (noteEl) {
+      const notes = [];
+      if (segs.some((x) => x.includes("impossible"))) notes.push('<i class="sw-impossible"></i>약풍이어서 배출가스 계산 불가');
+      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>공연·발전차 있는 시간');
+      noteEl.innerHTML = notes.join(" · ");
+    }
   }
 
   let refreshSeq = 0;
