@@ -14,7 +14,7 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128d";
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
@@ -24,10 +24,16 @@ import {
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261128a"; // 11/28: 공연 일정 수집 실패·멈춤 안내
 import { ContourCellLayer } from "./contour_layer.js";
-import { createGeneratorMarkers } from "./generator_markers.js"; // 11/28: 지도에 발전차 위치
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
+import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;
+// 11/28 최종 점검: 공연명·장소는 공단 홈페이지 글(자동 수집)이나 공단 직원이 입력한 글이라 그대로 innerHTML에
+// 넣으면 '<오페라의 유령>'처럼 꺾쇠가 든 이름이 깨지거나 스크립트가 실행돼요. 화면에 넣기 전에 이스케이프해요.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 const STORAGE_KEY = "olpak_station_trucks_v1";
 const EVENTS_STORAGE_KEY = "olpak_station_manual_events_v1";
 const NOGEN_STORAGE_KEY = "olpak_station_no_generator_v1";
@@ -76,8 +82,78 @@ function saveManualEvents() {
   try { localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(state.manualEvents)); } catch { /* 저장 안 돼도 화면은 그대로 동작 */ }
 }
 
+// ---------------------------------------------------------------------------
+// 11/28 하린: 발전차는 "어느 공연의 발전차인지"만 고르고, 가동 시간은 그 공연에서 가져와요.
+//  - 공연 추가(수동)에서 셋업 시각을 넣으면 → 그 공연 발전차는 셋업 시각부터 가동
+//  - 셋업이 없거나 홈페이지 자동 수집 공연이면 → 공연 시작 2시간 전부터(엔진 기본 규칙)
+//  - 끝은 공연 종료(소요 시간, 없으면 시작+3시간, 옥외는 21:30 중 먼저 — 소음 계산과 같은 규칙)
+//  같은 공연의 시간을 소음·기본 발전차·입력 발전차가 모두 같은 함수(occurrenceTime)로 받아서 어긋나지 않아요.
+// ---------------------------------------------------------------------------
+const OCC_DAYS = 14;
+const ymdKst = (d) => { const { y, m, d: dd } = kstParts(d); return `${y}-${m}-${dd}`; };
+const weekdayOfYmd = (ymd) => { const [y, m, d] = ymd.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
+function isoToLocalInput(iso) {
+  if (!iso) return null;
+  const { y, m, d, h } = kstParts(new Date(iso));
+  const mm = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", minute: "2-digit" }).format(new Date(iso)).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${mm}`;
+}
+/** 오늘부터 2주 안의 공연(자동 수집 + 공단이 추가한 공연), 날짜마다 하나씩. */
+function eventOccurrences() {
+  const out = [];
+  const start = hourSlotDate(0);
+  for (let i = 0; i < OCC_DAYS; i++) {
+    const day = ymdKst(new Date(start.getTime() + i * 86400e3));
+    for (const ev of state.events?.공연 ?? []) {
+      if (ev.출처 !== "공단일정페이지" || !ev.기간시작 || !ev.기간끝 || day < ev.기간시작 || day > ev.기간끝) continue;
+      if (Array.isArray(ev.공연요일) && !ev.공연요일.includes(weekdayOfYmd(day))) continue;
+      out.push({ key: `auto|${ev.공단일정번호 ?? ev.title}|${ev.site}|${day}`, kind: "auto", ev, day, site: ev.site, title: ev.title, 시작: ev.일자별시작?.[day] ?? null, 셋업: null });
+    }
+    for (const ev of state.manualEvents) {
+      if (!(ev.title && ev.site && ev.날짜 && ev.시작) || ev.날짜 !== day) continue;
+      out.push({ key: `manual|${ev.id}`, kind: "manual", ev, day, site: ev.site, title: ev.title, 시작: ev.시작, 셋업: ev.셋업 ?? null });
+    }
+  }
+  return out.sort((a, b) => (a.day + (a.시작 ?? "99")).localeCompare(b.day + (b.시작 ?? "99")));
+}
+/** 공연 하나의 가동 시간 {start, end, setupStart?, 출처}. 소음 음원과 같은 함수로 시작·종료를 정해요. */
+function occurrenceTime(o) {
+  const noon = `${o.day}T12:00:00+09:00`;
+  let time = null;
+  if (o.kind === "auto") {
+    time = buildRealEventGeneratorSources({ 공연: [o.ev] }, state.siteByName, state.assumptions, noon)[0]?.time
+      ?? buildRealEventStageSources({ 공연: [o.ev] }, state.siteByName, "기본", state.assumptions, noon, NO_EXCLUDE)[0]?.time ?? null;
+  } else {
+    time = buildManualEventStageSources([o.ev], state.siteByName, "기본", state.assumptions, noon)[0]?.time ?? null;
+  }
+  if (!time && o.시작) {
+    const s0 = new Date(`${o.day}T${o.시작}:00+09:00`).getTime();
+    const dur = Number.isFinite(o.ev?.소요분) && o.ev.소요분 > 0 ? o.ev.소요분 * 60000 : 3 * 3600e3;
+    time = { start: new Date(s0).toISOString(), end: new Date(s0 + dur).toISOString(), 출처: "공연시각_종료가정" };
+  }
+  if (!time) return { start: null, end: null, 출처: "미확인" };
+  if (time.start && o.셋업) time = { ...time, setupStart: `${o.셋업}:00+09:00` };
+  return time;
+}
+/** 발전차 입력 → 계산용 기록(공연에서 위치·시각을 가져옴). 고른 공연이 목록에 없으면 null(계산에서 빠짐). */
+function resolveTruck(t, occs = eventOccurrences()) {
+  if (!t.공연키) return null;
+  const o = occs.find((x) => x.key === t.공연키);
+  if (!o || !o.site) return null;
+  const time = occurrenceTime(o);
+  return {
+    site: o.site, 발전기수: t.발전기수 ?? null, 인증등급: t.인증등급 ?? "모름", 엔진출력_kW: t.엔진출력_kW ?? null,
+    시작시각: isoToLocalInput(time.start), 셋업시작: isoToLocalInput(time.setupStart), 종료시각: isoToLocalInput(time.end),
+    시간미확인: !time.start, 날짜: o.day, 공연명: o.title,
+  };
+}
+function resolvedTruckRecords() {
+  const occs = eventOccurrences();
+  return state.trucks.map((t) => resolveTruck(t, occs)).filter(Boolean);
+}
+
 function buildGeneratorSourcesFromTrucks() {
-  return buildGeneratorSourcesFromTruckRecords(state.trucks, state.siteByName, state.assumptions);
+  return buildGeneratorSourcesFromTruckRecords(resolvedTruckRecords(), state.siteByName, state.assumptions);
 }
 
 function buildStageSources(hourIso) {
@@ -92,10 +168,27 @@ function buildStageSources(hourIso) {
 // 자동 생성 대상이 아니에요(발전차는 위 트럭 표에 직접 입력해 주세요) — events.공연(자동
 // 수집)만 대상이에요.
 function buildGeneratorSources(hourIso) {
-  return buildCitizenGeneratorSources({
-    events: state.events, truckRecords: state.trucks, noGeneratorDays: state.noGeneratorDays,
+  const records = resolvedTruckRecords();
+  const base = buildCitizenGeneratorSources({
+    events: state.events, truckRecords: records, noGeneratorDays: state.noGeneratorDays,
     siteByName: state.siteByName, assumptions: state.assumptions, hourIso,
   });
+  // 11/28: 공단이 추가한 공연도 홈페이지 공연처럼 기본 대수 발전차를 넣어요(셋업 시각이 있으면 그때부터).
+  // 그 공연장·날짜에 발전차를 직접 입력했거나 '사용 안 함'이면 넣지 않아요(입력값 우선).
+  const entered = new Set(records.map((r) => `${r.site}|${r.날짜}`));
+  const noGen = new Set(state.noGeneratorDays.filter((r) => r.site && r.날짜).map((r) => `${r.site}|${r.날짜}`));
+  const manual = [];
+  for (const o of eventOccurrences()) {
+    if (o.kind !== "manual" || entered.has(`${o.site}|${o.day}`) || noGen.has(`${o.site}|${o.day}`)) continue;
+    const n = defaultGeneratorCount(o.site, state.assumptions);
+    const feature = state.siteByName.get(o.site);
+    if (!n || !feature) continue;
+    const pos = generatorPosition(o.site, feature, state.assumptions);
+    const time = occurrenceTime(o);
+    const 대수근거 = state.assumptions.발전차_기본대수?.공연장별?.[o.site] ? "공단확인값" : "확인된최소";
+    for (let i = 0; i < n; i++) manual.push({ lat: pos.lat, lon: pos.lon, 위치출처: pos.위치출처, site: o.site, 정보출처: "공연일정자동_대수가정", 대수근거, time });
+  }
+  return [...base, ...manual];
 }
 
 // '발전차 사용 안 함' 표 (agency.js와 같은 기능, 11/27 하린). 이 화면의 지도에도 반영돼요
@@ -159,15 +252,15 @@ async function getCellsForHour(date, computeHourInWorker) {
 // 발전차 입력 표 (agency.js와 동일)
 // ---------------------------------------------------------------------------
 const editingTruckIds = new Set(); // 지금 펼쳐서 고치는 중인 발전차(저장 전)
+const fmtMD = (ymd) => { const [, m, d] = ymd.split("-"); return `${Number(m)}/${Number(d)}`; };
+const fmtLocal = (v) => (v ? `${fmtMD(v.slice(0, 10))} ${v.slice(11, 16)}` : "");
 function renderTruckTable(onChange) {
-  // 11/28 하린: 공연 추가 카드와 같은 방식 — 고친 내용은 '저장'을 눌러야 반영되고, 저장하면 한 줄 요약으로 접혀요.
-  // 시각은 공연 추가와 같이 날짜 + '시'·'분' 선택으로 받아요(브라우저마다 다른 날짜·시각 입력 대신).
+  // 11/28 하린: 발전차는 '어느 공연'만 고르고(위치·가동 시간은 그 공연에서), 대수·인증·출력만 넣어요.
+  // 저장을 눌러야 반영되고, 저장하면 한 줄 요약(수정·삭제)으로 접혀요.
   const tbody = document.getElementById("truck-rows");
   tbody.innerHTML = "";
-  const venueNames = [...state.siteByName.keys()];
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
-  const md = (dt) => { const [d, hm] = dt.split("T"); const [, m, dd] = d.split("-"); return `${Number(m)}/${Number(dd)} ${hm}`; };
+  const occs = eventOccurrences();
+  const occLabel = (o) => `${fmtMD(o.day)} ${o.시작 ?? "시각 미확인"} · ${o.site ?? "장소 미확인"} · ${o.title}`;
   const delTruck = (t) => {
     state.trucks = state.trucks.filter((x) => x.id !== t.id);
     editingTruckIds.delete(t.id);
@@ -175,15 +268,25 @@ function renderTruckTable(onChange) {
     onChange();
   };
   for (const t of state.trucks) {
-    if (t.site && !editingTruckIds.has(t.id)) {
+    const occ = t.공연키 ? occs.find((x) => x.key === t.공연키) : null;
+    if (t.공연키 && !editingTruckIds.has(t.id)) {
       const tr = document.createElement("tr");
       tr.className = "compact";
       const td = document.createElement("td");
       const parts = [`${t.발전기수 ?? "대수 모름"}${t.발전기수 ? "대" : ""}`, t.인증등급 && t.인증등급 !== "모름" ? t.인증등급 : "등급 모름", t.엔진출력_kW ? `${t.엔진출력_kW}kW` : "출력 모름"];
-      const when = t.시작시각
-        ? `공연 ${md(t.시작시각)}${t.셋업시작 ? ` · 셋업 ${md(t.셋업시작)}` : " · 2시간 전부터 가동"}`
-        : "공연 시작 없음 → 항상 가동으로 계산";
-      td.innerHTML = `<div class="ev-sum"><b>${t.site}</b> · ${parts.join(" · ")}<br><span>${when}</span></div>`;
+      let head, when;
+      const r = occ ? resolveTruck(t, occs) : null; // 장소 미확인 공연이면 null(독립 검토 11/28: 이때 r.셋업시작을 읽다 화면이 죽었음)
+      if (occ && r) {
+        head = `${fmtMD(occ.day)} ${occ.시작 ?? ""} · ${esc(occ.site)}`;
+        when = r?.시간미확인 ? "공연 시각 미확인 → 가동 시간 모름(그 칸은 계산 안 함)"
+          : `가동 ${r.셋업시작 ? `${fmtLocal(r.셋업시작)}부터(셋업)` : `${fmtLocal(isoToLocalInput(new Date(new Date(`${r.시작시각}:00+09:00`).getTime() - 2 * 3600e3).toISOString()))}부터(공연 2시간 전)`} ~ ${fmtLocal(r.종료시각) || "종료 미상"}`;
+        head += ` · ${esc(occ.title)}`;
+      } else {
+        head = occ ? `${fmtMD(occ.day)} ${occ.시작 ?? ""} · 장소 미확인 · ${esc(occ.title)}`
+          : t.공연표시 ? `${fmtMD(t.공연표시.day)} · ${esc(t.공연표시.site)} · ${esc(t.공연표시.title)}` : "공연 정보 없음";
+        when = occ ? "공연 장소 미확인 → 계산에서 빠짐" : "고른 공연이 목록에 없어 계산에서 빠짐(지난 공연이거나 일정 삭제)";
+      }
+      td.innerHTML = `<div class="ev-sum"><b>${head}</b><br><span>${parts.join(" · ")} · ${when}</span></div>`;
       const btns = document.createElement("div");
       btns.className = "ev-btns";
       const edit = document.createElement("button");
@@ -198,7 +301,7 @@ function renderTruckTable(onChange) {
       tbody.appendChild(tr);
       continue;
     }
-    const draft = { site: t.site ?? "", 발전기수: t.발전기수 ?? "", 인증등급: t.인증등급 ?? "모름", 엔진출력_kW: t.엔진출력_kW ?? "", 시작시각: t.시작시각 ?? "", 셋업시작: t.셋업시작 ?? "" };
+    const draft = { 공연키: t.공연키 ?? "", 발전기수: t.발전기수 ?? "", 인증등급: t.인증등급 ?? "모름", 엔진출력_kW: t.엔진출력_kW ?? "" };
     const tr = document.createElement("tr");
     const status = document.createElement("span");
     status.className = "ev-status";
@@ -207,14 +310,19 @@ function renderTruckTable(onChange) {
     const paint = (msg) => {
       if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
       if (dirty()) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
-      else if (t.site) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
-      else { status.textContent = "입력 필요"; status.dataset.state = "dirty"; }
+      else if (t.공연키) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
+      else { status.textContent = t.site ? "공연 선택 필요(예전 입력)" : "입력 필요"; status.dataset.state = "dirty"; }
     };
 
-    const siteSel = document.createElement("select");
-    siteSel.innerHTML = `<option value="">위치 고르기</option>` + venueNames.map((n) => `<option value="${n}">${n}</option>`).join("");
-    siteSel.value = draft.site;
-    siteSel.addEventListener("change", () => { draft.site = siteSel.value; paint(); });
+    // 공연 고르기: 날짜별로 묶어서(앞으로 2주)
+    const occSel = document.createElement("select");
+    const byDay = new Map();
+    for (const o of occs) { if (!byDay.has(o.day)) byDay.set(o.day, []); byDay.get(o.day).push(o); }
+    occSel.innerHTML = `<option value="">공연 고르기</option>` + [...byDay].map(([day, list]) =>
+      `<optgroup label="${fmtMD(day)}">${list.map((o) => `<option value="${esc(o.key)}">${esc(occLabel(o))}</option>`).join("")}</optgroup>`).join("");
+    occSel.value = draft.공연키;
+    if (draft.공연키 && occSel.value !== draft.공연키) occSel.value = ""; // 목록에서 사라진 공연
+    occSel.addEventListener("change", () => { draft.공연키 = occSel.value; paint(); });
 
     const countInput = document.createElement("input");
     countInput.type = "number"; countInput.min = "1"; countInput.max = "4"; countInput.placeholder = "모름=2";
@@ -231,48 +339,23 @@ function renderTruckTable(onChange) {
     powerInput.value = draft.엔진출력_kW;
     powerInput.addEventListener("input", () => { draft.엔진출력_kW = powerInput.value; paint(); });
 
-    // 날짜 + 시·분 선택 → "YYYY-MM-DDTHH:MM"
-    const dateTimePick = (key) => {
-      const wrap = document.createElement("div");
-      wrap.className = "time-pick dt";
-      const dIn = document.createElement("input");
-      dIn.type = "date";
-      const hSel = document.createElement("select");
-      const mSel = document.createElement("select");
-      hSel.innerHTML = `<option value="">시</option>` + hours.map((h) => `<option value="${h}">${h}시</option>`).join("");
-      mSel.innerHTML = mins.map((m) => `<option value="${m}">${m}분</option>`).join("");
-      if (draft[key]) {
-        const [d, hm] = draft[key].split("T"); const [hh, mm] = (hm ?? "").split(":");
-        dIn.value = d; hSel.value = hh ?? ""; mSel.value = mins.includes(mm) ? mm : "00";
-      }
-      const upd = () => {
-        draft[key] = dIn.value && hSel.value ? `${dIn.value}T${hSel.value}:${mSel.value}` : (dIn.value || hSel.value ? "__partial" : "");
-        paint();
-      };
-      dIn.addEventListener("input", upd); dIn.addEventListener("change", upd);
-      hSel.addEventListener("change", upd); mSel.addEventListener("change", upd);
-      wrap.append(dIn, hSel, mSel);
-      return wrap;
-    };
-    const startPick = dateTimePick("시작시각");
-    const setupPick = dateTimePick("셋업시작");
-
     const actions = document.createElement("div");
     actions.className = "ev-actions";
     const saveBtn = document.createElement("button");
     saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
     saveBtn.addEventListener("click", () => {
-      if (!draft.site) { paint("위치를 골라 주세요"); return; }
+      if (!draft.공연키) { paint("공연 선택 필요"); return; }
       const num = (v) => (v === "" || v === null ? null : Number(v));
       const cnt = num(draft.발전기수), kw = num(draft.엔진출력_kW);
       if (cnt !== null && !(Number.isInteger(cnt) && cnt >= 1 && cnt <= 4)) { paint("발전기 수는 1~4"); return; }
       if (kw !== null && !(Number.isFinite(kw) && kw >= 1 && kw <= 2000)) { paint("엔진 출력은 1~2000 kW"); return; }
-      if (draft.시작시각 === "__partial" || draft.셋업시작 === "__partial") { paint("날짜와 시를 함께 넣어 주세요"); return; }
-      if (draft.셋업시작 && !draft.시작시각) { paint("셋업 시작은 공연 시작과 함께 넣어 주세요"); return; }
-      if (draft.셋업시작 && draft.셋업시작 >= draft.시작시각) { paint("셋업 시작은 공연 시작보다 앞이어야 함"); return; }
-      Object.assign(t, { site: draft.site, 발전기수: cnt, 인증등급: draft.인증등급, 엔진출력_kW: kw, 시작시각: draft.시작시각 || null, 셋업시작: draft.셋업시작 || null });
+      const o = occs.find((x) => x.key === draft.공연키);
+      Object.assign(t, { 공연키: draft.공연키, 공연표시: o ? { day: o.day, site: o.site, title: o.title } : t.공연표시 ?? null,
+        발전기수: cnt, 인증등급: draft.인증등급, 엔진출력_kW: kw });
+      // 예전 방식(위치·시각 직접 입력) 값은 지워요 — 이제 공연에서 가져와요
+      delete t.site; delete t.시작시각; delete t.셋업시작;
       editingTruckIds.delete(t.id);
-      renderTruckTable(onChange); // 저장하면 입력칸을 접고 한 줄 요약으로
+      renderTruckTable(onChange);
       onChange();
     });
     const delBtn = document.createElement("button");
@@ -280,7 +363,7 @@ function renderTruckTable(onChange) {
     delBtn.addEventListener("click", () => delTruck(t));
     actions.append(status, delBtn, saveBtn);
 
-    for (const el of [siteSel, countInput, gradeSel, powerInput, startPick, setupPick, actions]) {
+    for (const el of [occSel, countInput, gradeSel, powerInput, actions]) {
       const td = document.createElement("td");
       td.appendChild(el);
       tr.appendChild(td);
@@ -322,10 +405,10 @@ function renderAutoEvents(hourIso) {
     const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예측 범위 밖";
     blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
       <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${label}</b><small>${hint}</small></button>
-      ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${e.title}</span></div>`).join("")}
+      ${items.map((e) => `<div class="ev"><b>${esc(e.startTimeStr ?? "시각 미상")}</b> · ${esc(e.site)}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${esc(e.title)}</span></div>`).join("")}
     </section>`);
   }
-  el.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">앞으로 2주 공연 없음</p>`;
+  el.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">${esc(eventsEmptyMessage(state.events))}</p>`;
   if (!scheduleClickBound) {
     scheduleClickBound = true;
     el.addEventListener("click", (e) => {
@@ -356,7 +439,7 @@ function renderManualEventsTable(onChange) {
       tr.className = "compact";
       const td = document.createElement("td");
       const [, mm, dd] = ev.날짜.split("-");
-      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${ev.시작}</b> · ${ev.site}<br><span>${ev.title}${ev.소요분 ? ` · ${ev.소요분}분` : ""}</span></div>`;
+      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${esc(ev.시작)}</b> · ${esc(ev.site)}<br><span>${esc(ev.title)}${ev.소요분 ? ` · ${ev.소요분}분` : ""} · ${ev.셋업 ? `셋업 ${fmtLocal(ev.셋업)}부터 발전차 가동` : "발전차 공연 2시간 전부터"}</span></div>`;
       const btns = document.createElement("div");
       btns.className = "ev-btns";
       const edit = document.createElement("button");
@@ -375,13 +458,13 @@ function renderManualEventsTable(onChange) {
       tbody.appendChild(tr);
       continue;
     }
-    const draft = { title: ev.title ?? "", site: ev.site ?? "", 날짜: ev.날짜 ?? "", 시작: ev.시작 ?? "", 소요분: ev.소요분 ?? "" };
+    const draft = { title: ev.title ?? "", site: ev.site ?? "", 날짜: ev.날짜 ?? "", 시작: ev.시작 ?? "", 소요분: ev.소요분 ?? "", 셋업: ev.셋업 ?? "" };
     const tr = document.createElement("tr");
     const status = document.createElement("span");
     status.className = "ev-status";
     const isSaved = () => ev.title && ev.site && ev.날짜 && ev.시작;
     const dirty = () => (draft.title || "") !== (ev.title ?? "") || draft.site !== (ev.site ?? "") || draft.날짜 !== (ev.날짜 ?? "")
-      || draft.시작 !== (ev.시작 ?? "") || String(draft.소요분 ?? "") !== String(ev.소요분 ?? "");
+      || draft.시작 !== (ev.시작 ?? "") || String(draft.소요분 ?? "") !== String(ev.소요분 ?? "") || draft.셋업 !== (ev.셋업 ?? "");
     const paint = (msg) => {
       if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
       if (dirty()) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
@@ -418,15 +501,34 @@ function renderManualEventsTable(onChange) {
     durInput.type = "number"; durInput.min = "1"; durInput.placeholder = "비우면 180"; durInput.value = draft.소요분;
     durInput.addEventListener("input", () => { draft.소요분 = durInput.value; paint(); });
 
+    // 11/28: 셋업 시작(선택) — 날짜 + 시·분. 넣으면 이 공연 발전차는 그때부터 가동, 비우면 공연 2시간 전부터.
+    const setupWrap = document.createElement("div");
+    setupWrap.className = "time-pick dt";
+    const sDate = document.createElement("input"); sDate.type = "date";
+    const sH = document.createElement("select"); const sM = document.createElement("select");
+    sH.innerHTML = `<option value="">시</option>` + hours.map((h) => `<option value="${h}">${h}시</option>`).join("");
+    sM.innerHTML = mins.map((m) => `<option value="${m}">${m}분</option>`).join("");
+    if (draft.셋업) { const [d0, hm] = draft.셋업.split("T"); const [hh, mm2] = hm.split(":"); sDate.value = d0; sH.value = hh; sM.value = mins.includes(mm2) ? mm2 : "00"; }
+    const onSetup = () => {
+      const d0 = sDate.value || (sH.value ? draft.날짜 : "");
+      if (!sDate.value && d0) sDate.value = d0; // 시만 고르면 공연 날짜로 채움
+      draft.셋업 = d0 && sH.value ? `${d0}T${sH.value}:${sM.value}` : (sDate.value || sH.value ? "__partial" : "");
+      paint();
+    };
+    for (const el of [sDate, sH, sM]) { el.addEventListener("change", onSetup); el.addEventListener("input", onSetup); }
+    setupWrap.append(sDate, sH, sM);
+
     const actions = document.createElement("div");
     actions.className = "ev-actions";
     const saveBtn = document.createElement("button");
     saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
     saveBtn.addEventListener("click", () => {
-      if (!draft.title || !draft.site || !draft.날짜 || !draft.시작) { paint("공연명·위치·날짜·시작 시각을 모두 넣어 주세요"); return; }
+      if (!draft.title || !draft.site || !draft.날짜 || !draft.시작) { paint("공연명·위치·날짜·시작 시각 모두 입력 필요"); return; }
       const dur = draft.소요분 === "" ? null : Number(draft.소요분);
       if (dur !== null && !(Number.isFinite(dur) && dur > 0)) { paint("소요(분)는 1 이상 숫자"); return; }
-      Object.assign(ev, { title: draft.title, site: draft.site, 날짜: draft.날짜, 시작: draft.시작, 소요분: dur });
+      if (draft.셋업 === "__partial") { paint("셋업은 날짜와 시 함께 입력 필요"); return; }
+      if (draft.셋업 && draft.셋업 > `${draft.날짜}T${draft.시작}`) { paint("셋업은 공연 시작보다 앞이어야 함"); return; }
+      Object.assign(ev, { title: draft.title, site: draft.site, 날짜: draft.날짜, 시작: draft.시작, 소요분: dur, 셋업: draft.셋업 || null });
       editingEventIds.delete(ev.id);
       renderManualEventsTable(onChange); // 저장하면 입력칸을 접고 한 줄 요약으로
       onChange();
@@ -440,7 +542,7 @@ function renderManualEventsTable(onChange) {
     });
     actions.append(status, delBtn, saveBtn);
 
-    for (const el of [titleInput, siteSel, dateInput, timeWrap, durInput, actions]) {
+    for (const el of [titleInput, siteSel, dateInput, timeWrap, durInput, setupWrap, actions]) {
       const td = document.createElement("td");
       td.appendChild(el);
       tr.appendChild(td);
@@ -556,14 +658,14 @@ function renderImpactedLessons(lessons, date, cells) {
   }
   const rows = running.map((l) => {
     const feature = state.siteByName.get(l.site);
-    if (!feature) return `<tr><td>${l.name}</td><td>${l.site}</td><td colspan="2">위치 자료 없음</td></tr>`;
+    if (!feature) return `<tr><td>${esc(l.name)}</td><td>${esc(l.site)}</td><td colspan="2">위치 자료 없음</td></tr>`;
     const [lon, lat] = feature.geometry.coordinates;
     const near = nearestPlace(DEFAULT_PLACE_NAMES.map((n) => ({ name: n, ...pt(n) })).filter((p) => p.lat), lat, lon, 9999);
     const key = near?.name ?? null;
     const c = key ? cells?.[key] : null;
     const noise = placeCellState(c?.noise);
     const exhaust = placeCellState(c?.exhaust);
-    return `<tr><td>${l.name}</td><td>${l.site}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
+    return `<tr><td>${esc(l.name)}</td><td>${esc(l.site)}</td><td>${noise.text}</td><td>${exhaust.text}</td></tr>`;
   }).join("");
   el.innerHTML = `<table class="mini"><thead><tr><th>강좌</th><th>장소</th><th>소음</th><th>배출</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -599,6 +701,7 @@ async function main() {
   state.concaweData = concaweData;
   state.lessons = lessons;
   state.events = events;
+  setupEventsNotice(events);
   initTabs({ defaultTab: "events" });
 
   const genNote = document.getElementById("generator-count-note");
@@ -626,7 +729,7 @@ async function main() {
   if (fitPlaces.length) map.fitBounds(L.latLngBounds(fitPlaces.map((p) => [p.lat, p.lon])).pad(0.03), { animate: false });
 
   document.getElementById("add-truck").addEventListener("click", () => {
-    state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, site: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null, 시작시각: null, 셋업시작: null });
+    state.trucks.push({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, 공연키: null, 발전기수: null, 인증등급: "모름", 엔진출력_kW: null });
     saveTrucks();
     renderTruckTable(onTruckChange);
   });
@@ -646,7 +749,7 @@ async function main() {
   document.getElementById("export-trucks").addEventListener("click", () => {
     const payload = {
       _설명: "station.html에서 내보낸 발전차 입력값 — data/generator_inputs.json 자리에 덮어써서 커밋하면 시민 화면에 반영돼요.",
-      내보낸시각: new Date().toISOString(), trucks: state.trucks,
+      내보낸시각: new Date().toISOString(), trucks: resolvedTruckRecords(),
       미사용: state.noGeneratorDays.filter((r) => r.site && r.날짜).map(({ site, 날짜 }) => ({ site, 날짜 })),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -675,6 +778,8 @@ async function main() {
     invalidateSummary();
     saveManualEvents();
     state.cellCache.clear(); // 11/26: 이제 계산에 들어가니 agency.js와 달리 캐시도 비워요
+    renderTruckTable(onTruckChange); // 11/28: 발전차의 공연 목록·가동 시간이 공연에서 오니 같이 갱신
+    refreshSliderBand();
     refresh();
   }
   renderManualEventsTable(onEventChange);
@@ -699,7 +804,7 @@ async function main() {
     btn.textContent = "만드는 중…(72시간 계산)";
     try {
       const csv = await buildForecastCsv();
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }) // BOM: 엑셀에서 한글이 안 깨지게;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -720,8 +825,10 @@ async function main() {
   const warningEl = document.getElementById("slider-warning");
 
   const layerWarningEl = document.getElementById("layer-warning");
-  function renderLayerWarnings(cells, weather) {
+  function renderLayerWarnings(cells, weather, warning = null) {
     const lines = [];
+    // 11/28 독립 검토: 기상 자료가 없는 시각엔 지도가 빈칸인데 안내가 슬라이더 옆 작은 글씨뿐이었어요.
+    if (warning) lines.push(esc(warning));
     for (const key of ["exhaust", "noise"]) {
       const layerCells = cells.filter((c) => c.layer === key);
       if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
@@ -756,7 +863,7 @@ async function main() {
     if (mySeq !== refreshSeq) return;
     warningEl.textContent = warning ?? "";
     const weatherForWarning = resolveWeather(date);
-    renderLayerWarnings(cells, weatherForWarning);
+    renderLayerWarnings(cells, weatherForWarning, warning);
     const noiseCells = cells.filter((c) => c.layer === "noise");
     const exhaustCells = cells.filter((c) => c.layer === "exhaust");
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);

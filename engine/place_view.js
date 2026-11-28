@@ -74,7 +74,7 @@ export function buildPlaceTimeline({ series, placeName }) {
     if (rows.length === 0) text = `${name}: 예측 자료가 아직 없어요`;
     else if (worst) text = `${name}: 가장 높은 단계는 '${worst}${atLeast ? " 이상" : ""}'(${spanList(worstRows)})`;
     else text = `${name}: '약' 이상으로 예측된 시간이 없어요`;
-    if (unknownRows.length) text += ` · 계산하지 못한 시간 ${spanList(unknownRows)}(안전하다는 뜻은 아니에요)`;
+    if (unknownRows.length) text += ` · 계산하지 못한 시간 ${spanList(unknownRows)}`;
     summary[layer] = { worst, atLeast, hours: worstRows.map((r) => r.hour), unknownHours: unknownRows.map((r) => r.hour), text };
   }
   return { place: placeName, rows, summary };

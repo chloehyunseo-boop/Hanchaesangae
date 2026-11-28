@@ -200,25 +200,32 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES, plac
       } else {
         text = `${when} ${windPart}${LAYER_TOPIC[g.layer]} ${where}까지 약하게 도달 가능('약')`;
       }
-      lines.push({ text, rank: LEVEL_RANK[lv] * 10, start: g.startIdx });
+      // 11/28 하린: 소음 '약'(45 dB 이상)은 요약에 안 넣어요(지도에는 그대로). 공연 소음은 주요 장소에서
+      // 대개 약하게만 닿아 문장이 많아지기만 해서요.
+      if (g.layer === "noise" && lv === "약" && !g.state.atLeast) continue;
+      lines.push({ text, rank: LEVEL_RANK[lv] * 10, start: g.startIdx, known: true, layer: g.layer });
     } else {
       const r = g.state.reason;
       const text =
-        r === "약풍" ? (where === "주요 장소 전체" ? `${when} 약풍, ${LAYER_TOPIC[g.layer]} 확산 방향 계산 불가. 안전하다는 뜻은 아님(지도 회색)` : `${when} 약풍, ${where} 쪽 ${LAYER_TOPIC[g.layer]} 확산 계산 불가. 안전하다는 뜻은 아님(지도 회색)`) :
+        r === "약풍" ? (where === "주요 장소 전체" ? `${when} 약풍, ${LAYER_TOPIC[g.layer]} 확산 방향 계산 불가${g.layer === "exhaust" ? ". 발전차 주변에 고일 수 있음" : ""}` : `${when} 약풍, ${where} 쪽 ${LAYER_TOPIC[g.layer]} 확산 계산 불가${g.layer === "exhaust" ? ". 발전차 주변에 고일 수 있음" : ""}`) :
         r === "근거리" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 발전차 바로 옆이라 단계 보류(지도 빗금)` :
         r === "시간미확인" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 계산 안 함(가동 시간 모르는 ${g.layer === "exhaust" ? "발전차" : "공연"} 있음)` :
         r === "일부제외" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 단계 보류(일부 공연 정보 빠짐)` :
         `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 계산 불가(입력 정보 부족)`;
-      lines.push({ text, rank: 15, start: g.startIdx }); // 모름은 '중'과 '약' 사이 우선순위
+      lines.push({ text, rank: 15, start: g.startIdx, known: false, layer: g.layer });
     }
   }
 
   if (lines.length === 0) {
     const s0 = sorted[0].hour, n = sorted.length;
-    return [`${spanText(s0, n, now)} 주요 장소에 '약' 이상 예측된 소음·배출가스 없음`];
+    return [`${spanText(s0, n, now)} 주요 장소에 배출가스 '약' 이상·소음 '중' 이상 예측 없음`];
   }
-  // 강 → 이상 등급 → 중 → 모름 → 약, 같은 순위면 이른 시각 먼저
-  lines.sort((a, b) => b.rank - a.rank || a.start - b.start);
+  // 11/28 하린: 계산된 예측을 가까운 시간부터 먼저 보여주고(같은 시각이면 높은 단계 먼저),
+  // 계산 못 한 시간(약풍·시간 미확인 등)은 그 뒤에 둬요. 예전엔 단계 높은 순이라 먼 시간의 '강'이나
+  // '계산 불가'가 가까운 시간의 예측보다 먼저 떠서 읽기 어려웠어요.
+  // 11/28 하린: 배출가스를 소음보다 먼저(배출가스 → 소음 → 계산 못 한 시간), 각각 안에서는 가까운 시간 먼저.
+  const group = (l) => (!l.known ? 2 : l.layer === "exhaust" ? 0 : 1);
+  lines.sort((a, b) => group(a) - group(b) || a.start - b.start || b.rank - a.rank);
   // 11/28 하린: 개조식(마침표 없음)으로 통일 — 안내 탭 문구와 같은 말투
   const out = lines.slice(0, maxLines).map((l) => l.text);
   if (lines.length > maxLines) {

@@ -232,8 +232,13 @@ export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName, assump
       ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
       ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
       ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
-      time: t.시작시각
-        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}), 출처: "공단화면입력" }
+      // 11/28: 공단 화면은 발전차마다 '어느 공연'을 고르고, 시작·셋업·종료는 그 공연에서 가져와요.
+      // 공연 시각을 모르면(시간미확인) 상시 가동이 아니라 '모름'으로 둬요.
+      time: t.시간미확인
+        ? { start: null, end: null, 출처: "미확인" }
+        : t.시작시각
+        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}),
+            ...(t.종료시각 ? { end: localInputToIso(t.종료시각) } : {}), 출처: "공단화면입력" }
         : TRUCK_ALWAYS_ON_TIME,
     });
   }
@@ -253,7 +258,7 @@ export function buildCitizenGeneratorSources({ events, truckRecords, noGenerator
   const enteredAllDaysSites = [];
   for (const t of truckRecords ?? []) {
     if (!t.site) continue;
-    if (t.시작시각) enteredDays.push({ site: t.site, 날짜: String(t.시작시각).slice(0, 10) });
+    if (t.날짜 || t.시작시각) enteredDays.push({ site: t.site, 날짜: t.날짜 ?? String(t.시작시각).slice(0, 10) });
     else enteredAllDaysSites.push(t.site); // 날짜 없는 입력 = 상시 가동(데모) → 그 공연장은 자동 생성 안 함
   }
   const autoGens = buildRealEventGeneratorSources(events, siteByName, assumptions, hourIso, {
@@ -335,16 +340,16 @@ export function uniformUnknownMessage(layerKey, cells, weather) {
   const flags = cells[0]?.flags ?? [];
   if (flags.includes("약풍미표시")) {
     const wsd = typeof weather?.wsd10m === "number" ? `${weather.wsd10m}m/s` : "거의 없음";
-    return `약풍(풍속 ${wsd}), ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 확산 방향 계산 불가. 발전차 주변에 고일 수 있음. 안전하다는 뜻은 아님`;
+    return `약풍(풍속 ${wsd}), ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 확산 방향 계산 불가. 발전차 주변에 고일 수 있음`;
   }
-  return `이 시간 ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 계산 불가. 안전하다는 뜻은 아님`;
+  return `이 시간 ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 계산 불가`;
 }
 
 export function hourSlotDate(offsetHours) {
-  const d = new Date();
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + offsetHours);
-  return d;
+  // 11/28 최종 점검: 예전엔 브라우저 '로컬' 정시로 잘랐는데, 인도(+5:30)처럼 30분 단위 시차인 시간대에서는
+  // KST 0~29분 동안 '지금' 칸이 한 시간 전으로 밀렸어요(validation/timezone_slot_test.mjs). KST(+9)는 정시 단위
+  // 시차라서 UTC 정시로 자르면 KST 정시와 같고, 시간대·서머타임과 무관해요.
+  return new Date(Math.floor(Date.now() / 3600e3) * 3600e3 + offsetHours * 3600e3);
 }
 
 export function formatSlotLabel(date) {
@@ -398,11 +403,11 @@ export function setupWeatherFreshness(savedIso, { metaEl, metaPrefix = "기상�
   const check = async () => {
     try {
       const latest = (await fetch(`./data/weather.json?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.json())).저장시각;
-      if (latest && Date.parse(latest) > Date.parse(savedIso)) { show(`새 기상 예보가 올라왔어요(${fmtKstShort(latest)}). 새로고침하면 반영`); return; }
+      if (latest && Date.parse(latest) > Date.parse(savedIso)) { show(`새 기상 예보가 올라옴(${fmtKstShort(latest)}). 새로고침하면 반영`); return; }
     } catch { /* 확인 실패 — 아래 시간 기준으로만 판단 */ }
-    if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않았어요. 최신 예보가 아닐 수 있음`);
+    if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않음. 최신 예보가 아닐 수 있음`);
   };
-  if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않았어요. 최신 예보가 아닐 수 있음`);
+  if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않음. 최신 예보가 아닐 수 있음`);
   setInterval(check, 10 * 60 * 1000);
 }
 

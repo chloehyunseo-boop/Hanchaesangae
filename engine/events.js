@@ -347,7 +347,8 @@ const WEEKDAY_CHAR_TO_INDEX = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 
 export function parseWeekdayGroupedTimes(timeText) {
   if (typeof timeText !== "string") return {};
   // 11/28: "목 오후 7시 30분 / 금 오후 6시"처럼 요일 뒤에 "오전/오후"가 붙는 경우도 읽게 함.
-  const groupRe = /([월화수목금토일]{1,3})\s*((?:(?:오전|오후)\s*)?(?:\d{1,2}시(?:\s*\d{1,2}분)?\s*,?\s*)+)/g;
+  // 11/28 독립 검토: "5일 19시"의 "일"이나 "12월"의 "월"을 요일로 읽던 문제 — 요일 글자 바로 앞이 숫자면 요일이 아니에요.
+  const groupRe = /(?<![0-9])([월화수목금토일]{1,3})\s*((?:(?:오전|오후)\s*)?(?:\d{1,2}시(?:\s*\d{1,2}분)?\s*,?\s*)+)/g;
   const timeRe = /(?:(오전|오후)\s*)?(\d{1,2})시(?:\s*(\d{1,2})분)?/g;
   const byWeekday = {};
   for (const gm of timeText.matchAll(groupRe)) {

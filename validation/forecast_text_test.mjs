@@ -28,7 +28,7 @@ ok(windName(NaN) === null && windName(undefined) === null, "풍향 없음 → nu
 {
   const series = [17, 18].map((h) => ({ hour: H(23, h), weather: { windVecFromDeg: 90 }, cellsByPlace: { 장미광장: { exhaust: ex(null), noise: no(null) } } }));
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out.length === 1 && out[0].includes("'약' 이상 예측된 소음·배출가스 없음"), "예보 없음 문장", out[0]);
+  ok(out.length === 1 && out[0].includes("배출가스 '약' 이상·소음 '중' 이상 예측 없음"), "예보 없음 문장", out[0]);
 }
 // 4) 강이 먼저, 6줄 이상이면 5줄째가 '그 밖에'
 {
@@ -38,7 +38,19 @@ ok(windName(NaN) === null && windName(undefined) === null, "풍향 없음 → nu
   // 시간마다 다른 단계로 만들어 합쳐지지 않게
   names.forEach((n, i) => { series[0].cellsByPlace[n] = { exhaust: ex(lv[i]) }; series[1].cellsByPlace[n] = { noise: no(lv[(i + 1) % 7]) }; });
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out.length === 5 && out[0].includes("'강'") && out[4].startsWith("그 밖에"), "최대 5줄, 강 먼저, 넘치면 '그 밖에'", out.join(" / "));
+  ok(out.length === 5 && out[0].includes("배출가스") && out[0].includes("'강'") && !out.some((l) => l.includes("소음") && l.includes("'약'")), "배출가스 먼저(같은 시각이면 강 먼저), 소음 '약'은 요약에서 뺌", out.join(" / "));
+  const firstNoise = out.findIndex((l) => l.includes("소음")), lastEx = out.map((l) => l.includes("배출가스")).lastIndexOf(true);
+  ok(firstNoise === -1 || firstNoise > lastEx, "배출가스 문장이 모두 소음 문장보다 앞", out.join(" / "));
+}
+// 4-1) 11/28: 계산된 가까운 시각이 먼저, 계산 못 한 시간(약풍)은 뒤로
+{
+  const series = [
+    { hour: H(23, 11), weather: { windVecFromDeg: 0 }, cellsByPlace: { 장미광장: { exhaust: { layer: "exhaust", value: null, level: null, flags: ["약풍미표시"] } } } },
+    { hour: H(23, 14), weather: { windVecFromDeg: 0 }, cellsByPlace: { 올림픽수영장: { exhaust: ex("약") } } },
+    { hour: H(23, 20), weather: { windVecFromDeg: 0 }, cellsByPlace: { 올림픽수영장: { exhaust: ex("강") } } },
+  ];
+  const out = buildForecastSentences({ series, now: NOW });
+  ok(out[0].includes("'약'") && out[1].includes("'강'") && out[2].includes("계산 불가"), "가까운 시각 먼저, 계산 불가는 맨 뒤", out.join(" / "));
 }
 // 5) 근거리: 하한등급 있으면 '이상', 없으면 보류
 ok(cellState(ex(null, ["근거리불확실"], { value: 0.2, 하한등급: "강" })).atLeast === true, "근거리+하한등급 → '강 이상'");

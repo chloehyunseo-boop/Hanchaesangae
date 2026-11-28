@@ -13,16 +13,21 @@
 //  - 풍향·풍속 직접 설정 없음 — 기상청 예보만 써요.
 //  - 장소별 보기(파란 점) 없음 — 사용자 요청으로 뺌(포크 세션 결정, decisions.md 참고).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128d";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, kstParts, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
   allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness, initTabs,
 } from "./shared.js";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261128a"; // 11/28: 공연 일정 수집 실패·멈춤 안내
 import { ContourCellLayer } from "./contour_layer.js"; // 디자인 사본: 블러 대신 등치선 면
-import { createGeneratorMarkers } from "./generator_markers.js"; // 11/28: 지도에 발전차 위치
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { generatorActivityAtHour } from "../engine/combine.js";
+
+// 11/28 최종 점검: 공연명·장소는 공단 홈페이지 글(자동 수집)이나 공단 직원이 입력한 글이라 그대로 innerHTML에
+// 넣으면 '<오페라의 유령>'처럼 꺾쇠가 든 이름이 깨지거나 스크립트가 실행돼요. 화면에 넣기 전에 이스케이프해요.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const NUM_HOURS = 72;
 const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가한 장소"는 항상 없음
@@ -57,6 +62,7 @@ async function loadData() {
   state.assumptions = assumptions;
   state.concaweData = concaweData;
   state.events = events;
+  setupEventsNotice(events);
   // 11/26: 공단이 agency.html에서 "내보내기"한 실제 발전차 정보(없으면 빈 목록 — 404도 그냥
   // 빈 목록으로 다뤄요, 아직 아무도 안 내보낸 상태일 수 있어서 에러로 막지 않음).
   try {
@@ -85,7 +91,18 @@ function buildGeneratorSourcesForHour(hourIso) {
   });
 }
 
-async function getCellsForHour(date) {
+// 11/28 독립 검토: 첫 로드에서 화면 갱신과 미리 계산이 같은 시각을 동시에 요청해 20~40초짜리 계산이 두 번 돌았어요.
+// 같은 시각이 계산 중이면 그 결과를 같이 기다려요.
+const inflightCells = new Map();
+function getCellsForHour(date) {
+  const hourIso = hourSlotIso(date);
+  if (state.cellCache.has(hourIso)) return Promise.resolve(state.cellCache.get(hourIso));
+  if (inflightCells.has(hourIso)) return inflightCells.get(hourIso);
+  const p = computeCellsForHour(date).finally(() => inflightCells.delete(hourIso));
+  inflightCells.set(hourIso, p);
+  return p;
+}
+async function computeCellsForHour(date) {
   const hourIso = hourSlotIso(date);
   if (state.cellCache.has(hourIso)) return state.cellCache.get(hourIso);
 
@@ -196,8 +213,10 @@ async function main() {
   const warningEl = document.getElementById("slider-warning");
   const layerWarningEl = document.getElementById("layer-warning");
 
-  function renderLayerWarnings(cells, weather) {
+  function renderLayerWarnings(cells, weather, warning = null) {
     const lines = [];
+    // 11/28 독립 검토: 기상 자료가 없는 시각엔 지도가 빈칸인데 안내가 슬라이더 옆 작은 글씨뿐이었어요.
+    if (warning) lines.push(esc(warning));
     for (const key of ["exhaust", "noise"]) {
       const layerCells = cells.filter((c) => c.layer === key);
       if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
@@ -232,10 +251,10 @@ async function main() {
       const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예측 범위 밖";
       blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
         <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${dp.month}월 ${dp.day}일 (${dp.weekday})</b><small>${hint}</small></button>
-        ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span>${e.title}</span></div>`).join("")}
+        ${items.map((e) => `<div class="ev"><b>${esc(e.startTimeStr ?? "시각 미상")}</b> · ${esc(e.site)}<br><span>${esc(e.title)}</span></div>`).join("")}
       </section>`);
     }
-    autoEventsEl.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">앞으로 2주 공연 없음</p>`;
+    autoEventsEl.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">${esc(eventsEmptyMessage(state.events))}</p>`;
   }
   autoEventsEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".day-head[data-offset]");
@@ -252,7 +271,7 @@ async function main() {
     const noiseCells = cells.filter((c) => c.layer === "noise");
     const exhaustCells = cells.filter((c) => c.layer === "exhaust");
     const weather = resolveWeather(date);
-    renderLayerWarnings(cells, weather);
+    renderLayerWarnings(cells, weather, warning);
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
     exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
     genMarkers.update(buildGeneratorSourcesForHour(hourSlotIso(date)), hourSlotIso(date));
