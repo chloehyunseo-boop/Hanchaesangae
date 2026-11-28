@@ -14,7 +14,7 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-1";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-2";
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { stageActiveMinutes } from "../engine/noise.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
@@ -24,11 +24,11 @@ import {
   buildRealEventStageSources, buildManualEventStageSources, buildCitizenGeneratorSources,
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
-} from "./shared.js?v=20261129-1";
-import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-1"; // 11/28: 공연 일정 수집 실패·멈춤 안내
-import { ContourCellLayer } from "./contour_layer.js?v=20261129-1";
-import { setupDaySlider } from "./day_slider.js?v=20261129-1"; // 11/28: 휴대폰에서 시간 막대 하루씩
-import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-1"; // 11/28: 지도에 발전차 위치
+} from "./shared.js?v=20261129-2";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-2"; // 11/28: 공연 일정 수집 실패·멈춤 안내
+import { ContourCellLayer } from "./contour_layer.js?v=20261129-2";
+import { setupDaySlider } from "./day_slider.js?v=20261129-2"; // 11/28: 휴대폰에서 시간 막대 하루씩
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-2"; // 11/28: 지도에 발전차 위치
 import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;
@@ -446,12 +446,19 @@ function renderAutoEvents(hourIso) {
     if (!items.length) continue;
     // 그날 첫 공연 시각(없으면 그날 첫 시간)에 해당하는 시간 막대 위치
     const firstHour = items.find((x) => x.startTimeStr)?.startTimeStr?.slice(0, 2) ?? null;
+    // 11/29 친구 지적: 시작 시각을 아는 공연인데 그 시각이 72시간 범위 밖이면, 그날 아무
+    // 시간(예: 0시)에나 걸려서 "지도에서 보기"가 떠도 그 시각엔 공연이 아직 시작 전이라
+    // 지도에 아무것도 안 떠요. 시작 시각을 알면 그 시각이 범위 안에 있을 때만 "찾음"으로 쳐요
+    // (시작 시각을 모르는 공연만, 지금처럼 그날 첫 시간을 대신 써요).
     let offset = -1;
     for (let o = 0; o < NUM_HOURS; o++) {
       const d = hourSlotDate(o);
       if (ymd(d) !== day) continue;
-      if (offset < 0) offset = o;
-      if (firstHour && kstParts(d).h === firstHour) { offset = o; break; }
+      if (firstHour) {
+        if (kstParts(d).h === firstHour) { offset = o; break; }
+      } else if (offset < 0) {
+        offset = o;
+      }
     }
     const dp = Object.fromEntries(fmt.formatToParts(new Date(`${day}T12:00:00+09:00`)).map((x) => [x.type, x.value]));
     const label = `${dp.month}월 ${dp.day}일 (${dp.weekday})`;
