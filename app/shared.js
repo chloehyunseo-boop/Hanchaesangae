@@ -232,8 +232,13 @@ export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName, assump
       ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
       ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
       ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
-      time: t.시작시각
-        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}), 출처: "공단화면입력" }
+      // 11/28: 공단 화면은 발전차마다 '어느 공연'을 고르고, 시작·셋업·종료는 그 공연에서 가져와요.
+      // 공연 시각을 모르면(시간미확인) 상시 가동이 아니라 '모름'으로 둬요.
+      time: t.시간미확인
+        ? { start: null, end: null, 출처: "미확인" }
+        : t.시작시각
+        ? { start: localInputToIso(t.시작시각), ...(t.셋업시작 ? { setupStart: localInputToIso(t.셋업시작) } : {}),
+            ...(t.종료시각 ? { end: localInputToIso(t.종료시각) } : {}), 출처: "공단화면입력" }
         : TRUCK_ALWAYS_ON_TIME,
     });
   }
@@ -253,7 +258,7 @@ export function buildCitizenGeneratorSources({ events, truckRecords, noGenerator
   const enteredAllDaysSites = [];
   for (const t of truckRecords ?? []) {
     if (!t.site) continue;
-    if (t.시작시각) enteredDays.push({ site: t.site, 날짜: String(t.시작시각).slice(0, 10) });
+    if (t.날짜 || t.시작시각) enteredDays.push({ site: t.site, 날짜: t.날짜 ?? String(t.시작시각).slice(0, 10) });
     else enteredAllDaysSites.push(t.site); // 날짜 없는 입력 = 상시 가동(데모) → 그 공연장은 자동 생성 안 함
   }
   const autoGens = buildRealEventGeneratorSources(events, siteByName, assumptions, hourIso, {

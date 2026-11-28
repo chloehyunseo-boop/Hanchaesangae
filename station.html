@@ -260,8 +260,8 @@
     #event-table td:nth-child(1)::before { content: "공연명"; } #event-table td:nth-child(2)::before { content: "위치"; } #event-table td:nth-child(3)::before { content: "날짜"; }
     #event-table td:nth-child(4)::before { content: "시작 시각"; } #event-table td:nth-child(5)::before { content: "소요(분)"; }
     #truck-table td:nth-child(1) { grid-column: 1 / -1; }
-    #truck-table td:nth-child(1)::before { content: "위치"; } #truck-table td:nth-child(2)::before { content: "발전기 수"; } #truck-table td:nth-child(3)::before { content: "인증 등급"; }
-    #truck-table td:nth-child(4)::before { content: "엔진 출력(kW)"; } #truck-table td:nth-child(5)::before { content: "공연 시작"; } #truck-table td:nth-child(6)::before { content: "셋업 시작"; }
+    #truck-table td:nth-child(1)::before { content: "공연"; } #truck-table td:nth-child(2)::before { content: "발전기 수"; } #truck-table td:nth-child(3)::before { content: "인증 등급"; }
+    #truck-table td:nth-child(4)::before { content: "엔진 출력(kW)"; }
     #nogen-table td:nth-child(1)::before { content: "공연장"; } #nogen-table td:nth-child(2)::before { content: "날짜"; }
 
     /* 오른쪽 상태 */
@@ -318,7 +318,8 @@
     .cards tr.compact .ev-sum { flex: 1; min-width: 0; font-size: 13px; color: var(--text); line-height: 1.45; }
     .cards tr.compact .ev-sum span { color: var(--sub); font-size: 12px; }
     #event-table tr.compact td::before, #truck-table tr.compact td::before { content: none; }
-    #truck-table td:nth-child(5), #truck-table td:nth-child(6) { grid-column: 1 / -1; }
+    #event-table td:nth-child(6) { grid-column: 1 / -1; }
+    #event-table td:nth-child(6)::before { content: "셋업 시작(선택) · 넣으면 발전차가 그때부터 가동"; }
     .time-pick.dt input { flex: 1.6; min-width: 0; }
     .cards tr.compact .ev-btns { display: flex; gap: 4px; flex: none; }
     .cards tr.compact .ev-btns button { height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; color: var(--sub); }
@@ -383,16 +384,16 @@
           </div>
           <div class="w-sec">
           <div class="w-head"><h3>공연 추가</h3><span class="spacer"></span><button type="button" class="btn" id="add-event">추가</button></div>
-          <p class="w-note">자동 수집에 없거나 시작 시각이 없는 공연. 소요를 비우면 3시간(옥외 21:30 중 먼저).</p>
-          <table class="cards" id="event-table"><thead><tr><th>공연명</th><th>위치</th><th>날짜</th><th>시작 시각</th><th>소요(분)</th><th></th></tr></thead><tbody id="event-rows"></tbody></table>
+          <p class="w-note">자동 수집에 없거나 시작 시각이 없는 공연. 소요를 비우면 3시간(옥외 21:30 중 먼저). 셋업 시작을 넣으면 이 공연 발전차는 그때부터 가동.</p>
+          <table class="cards" id="event-table"><thead><tr><th>공연명</th><th>위치</th><th>날짜</th><th>시작 시각</th><th>소요(분)</th><th>셋업 시작</th><th></th></tr></thead><tbody id="event-rows"></tbody></table>
           </div>
         </div>
 
         <div class="tab-panel" data-tab="trucks">
           <div class="w-sec">
             <div class="w-head"><h3>발전차</h3><span class="spacer"></span><button type="button" class="btn" id="add-truck">추가</button></div>
-            <p class="w-note">한 카드 = 발전차 한 대. 셋업 시작을 비우면 공연 2시간 전부터 가동. 모르는 값은 비우면 대표모델 가정값.</p>
-            <table class="cards" id="truck-table"><thead><tr><th>위치</th><th>발전기 수</th><th>인증 등급</th><th>엔진 출력(kW)</th><th>공연 시작</th><th>셋업 시작</th><th></th></tr></thead><tbody id="truck-rows"></tbody></table>
+            <p class="w-note">한 카드 = 발전차 한 대. 어느 공연의 발전차인지 고르면 위치와 가동 시간은 그 공연에서 가져옴(셋업 시각이 있는 공연은 셋업부터, 없으면 공연 2시간 전부터 종료까지). 모르는 값은 비우면 대표모델 가정값.</p>
+            <table class="cards" id="truck-table"><thead><tr><th>공연</th><th>발전기 수</th><th>인증 등급</th><th>엔진 출력(kW)</th><th></th></tr></thead><tbody id="truck-rows"></tbody></table>
             <p class="w-note">인증 등급: 발전기 엔진의 배출가스 인증. 인증 = 미국 EPA Tier 4 Final(NOx 0.40 g/kWh 한도), 비인증 = 인증 표기 없음(비제어 평균 18.8 g/kWh).</p>
             <div class="w-row">등급 모를 때 <select id="scenario-default"><option value="인증" selected>인증으로 가정(기본)</option><option value="비인증">비인증으로 가정(비교)</option></select></div>
           </div>
@@ -499,7 +500,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station.js?v=20261128h"></script>
+  <script type="module" src="./app/station.js?v=20261128i"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {
