@@ -85,7 +85,7 @@ export const ContourCellLayer = CanvasCellLayer.extend({
     const sctx = small.getContext("2d");
     const big = document.createElement("canvas");
     big.width = W; big.height = H;
-    const bctx = big.getContext("2d");
+    const bctx = big.getContext("2d", { willReadFrequently: true });
     bctx.imageSmoothingEnabled = true;
     bctx.imageSmoothingQuality = "high";
 
@@ -110,10 +110,14 @@ export const ContourCellLayer = CanvasCellLayer.extend({
     const palette = this.options.palette;
     const out = fctx.getImageData(0, 0, W, H);
     const od = out.data;
-    const paint = (bd, color) => {
+    const owner = new Int16Array(W * H).fill(-1); // 픽셀마다 마지막으로 칠한 구역(무늬는 자기 구역 안에만 그리려고)
+    const paint = (bd, color, cut = 128, id = -2) => {
       const [r, g, b, a] = parseRgba(color);
-      for (let q = 3; q < bd.length; q += 4) if (bd[q] >= 128) { od[q - 3] = r; od[q - 2] = g; od[q - 1] = b; od[q] = a; }
+      for (let q = 3; q < bd.length; q += 4) if (bd[q] >= cut) { od[q - 3] = r; od[q - 2] = g; od[q - 1] = b; od[q] = a; owner[(q - 3) >> 2] = id; }
     };
+    // 무늬 구역은 기준을 조금 낮춰(조금 넓게) 칠해요 — 색 구역과 각각 부드럽게 줄어들면서 사이에 생기던
+    // 흰 틈을 메우려고요(11/28 화면 확인).
+    const PATTERN_CUT = 72;
 
     // 무늬 구역: 바탕(면) + 무늬(면 안에만)
     const patternJobs = [];
@@ -121,8 +125,8 @@ export const ContourCellLayer = CanvasCellLayer.extend({
       if (key !== "dots" && !key.startsWith("hatch|")) continue;
       if (!hasAny(m)) continue;
       const bd = upscale(m);
-      paint(bd, key === "dots" ? palette.uncertain : HATCH_FILL);
-      patternJobs.push({ key, alpha: Uint8Array.from({ length: W * H }, (_, i) => bd[i * 4 + 3]) });
+      paint(bd, key === "dots" ? palette.uncertain : HATCH_FILL, PATTERN_CUT, patternJobs.length);
+      patternJobs.push({ key });
     }
     for (const key of ["약", "중", "강"]) {
       const m = masks.get(key);
@@ -137,11 +141,14 @@ export const ContourCellLayer = CanvasCellLayer.extend({
     const pctx = pat.getContext("2d");
     const oimg = octx.createImageData(W, H);
     const odd = oimg.data;
-    for (const job of patternJobs) {
+    patternJobs.forEach((job, jobId) => {
       pctx.clearRect(0, 0, W, H);
       if (job.key === "dots") {
+        // 11/28 하린: 6px 바둑판 점은 '격자'처럼 보여서, 간격을 넓히고 줄마다 반 칸 어긋나게(엇갈린 점) 찍어요.
         pctx.fillStyle = DOT_COLOR;
-        for (let y = 3; y < H; y += 6) for (let x = 3; x < W; x += 6) { pctx.beginPath(); pctx.arc(x, y, 1.1, 0, Math.PI * 2); pctx.fill(); }
+        for (let y = 4, row = 0; y < H; y += 7, row++) {
+          for (let x = (row % 2 ? 9 : 4); x < W; x += 10) { pctx.beginPath(); pctx.arc(x, y, 1.3, 0, Math.PI * 2); pctx.fill(); }
+        }
       } else {
         const color = job.key.slice(6);
         const [r, g, b, a] = parseRgba(color);
@@ -151,12 +158,12 @@ export const ContourCellLayer = CanvasCellLayer.extend({
         for (let off = -H; off < W; off += 6) { pctx.beginPath(); pctx.moveTo(off, 0); pctx.lineTo(off + H, H); pctx.stroke(); }
       }
       const pd = pctx.getImageData(0, 0, W, H).data;
-      for (let i = 0; i < job.alpha.length; i++) {
-        if (job.alpha[i] < 128 || !pd[i * 4 + 3]) continue;
+      for (let i = 0; i < owner.length; i++) {
+        if (owner[i] !== jobId || !pd[i * 4 + 3]) continue;
         const q = i * 4;
         odd[q] = pd[q]; odd[q + 1] = pd[q + 1]; odd[q + 2] = pd[q + 2]; odd[q + 3] = pd[q + 3];
       }
-    }
+    });
     octx.putImageData(oimg, 0, 0);
   },
 });
