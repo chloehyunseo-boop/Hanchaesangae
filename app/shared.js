@@ -327,16 +327,16 @@ export function allCellsUnknown(cells) {
 }
 
 const UNIFORM_UNKNOWN_LAYER_LABEL = { exhaust: "배출가스가", noise: "소음이" };
+const LAYER_NAME_PLAIN = { exhaust: "배출가스", noise: "소음" }; // 11/28 회의: 띠 문구 개조식
 
 /** 전체-모름 띠에 넣을 문구. 원인이 약풍이면 그 시각 실제 풍속을 넣어서 말해요. */
 export function uniformUnknownMessage(layerKey, cells, weather) {
-  const label = UNIFORM_UNKNOWN_LAYER_LABEL[layerKey] ?? `${layerKey}가`;
   const flags = cells[0]?.flags ?? [];
   if (flags.includes("약풍미표시")) {
     const wsd = typeof weather?.wsd10m === "number" ? `${weather.wsd10m}m/s` : "거의 없음";
-    return `이 시간은 바람이 거의 없어(풍속 ${wsd}) ${label} 어디로 퍼질지 계산할 수 없어요. 이런 때는 발전차 주변에 고일 수 있어요. 안전하다는 뜻은 아니에요.`;
+    return `약풍(풍속 ${wsd}), ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 확산 방향 계산 불가. 발전차 주변에 고일 수 있음. 안전하다는 뜻은 아님`;
   }
-  return `이 시간은 ${label} 계산할 수 없어요. 안전하다는 뜻은 아니에요.`;
+  return `이 시간 ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 계산 불가. 안전하다는 뜻은 아님`;
 }
 
 export function hourSlotDate(offsetHours) {
@@ -364,8 +364,45 @@ export async function loadCommonData() {
   for (const f of site.features) siteByName.set(f.properties.name, f);
   return {
     weatherByHour: buildWeatherByHour(weather.예보 ?? []),
+    weatherSavedAt: weather.저장시각 ?? null, // 11/28: 갱신 멈춤 경고용
     site, siteByName, assumptions, concaweData, lessons, events,
   };
+}
+
+// 11/28 회의 결정: 자동 갱신(GitHub Actions)이 멈추면 옛 예보로 그린 지도가 최신처럼 보여요.
+// 헤더에 실제 갱신 시각을 적고, 3시간 넘게 멈추면 헤더 아래에 눈에 띄는 띠를 띄워요.
+// 페이지를 오래 열어 두면 10분마다 서버의 weather.json을 다시 확인해, 새 예보가 올라왔으면
+// '새로고침하면 반영'으로 바꿔 말해요(멈춘 게 아니니까).
+const STALE_AFTER_MS = 3 * 3600 * 1000;
+function fmtKstShort(iso) {
+  const { m, d, h } = kstParts(new Date(iso));
+  const mm = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", minute: "2-digit" }).format(new Date(iso)).padStart(2, "0");
+  return `${Number(m)}/${Number(d)} ${h}:${mm}`;
+}
+export function setupWeatherFreshness(savedIso, { metaEl, metaPrefix = "기상청 단기예보", metaSuffix = "" } = {}) {
+  if (!savedIso || !Number.isFinite(Date.parse(savedIso))) return;
+  if (metaEl) metaEl.textContent = `${metaPrefix} · 갱신 ${fmtKstShort(savedIso)}${metaSuffix}`;
+  const header = document.querySelector("header.top");
+  let bar = null;
+  const show = (text) => {
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.className = "stale-banner";
+      bar.setAttribute("role", "status");
+      bar.style.cssText = "background:#FFF3DC;border-bottom:1px solid #F0B45A;color:#6B4300;font-size:13.5px;font-weight:600;padding:9px 20px;text-align:center;line-height:1.45";
+      header?.insertAdjacentElement("afterend", bar);
+    }
+    bar.textContent = text;
+  };
+  const check = async () => {
+    try {
+      const latest = (await fetch(`./data/weather.json?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.json())).저장시각;
+      if (latest && Date.parse(latest) > Date.parse(savedIso)) { show(`새 기상 예보가 올라왔어요(${fmtKstShort(latest)}). 새로고침하면 반영`); return; }
+    } catch { /* 확인 실패 — 아래 시간 기준으로만 판단 */ }
+    if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않았어요. 최신 예보가 아닐 수 있음`);
+  };
+  if (Date.now() - Date.parse(savedIso) > STALE_AFTER_MS) show(`기상 예보가 ${fmtKstShort(savedIso)} 이후 갱신되지 않았어요. 최신 예보가 아닐 수 있음`);
+  setInterval(check, 10 * 60 * 1000);
 }
 
 /** 격자 전체를 Leaflet 도형 대신 캔버스 하나에 그려요(24,178개 셀, 11/22 성능 결정). */

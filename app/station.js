@@ -21,10 +21,10 @@ import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildManualEventStageSources, buildCitizenGeneratorSources,
-  listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage,
+  listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
-import { ContourCellLayer } from "./contour_layer_design.js";
+import { ContourCellLayer } from "./contour_layer.js";
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_station_trucks_v1";
@@ -138,7 +138,7 @@ async function getCellsForHour(date, computeHourInWorker) {
 
   const weather = resolveWeather(date);
   if (!weather) {
-    const result = { cells: [], warning: "이 시각은 기상 자료가 없어 계산하지 않았어요(자료 부족)." };
+    const result = { cells: [], warning: "이 시각 기상 자료 없음, 계산 안 함" };
     state.cellCache.set(cacheKey, result);
     return result;
   }
@@ -268,7 +268,7 @@ function renderTruckTable(onChange) {
       if (kw !== null && !(Number.isFinite(kw) && kw >= 1 && kw <= 2000)) { paint("엔진 출력은 1~2000 kW"); return; }
       if (draft.시작시각 === "__partial" || draft.셋업시작 === "__partial") { paint("날짜와 시를 함께 넣어 주세요"); return; }
       if (draft.셋업시작 && !draft.시작시각) { paint("셋업 시작은 공연 시작과 함께 넣어 주세요"); return; }
-      if (draft.셋업시작 && draft.셋업시작 >= draft.시작시각) { paint("셋업 시작은 공연 시작보다 앞이어야 해요"); return; }
+      if (draft.셋업시작 && draft.셋업시작 >= draft.시작시각) { paint("셋업 시작은 공연 시작보다 앞이어야 함"); return; }
       Object.assign(t, { site: draft.site, 발전기수: cnt, 인증등급: draft.인증등급, 엔진출력_kW: kw, 시작시각: draft.시작시각 || null, 셋업시작: draft.셋업시작 || null });
       editingTruckIds.delete(t.id);
       renderTruckTable(onChange); // 저장하면 입력칸을 접고 한 줄 요약으로
@@ -545,12 +545,12 @@ function renderImpactedLessons(lessons, date, cells) {
   const el = document.getElementById("impacted-lessons");
   const list = lessons?.강좌 ?? [];
   if (list.length === 0) {
-    el.innerHTML = "<p>아직 강좌 자료가 없어요(수영장·테니스장 강좌정보 수집 전, data/lessons.json이 빈 자리예요).</p>";
+    el.innerHTML = "<p>강좌 자료 없음</p>";
     return;
   }
   const running = lessonsAtHour(list, date);
   if (running.length === 0) {
-    el.innerHTML = "<p>이 시각엔 진행 중인 강좌가 없어요.</p>";
+    el.innerHTML = "<p>이 시각 진행 중인 강좌 없음</p>";
     return;
   }
   const rows = running.map((l) => {
@@ -590,8 +590,9 @@ async function buildForecastCsv() {
 
 // ---------------------------------------------------------------------------
 async function main() {
-  const { weatherByHour, siteByName, assumptions, concaweData, lessons, events } = await loadCommonData();
+  const { weatherByHour, weatherSavedAt, siteByName, assumptions, concaweData, lessons, events } = await loadCommonData();
   state.weatherByHour = weatherByHour;
+  setupWeatherFreshness(weatherSavedAt, { metaEl: document.querySelector("header.top .meta"), metaSuffix: " · 입력값은 이 브라우저에만 저장" });
   state.siteByName = siteByName;
   state.assumptions = assumptions;
   state.concaweData = concaweData;
@@ -734,7 +735,7 @@ async function main() {
       const hourIso = hourSlotIso(hourSlotDate(offset));
       const hasGenerators = buildGeneratorSources(hourIso).length > 0;
       const impossible = hasGenerators && weather && weather.wsd10m < 1.0;
-      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
+      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "약풍, 배출가스 계산 불가" : ""}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
     const noteEl = document.getElementById("band-note");

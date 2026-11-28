@@ -1,5 +1,5 @@
 // 11/27 하린·친구 합의: 디자인 시안 C(citizen_design_c.html + app/citizen_design.js)를 그대로 옮겨 왔어요.
-// 지도 색은 블러 대신 등치선 면(app/contour_layer_design.js). 계산·데이터 로직은 바뀌지 않았어요.
+// 지도 색은 블러 대신 등치선 면(app/contour_layer.js). 계산·데이터 로직은 바뀌지 않았어요.
 // app/citizen.js — 시민 화면 "최종판"(citizen.html). 11/26 친구 요청: 체크박스로 "가정"하던
 // app/main.js(데모, index.html)는 그대로 두고, 사람이 아무것도 안 눌러도 실제 데이터로만
 // 돌아가는 화면을 새로 만들었어요. 지도·격자 계산·Web Worker는 app/shared.js를 그대로
@@ -18,9 +18,9 @@ import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, kstParts, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
-  allCellsUnknown, uniformUnknownMessage, initTabs,
+  allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness, initTabs,
 } from "./shared.js";
-import { ContourCellLayer } from "./contour_layer_design.js"; // 디자인 사본: 블러 대신 등치선 면
+import { ContourCellLayer } from "./contour_layer.js"; // 디자인 사본: 블러 대신 등치선 면
 
 const NUM_HOURS = 72;
 const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가한 장소"는 항상 없음
@@ -48,8 +48,9 @@ function getPlaces() {
 const computeHourInWorker = createGridWorker();
 
 async function loadData() {
-  const { weatherByHour, siteByName, assumptions, concaweData, events } = await loadCommonData();
+  const { weatherByHour, weatherSavedAt, siteByName, assumptions, concaweData, events } = await loadCommonData();
   state.weatherByHour = weatherByHour;
+  setupWeatherFreshness(weatherSavedAt, { metaEl: document.querySelector("header.top .meta"), metaSuffix: "" });
   state.siteByName = siteByName;
   state.assumptions = assumptions;
   state.concaweData = concaweData;
@@ -88,7 +89,7 @@ async function getCellsForHour(date) {
 
   const weather = resolveWeather(date);
   if (!weather) {
-    const result = { cells: [], warning: "이 시각은 기상 자료가 없어 계산하지 않았어요(자료 부족)." };
+    const result = { cells: [], warning: "이 시각 기상 자료 없음, 계산 안 함" };
     state.cellCache.set(hourIso, result);
     return result;
   }
@@ -290,7 +291,7 @@ async function main() {
       const hourIso = hourSlotIso(hourSlotDate(offset));
       const hasGenerators = buildGeneratorSourcesForHour(hourIso).length > 0;
       const impossible = hasGenerators && weather && weather.wsd10m < 1.0;
-      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "이 시간은 매연을 계산 못 해요(약풍)" : ""}"></div>`);
+      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "약풍, 배출가스 계산 불가" : ""}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
     // 디자인 사본: 회색 칸이 있을 때만 무슨 뜻인지 한 줄 표시

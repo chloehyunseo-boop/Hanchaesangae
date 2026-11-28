@@ -17,7 +17,7 @@ import {
   PARK_CENTER, NOISE_PALETTE, CanvasCellLayer, createGridWorker, loadCommonData,
   buildDemoStageSources, allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
-import { ContourCellLayer } from "./contour_layer_design.js";
+import { ContourCellLayer } from "./contour_layer.js";
 
 const HOURS = [16, 17, 18, 19, 20, 21];
 const DEFAULT_HOUR = 18;
@@ -73,7 +73,7 @@ async function cellsFor(hh, computeHourInWorker) {
   if (state.cache.has(key)) return state.cache.get(key);
   const weather = weatherAt(hh);
   let result;
-  if (!weather) result = { cells: [], weather: null, warning: "이 시각은 관측 자료가 없어요." };
+  if (!weather) result = { cells: [], weather: null, warning: "이 시각 관측 자료 없음" };
   else {
     const { cells, error } = await computeHourInWorker({
       stageSources: stageSources({ excludeDome: state.excludeDome }), generatorSources: [], weather,
@@ -201,7 +201,7 @@ async function main() {
     slider.dispatchEvent(new Event("change")); // 채워진 막대 폭 갱신(화면 스크립트)
     renderSide(hh);
     const warnEl = document.getElementById("layer-warning");
-    if (!state.cache.has(`${hh}|${state.excludeDome}`)) warnEl.textContent = "지도 계산 중이에요(바람 방향을 여러 개 돌려 보느라 20~30초 걸려요)…";
+    if (!state.cache.has(`${hh}|${state.excludeDome}`)) warnEl.textContent = "지도 계산 중(바람 방향 여러 개 확인, 20~30초)…";
     const { cells, weather, warning } = await cellsFor(hh, computeHourInWorker);
     if (my !== seq) return;
     const warn = document.getElementById("layer-warning");

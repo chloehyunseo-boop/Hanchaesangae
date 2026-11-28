@@ -2,114 +2,15 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>올팍 바람지도</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
-  <style>
-    body { margin: 0; font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif; }
-    #map { height: 70vh; width: 100%; }
-    #panel { padding: 12px 16px; }
-    #panel h1 { font-size: 1.1rem; margin: 0 0 8px; }
-    .row { margin: 8px 0; }
-    .legend-chip { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
-    .disclaimer { font-size: 0.8rem; color: #555; background: #fff8e1; padding: 8px; border-radius: 4px; }
-    fieldset { border: 1px solid #ddd; border-radius: 4px; margin: 8px 0; }
-    #venue-checkboxes label { display: inline-block; margin-right: 10px; font-size: 0.9rem; }
-    #slider-label { font-weight: bold; }
-    #slider-warning { color: #b71c1c; font-size: 0.85rem; min-height: 1.2em; }
-    #forecast-sentences { font-size: 0.9rem; background: #f5f5f5; padding: 8px 12px; border-radius: 4px; }
-    #forecast-sentences div { margin: 2px 0; }
-    #layer-warning:not(:empty) { background: #424242; color: #fff; font-size: 0.9rem; padding: 8px 16px; }
-    #layer-warning div { margin: 2px 0; }
-    #slider-band { display: flex; height: 6px; margin-top: 2px; }
-    #slider-band .slider-seg { flex: 1; }
-    #slider-band .slider-seg.impossible { background: #9e9e9e; }
-    #auto-events { font-size: 0.9rem; }
-    #auto-events div { margin: 2px 0; }
-  </style>
+  <!-- 11/28 회의 결정: 대표 주소는 새 시민 화면(citizen.html)으로 바로 보내요. 예전 화면 코드는 app/에 남아 있지만 쓰지 않아요. -->
+  <meta http-equiv="refresh" content="0; url=./citizen.html" />
+  <link rel="canonical" href="./citizen.html" />
+  <title>올팍 바람지도</title>
+  <script>location.replace("./citizen.html" + location.search + location.hash);</script>
+  <style>body{font-family:system-ui,sans-serif;background:#fff;color:#1a1f2b;margin:0;padding:40px 16px;text-align:center}</style>
 </head>
 <body>
-  <div id="panel">
-    <h1>올팍 바람지도 — 시민 화면 (데모)</h1>
-    <p class="disclaimer">
-      ⚠️ 아래 "자동으로 반영된 실제 공연 일정"은 공단 올림픽공원 홈페이지 일정안내 페이지를
-      긁어온 거예요 — 시작 시각이 요일마다 자유롭게 적혀 있어서 못 읽은 날은 "모름"으로
-      표시하고, 끝나는 시각은 데이터에 없어서 <b>평균 3시간(또는 옥외 무대는 21:30 중 먼저
-      오는 쪽)으로 가정</b>했어요(실측 아님). 공식 API 계약이 아니라 페이지를 그대로 읽는
-      방식이라 공단이 사이트를 바꾸면 깨질 수 있어요. 그 아래 체크박스로는 실제 일정에 없는
-      공연도 "공연 중이라고 가정"해서 추가로 켜고 끌 수 있어요(엔진 확인용).
-      음원 세기(음량)는 공단이 음향장비 사양을 못 준다고 해서(11/26 답변) 여전히 <b>가정값</b>이에요(실제 숫자 아님) —
-      다만 아무 숫자가 아니라 <b>공단 기준(옥외 행사 소음 65dB(A) 상한)을 역산</b>한 값이에요: 편익동 쪽으로 부는
-      순풍(풍속 3m/s, 중립 대기) 조건에서 이 기준을 넘지 않는 음량을 "기본"으로 두고, "조용한·큰공연"은 실제
-      측정이 아니라 비교해볼 수 있게 만든 <b>데모용 상대 눈금(±3dB)</b>일 뿐이에요.
-      소음 레이어는 CONCAWE 기반 시간별 추정(지면·건물 차폐는 반영, 방음벽·설비차폐는 미반영),
-      배출가스는 ARM2 기반 가우시안 플룸 추정이에요. 두 레이어 모두 대기환경기준 초과 판정이 아니에요.
-    </p>
-
-    <div class="row">
-      <label><input type="checkbox" id="toggle-noise" checked /> 소음 레이어</label>
-      <span class="legend-chip" style="background:rgba(198,40,40,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(251,140,0,0.62)"></span>중
-      <span class="legend-chip" style="background:rgba(253,216,53,0.5)"></span>약
-      &nbsp;&nbsp;
-      <label><input type="checkbox" id="toggle-exhaust" checked /> 배출가스 레이어</label>
-      <span class="legend-chip" style="background:rgba(106,27,154,0.72)"></span>강
-      <span class="legend-chip" style="background:rgba(171,71,188,0.6)"></span>중
-      <span class="legend-chip" style="background:rgba(206,147,216,0.48)"></span>약
-      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>빗금 = 일부 음원 제외/근거리 불확실(등급 보류, 배출가스는 빗금 색 = 근거리 발전차를 뺀 "하한 등급")
-      &nbsp;&nbsp;<span class="legend-chip" style="background:rgba(120,120,120,0.45)"></span>점 무늬 = <b>모름</b>(약풍·시간정보 문제 등으로 계산 못 함 — 빈칸과 달리 위험할 수 있음)
-      &nbsp;&nbsp;<span class="legend-chip" style="background:#9e9e9e"></span>슬라이더 아래 회색 구간 = 그 시간은 바람이 거의 없어 배출가스를 계산 못 해요
-    </div>
-
-    <fieldset>
-      <legend>자동으로 반영된 실제 공연 일정(지금 시각 기준)</legend>
-      <div id="auto-events"></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>데모: 공연 중이라고 가정할 장소 추가(복수 선택, 실제 일정에 없는 공연도 켜볼 수 있어요)</legend>
-      <div id="venue-checkboxes"></div>
-    </fieldset>
-
-    <fieldset>
-      <legend>데모: 엔진 만져 보기</legend>
-      <div class="row">
-        음량: <select id="volume-preset"><option value="조용한">조용한</option><option value="기본" selected>기본</option><option value="큰공연">큰공연</option></select>
-        &nbsp;&nbsp;발전차 대수(0~5): <input type="number" id="generator-count" min="0" max="5" value="0" style="width:3em" />
-      </div>
-      <div class="row">
-        <label><input type="checkbox" id="wind-override-toggle" /> 실제 예보 대신 풍향·풍속 직접 설정</label>
-        <span id="wind-override-fields">
-          풍향(바람이 불어오는 쪽, 0~360°): <input type="number" id="wind-dir" min="0" max="360" value="270" style="width:4em" />
-          풍속(m/s): <input type="number" id="wind-speed" min="0" max="20" step="0.5" value="3" style="width:4em" />
-        </span>
-      </div>
-    </fieldset>
-
-    <div class="row">
-      시간: <span id="slider-label"></span>
-      <input type="range" id="time-slider" style="width:100%" />
-      <div id="slider-band"></div>
-      <div id="slider-warning"></div>
-    </div>
-  </div>
-
-  <div id="layer-warning"></div>
-
-  <div id="map"></div>
-
-  <div id="panel">
-    <fieldset>
-      <legend>문장 예보 (최대 5줄)</legend>
-      <div id="forecast-sentences"></div>
-    </fieldset>
-  </div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-  <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/main.js"></script>
+  <p><a href="./citizen.html">올팍 바람지도 시민 화면으로 이동</a></p>
 </body>
 </html>
