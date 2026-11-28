@@ -157,8 +157,9 @@
     .ir:last-child { border-bottom: 0; padding-bottom: 0; }
     .ir .k { font-weight: 700; display: flex; align-items: flex-start; gap: 6px; }
     .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
-    .ig-sub { font-size: 12px; font-weight: 700; color: var(--sub); margin: 10px 0 2px; }
-    .ig-sub:first-child { margin-top: 0; }
+    .ir .v .lvl { display: flex; gap: 6px; }
+    .ir .v .lvl + .lvl { margin-top: 6px; }
+    .ir .v .lvl .lv-tag { flex: none; width: 16px; color: var(--sub); font-weight: 400; }
 
     footer { border-top: 1px solid var(--line); background: #F5F6F8; }
     footer .inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 18px; font-size: 12px; color: var(--sub); }
@@ -438,14 +439,16 @@
         <div class="tab-panel info" data-tab="info">
           <div class="ig">
             <h3>단계의 의미</h3>
-            <div class="ig-sub">소음</div>
-            <div class="ir"><span class="k">강</span><span class="v">공단 옥외 공연 소음 기준(65 dB) 이상</span></div>
-            <div class="ir"><span class="k">중</span><span class="v">주거지역 낮 소음 환경기준(55 dB) 이상</span></div>
-            <div class="ir"><span class="k">약</span><span class="v">주거지역 밤 소음 환경기준(45 dB) 이상</span></div>
-            <div class="ig-sub">배출가스</div>
-            <div class="ir"><span class="k">강</span><span class="v">대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></div>
-            <div class="ir"><span class="k">중</span><span class="v">대기환경기준의 10% 이상 50% 미만</span></div>
-            <div class="ir"><span class="k">약</span><span class="v">대기환경기준의 2% 이상 10% 미만</span></div>
+            <div class="ir"><span class="k">소음</span><span class="v">
+              <div class="lvl"><span class="lv-tag">강</span>공단 옥외 공연 소음 기준(65 dB) 이상</div>
+              <div class="lvl"><span class="lv-tag">중</span>주거지역 낮 소음 환경기준(55 dB) 이상</div>
+              <div class="lvl"><span class="lv-tag">약</span>주거지역 밤 소음 환경기준(45 dB) 이상</div>
+            </span></div>
+            <div class="ir"><span class="k">배출가스</span><span class="v">
+              <div class="lvl"><span class="lv-tag">강</span>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</div>
+              <div class="lvl"><span class="lv-tag">중</span>대기환경기준의 10% 이상 50% 미만</div>
+              <div class="lvl"><span class="lv-tag">약</span>대기환경기준의 2% 이상 10% 미만</div>
+            </span></div>
             <div class="note">* 대기환경기준: 정부가 법으로 정한 전국 공기질 기준</div>
           </div>
           <div class="ig">
