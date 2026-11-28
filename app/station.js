@@ -14,7 +14,7 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-4";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-5";
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { stageActiveMinutes } from "../engine/noise.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
@@ -24,11 +24,11 @@ import {
   buildRealEventStageSources, buildManualEventStageSources, buildCitizenGeneratorSources,
   listTodaysRealEvents, kstParts, allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness,
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
-} from "./shared.js?v=20261129-4";
-import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-4"; // 11/28: 공연 일정 수집 실패·멈춤 안내
-import { ContourCellLayer } from "./contour_layer.js?v=20261129-4";
-import { setupDaySlider } from "./day_slider.js?v=20261129-4"; // 11/28: 휴대폰에서 시간 막대 하루씩
-import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-4"; // 11/28: 지도에 발전차 위치
+} from "./shared.js?v=20261129-5";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-5"; // 11/28: 공연 일정 수집 실패·멈춤 안내
+import { ContourCellLayer } from "./contour_layer.js?v=20261129-5";
+import { setupDaySlider } from "./day_slider.js?v=20261129-5"; // 11/28: 휴대폰에서 시간 막대 하루씩
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-5"; // 11/28: 지도에 발전차 위치
 import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition, venueOfSite } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;
