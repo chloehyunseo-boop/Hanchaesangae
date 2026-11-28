@@ -44,7 +44,7 @@ function chip(doc, state, palette) {
     span.style.background = palette[state.level];
     if (state.atLeast) span.style.outline = "2px dashed rgba(0,0,0,0.45)";
   }
-  if (state.kind === "unknown") span.title = "계산하지 못했어요. 안전하다는 뜻은 아니에요.";
+  if (state.kind === "unknown") span.title = "계산 불가";
   return span;
 }
 

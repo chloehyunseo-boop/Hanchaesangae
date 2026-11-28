@@ -207,7 +207,7 @@ export function buildForecastSentences({ series, now, maxLines = MAX_LINES, plac
     } else {
       const r = g.state.reason;
       const text =
-        r === "약풍" ? (where === "주요 장소 전체" ? `${when} 약풍, ${LAYER_TOPIC[g.layer]} 확산 방향 계산 불가. 안전하다는 뜻은 아님(지도 회색)` : `${when} 약풍, ${where} 쪽 ${LAYER_TOPIC[g.layer]} 확산 계산 불가. 안전하다는 뜻은 아님(지도 회색)`) :
+        r === "약풍" ? (where === "주요 장소 전체" ? `${when} 약풍, ${LAYER_TOPIC[g.layer]} 확산 방향 계산 불가${g.layer === "exhaust" ? ". 발전차 주변에 고일 수 있음" : ""}` : `${when} 약풍, ${where} 쪽 ${LAYER_TOPIC[g.layer]} 확산 계산 불가${g.layer === "exhaust" ? ". 발전차 주변에 고일 수 있음" : ""}`) :
         r === "근거리" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 발전차 바로 옆이라 단계 보류(지도 빗금)` :
         r === "시간미확인" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 계산 안 함(가동 시간 모르는 ${g.layer === "exhaust" ? "발전차" : "공연"} 있음)` :
         r === "일부제외" ? `${when} ${where} 쪽 ${LAYER_TOPIC[g.layer]} 단계 보류(일부 공연 정보 빠짐)` :

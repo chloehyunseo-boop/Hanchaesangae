@@ -340,9 +340,9 @@ export function uniformUnknownMessage(layerKey, cells, weather) {
   const flags = cells[0]?.flags ?? [];
   if (flags.includes("약풍미표시")) {
     const wsd = typeof weather?.wsd10m === "number" ? `${weather.wsd10m}m/s` : "거의 없음";
-    return `약풍(풍속 ${wsd}), ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 확산 방향 계산 불가. 발전차 주변에 고일 수 있음. 안전하다는 뜻은 아님`;
+    return `약풍(풍속 ${wsd}), ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 확산 방향 계산 불가. 발전차 주변에 고일 수 있음`;
   }
-  return `이 시간 ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 계산 불가. 안전하다는 뜻은 아님`;
+  return `이 시간 ${LAYER_NAME_PLAIN[layerKey] ?? layerKey} 계산 불가`;
 }
 
 export function hourSlotDate(offsetHours) {

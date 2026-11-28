@@ -42,7 +42,7 @@ const tl = buildPlaceTimeline({ series: [...series].reverse(), placeName: "수�
 ok(tl.rows.length === 6 && tl.rows[0].hh === 18 && tl.rows[5].date === "2026-11-27", "시각 순서로 정렬, 날짜 넘어감");
 ok(tl.summary.noise.worst === "중" && tl.summary.noise.text.includes("11/26 19~21시"), "소음 요약: 가장 높은 단계 중, 19~21시", tl.summary.noise.text);
 ok(tl.summary.exhaust.worst === "강" && tl.summary.exhaust.atLeast, "배출가스 요약: 강 이상(하한)", tl.summary.exhaust.text);
-ok(tl.summary.exhaust.text.includes("21~22시·11/26 23시~다음 날 1시") && tl.summary.exhaust.text.includes("안전하다는 뜻은 아니에요"), "계산 못 한 시간도 요약에 적음(빈 시간 22시는 끊김)", tl.summary.exhaust.text);
+ok(tl.summary.exhaust.text.includes("21~22시·11/26 23시~다음 날 1시") && tl.summary.exhaust.text.includes("계산하지 못한 시간"), "계산 못 한 시간도 요약에 적음(빈 시간 22시는 끊김)", tl.summary.exhaust.text);
 ok(!/세요|하십시오|권장/.test(JSON.stringify(tl)), "행동 권고 문구 없음(규칙 4)");
 const empty = buildPlaceTimeline({ series: [], placeName: "수영장" });
 ok(empty.rows.length === 0 && empty.summary.noise.text.includes("예측 자료가 아직 없어요"), "자료 없음");

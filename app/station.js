@@ -14,7 +14,7 @@
 //  - 풍향·풍속 직접 설정 없음(사용자 11/26 결정 — 공단 화면도 실제 예보만 써요).
 //  - 발전차 입력·CSV·영향 강습 목록은 agency.js와 똑같아요(이건 데모가 아니라 진짜 운영 도구예요).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128c";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128d";
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { placeCellState, nearestPlace } from "../engine/place_view.js";
 import {
@@ -828,7 +828,7 @@ async function main() {
   function renderLayerWarnings(cells, weather, warning = null) {
     const lines = [];
     // 11/28 독립 검토: 기상 자료가 없는 시각엔 지도가 빈칸인데 안내가 슬라이더 옆 작은 글씨뿐이었어요.
-    if (warning) lines.push(`${esc(warning)}. 안전하다는 뜻은 아님`);
+    if (warning) lines.push(esc(warning));
     for (const key of ["exhaust", "noise"]) {
       const layerCells = cells.filter((c) => c.layer === key);
       if (allCellsUnknown(layerCells)) lines.push(uniformUnknownMessage(key, layerCells, weather));
