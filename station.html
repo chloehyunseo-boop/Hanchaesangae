@@ -157,6 +157,9 @@
     .ir:last-child { border-bottom: 0; padding-bottom: 0; }
     .ir .k { font-weight: 700; display: flex; align-items: flex-start; gap: 6px; }
     .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
+    .ir .k i.dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 3px; }
+    .ig-sub { font-size: 12px; font-weight: 700; color: var(--sub); margin: 10px 0 2px; }
+    .ig-sub:first-child { margin-top: 0; }
     .ir .v .l { display: grid; grid-template-columns: 54px 1fr; gap: 6px; }
     .ir .v .l + .l { margin-top: 4px; }
     .ir .v small { color: var(--sub); font-size: 12px; line-height: 1.75; display: inline-flex; align-items: center; gap: 4px; }
@@ -440,9 +443,15 @@
         <div class="tab-panel info" data-tab="info">
           <div class="ig">
             <h3>단계의 의미</h3>
-            <div class="ir"><span class="k">강</span><span class="v"><span class="l"><small><i style="background:rgba(198,40,40,0.85)"></i>소음</small><span>공단 옥외 공연 소음 기준(65 dB) 이상</span></span><span class="l"><small><i style="background:rgba(106,27,154,0.85)"></i>배출가스</small><span>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></span></span></div>
-            <div class="ir"><span class="k">중</span><span class="v"><span class="l"><small><i style="background:rgba(251,140,0,0.8)"></i>소음</small><span>주거지역 낮 소음 환경기준(55 dB) 이상</span></span><span class="l"><small><i style="background:rgba(171,71,188,0.8)"></i>배출가스</small><span>대기환경기준의 10% 이상 50% 미만</span></span></span></div>
-            <div class="ir"><span class="k">약</span><span class="v"><span class="l"><small><i style="background:rgba(253,216,53,0.85)"></i>소음</small><span>주거지역 밤 소음 환경기준(45 dB) 이상</span></span><span class="l"><small><i style="background:rgba(206,147,216,0.8)"></i>배출가스</small><span>대기환경기준의 2% 이상 10% 미만</span></span></span></div>
+            <div class="ig-sub">소음</div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(198,40,40,0.85)"></i>강</span><span class="v">공단 옥외 공연 소음 기준(65 dB) 이상</span></div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(251,140,0,0.8)"></i>중</span><span class="v">주거지역 낮 소음 환경기준(55 dB) 이상</span></div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(253,216,53,0.85)"></i>약</span><span class="v">주거지역 밤 소음 환경기준(45 dB) 이상</span></div>
+            <div class="ig-sub">배출가스</div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(106,27,154,0.85)"></i>강</span><span class="v">대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(171,71,188,0.8)"></i>중</span><span class="v">대기환경기준의 10% 이상 50% 미만</span></div>
+            <div class="ir"><span class="k"><i class="dot" style="background:rgba(206,147,216,0.8)"></i>약</span><span class="v">대기환경기준의 2% 이상 10% 미만</span></div>
+            <div class="note">* 대기환경기준: 전국 공기가 이 정도는 깨끗해야 한다고 정부가 법으로 정해둔 기준이에요.</div>
           </div>
           <div class="ig">
             <h3>지도 무늬</h3>
