@@ -3,8 +3,8 @@
 // 기상청 초단기예보·단기예보를 받아 data/weather.json을 갱신해요.
 // 인증키는 환경변수(KMA_SERVICE_KEY)로만 받아요 — 코드·커밋에는 절대 안 넣어요.
 
-import { writeFile } from "node:fs/promises";
-import { fetchLatestForecast, parseForecastResponse, mergeForecasts } from "../engine/weather.js";
+import { readFile, writeFile } from "node:fs/promises";
+import { fetchLatestForecast, parseForecastResponse, mergeForecasts, carryOverMissing } from "../engine/weather.js";
 
 async function main() {
   const serviceKey = process.env.KMA_SERVICE_KEY;
@@ -27,7 +27,12 @@ async function main() {
     실패기록.push({ 시각: now.toISOString(), 사유: `단기예보: ${vilage.사유}` });
   }
 
-  const 예보 = mergeForecasts(ultraItems, vilageItems, now);
+  // 11/28: 새 예보에 없는 지금~6시간 값은 직전 갱신 파일 값으로 채워요(engine/weather.js carryOverMissing 주석).
+  let prevItems = [];
+  try {
+    prevItems = JSON.parse(await readFile(new URL("../data/weather.json", import.meta.url), "utf8")).예보 ?? [];
+  } catch { /* 첫 실행 등 — 채울 값 없음 */ }
+  const 예보 = carryOverMissing(mergeForecasts(ultraItems, vilageItems, now), prevItems, now);
 
   const record = {
     _설명: "GitHub Actions가 매시 50분에 갱신해요. 값이 없는 시각은 비워 둬요(임의로 채우지 않음).",
