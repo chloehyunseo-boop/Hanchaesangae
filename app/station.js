@@ -25,7 +25,7 @@ import {
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
 import { ContourCellLayer } from "./contour_layer.js";
-import { createGeneratorMarkers } from "./generator_markers.js?v=20261128c"; // 11/28: 지도에 발전차 위치
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;

@@ -21,7 +21,7 @@ import {
   allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness, initTabs,
 } from "./shared.js";
 import { ContourCellLayer } from "./contour_layer.js"; // 디자인 사본: 블러 대신 등치선 면
-import { createGeneratorMarkers } from "./generator_markers.js?v=20261128c"; // 11/28: 지도에 발전차 위치
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261128d"; // 11/28: 지도에 발전차 위치
 import { generatorActivityAtHour } from "../engine/combine.js";
 
 const NUM_HOURS = 72;
