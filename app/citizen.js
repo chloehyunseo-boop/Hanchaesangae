@@ -324,7 +324,7 @@ async function main() {
       const impossible = activeGenerators && weather && weather.wsd10m < 1.0;
       const active = !impossible && (activeGenerators || activeStage);
       const cls = impossible ? " impossible" : active ? " active" : "";
-      const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "공연·발전차 있음" : "";
+      const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "공연 있음" : "";
       segs.push(`<div class="slider-seg${cls}" title="${title}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
@@ -333,8 +333,8 @@ async function main() {
     if (noteEl) {
       const notes = [];
       if (segs.some((x) => x.includes("impossible"))) notes.push('<i class="sw-impossible"></i>약풍이어서 배출가스 계산 불가');
-      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>공연·발전차 있는 시간');
-      noteEl.innerHTML = notes.join(" · ");
+      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>공연 있는 시간');
+      noteEl.innerHTML = notes.join("  ");
     }
   }
 
