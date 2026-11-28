@@ -13,7 +13,7 @@
 //  - 풍향·풍속 직접 설정 없음 — 기상청 예보만 써요.
 //  - 장소별 보기(파란 점) 없음 — 사용자 요청으로 뺌(포크 세션 결정, decisions.md 참고).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128b";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261128c";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, kstParts, formatSlotLabel, loadCommonData,
