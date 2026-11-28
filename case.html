@@ -124,7 +124,8 @@
     .lg td.g { width: 28px; font-weight: 700; }
     .lg td.v { color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
     .lg + .lg { margin-top: 12px; }
-    .marks { display: flex; gap: 14px; font-size: 12px; color: var(--sub); }
+    .marks { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--sub); }
+    .marks > span { white-space: nowrap; }
     .marks span span { display: inline-block; width: 18px; height: 10px; vertical-align: -1px; margin-right: 5px; }
     .hatch { background: repeating-linear-gradient(45deg, rgba(70,78,90,.42) 0 1px, rgba(120,120,120,.16) 1px 4.5px); border: 1px solid #C9CFD6; }
     /* 11/28: 지도와 같은 엇갈린 점(4px 바둑판 점은 Safari에서 격자처럼 보였어요) */

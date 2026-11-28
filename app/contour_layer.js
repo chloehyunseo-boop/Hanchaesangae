@@ -155,7 +155,7 @@ export const ContourCellLayer = CanvasCellLayer.extend({
         // 하한 단계 색 빗금도 바탕보다 너무 진하지 않게 알파를 줄여요
         pctx.strokeStyle = `rgba(${r},${g},${b},${Math.min(a / 255, 0.55)})`;
         pctx.lineWidth = 1;
-        for (let off = -H; off < W; off += 6) { pctx.beginPath(); pctx.moveTo(off, 0); pctx.lineTo(off + H, H); pctx.stroke(); }
+        for (let off = -H; off < W; off += 10) { pctx.beginPath(); pctx.moveTo(off, 0); pctx.lineTo(off + H, H); pctx.stroke(); }
       }
       const pd = pctx.getImageData(0, 0, W, H).data;
       for (let i = 0; i < owner.length; i++) {
