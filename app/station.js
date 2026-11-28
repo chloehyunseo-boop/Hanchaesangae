@@ -157,58 +157,134 @@ async function getCellsForHour(date, computeHourInWorker) {
 // ---------------------------------------------------------------------------
 // 발전차 입력 표 (agency.js와 동일)
 // ---------------------------------------------------------------------------
+const editingTruckIds = new Set(); // 지금 펼쳐서 고치는 중인 발전차(저장 전)
 function renderTruckTable(onChange) {
+  // 11/28 하린: 공연 추가 카드와 같은 방식 — 고친 내용은 '저장'을 눌러야 반영되고, 저장하면 한 줄 요약으로 접혀요.
+  // 시각은 공연 추가와 같이 날짜 + '시'·'분' 선택으로 받아요(브라우저마다 다른 날짜·시각 입력 대신).
   const tbody = document.getElementById("truck-rows");
   tbody.innerHTML = "";
   const venueNames = [...state.siteByName.keys()];
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+  const md = (dt) => { const [d, hm] = dt.split("T"); const [, m, dd] = d.split("-"); return `${Number(m)}/${Number(dd)} ${hm}`; };
+  const delTruck = (t) => {
+    state.trucks = state.trucks.filter((x) => x.id !== t.id);
+    editingTruckIds.delete(t.id);
+    renderTruckTable(onChange);
+    onChange();
+  };
   for (const t of state.trucks) {
+    if (t.site && !editingTruckIds.has(t.id)) {
+      const tr = document.createElement("tr");
+      tr.className = "compact";
+      const td = document.createElement("td");
+      const parts = [`${t.발전기수 ?? "대수 모름"}${t.발전기수 ? "대" : ""}`, t.인증등급 && t.인증등급 !== "모름" ? t.인증등급 : "등급 모름", t.엔진출력_kW ? `${t.엔진출력_kW}kW` : "출력 모름"];
+      const when = t.시작시각
+        ? `공연 ${md(t.시작시각)}${t.셋업시작 ? ` · 셋업 ${md(t.셋업시작)}` : " · 2시간 전부터 가동"}`
+        : "공연 시작 없음 → 항상 가동으로 계산";
+      td.innerHTML = `<div class="ev-sum"><b>${t.site}</b> · ${parts.join(" · ")}<br><span>${when}</span></div>`;
+      const btns = document.createElement("div");
+      btns.className = "ev-btns";
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.textContent = "수정";
+      edit.addEventListener("click", () => { editingTruckIds.add(t.id); renderTruckTable(onChange); });
+      const del = document.createElement("button");
+      del.type = "button"; del.textContent = "삭제";
+      del.addEventListener("click", () => delTruck(t));
+      btns.append(edit, del);
+      td.appendChild(btns);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      continue;
+    }
+    const draft = { site: t.site ?? "", 발전기수: t.발전기수 ?? "", 인증등급: t.인증등급 ?? "모름", 엔진출력_kW: t.엔진출력_kW ?? "", 시작시각: t.시작시각 ?? "", 셋업시작: t.셋업시작 ?? "" };
     const tr = document.createElement("tr");
+    const status = document.createElement("span");
+    status.className = "ev-status";
+    const keys = Object.keys(draft);
+    const dirty = () => keys.some((k) => String(draft[k] ?? "") !== String(t[k] ?? (k === "인증등급" ? "모름" : "")));
+    const paint = (msg) => {
+      if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
+      if (dirty()) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
+      else if (t.site) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
+      else { status.textContent = "입력 필요"; status.dataset.state = "dirty"; }
+    };
 
     const siteSel = document.createElement("select");
     siteSel.innerHTML = `<option value="">위치 고르기</option>` + venueNames.map((n) => `<option value="${n}">${n}</option>`).join("");
-    siteSel.value = t.site ?? "";
-    siteSel.addEventListener("change", () => { t.site = siteSel.value || null; onChange(); });
+    siteSel.value = draft.site;
+    siteSel.addEventListener("change", () => { draft.site = siteSel.value; paint(); });
 
     const countInput = document.createElement("input");
-    countInput.type = "number"; countInput.min = "1"; countInput.max = "4"; countInput.style.width = "3.5em";
-    countInput.placeholder = "모름=2";
-    countInput.value = t.발전기수 ?? "";
-    countInput.addEventListener("change", () => { const v = Number(countInput.value); t.발전기수 = countInput.value === "" ? null : (Number.isFinite(v) ? v : null); onChange(); });
+    countInput.type = "number"; countInput.min = "1"; countInput.max = "4"; countInput.placeholder = "모름=2";
+    countInput.value = draft.발전기수;
+    countInput.addEventListener("input", () => { draft.발전기수 = countInput.value; paint(); });
 
     const gradeSel = document.createElement("select");
     gradeSel.innerHTML = Object.entries(GRADE_LABEL).map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
-    gradeSel.value = t.인증등급 ?? "모름";
-    gradeSel.addEventListener("change", () => { t.인증등급 = gradeSel.value; onChange(); });
+    gradeSel.value = draft.인증등급;
+    gradeSel.addEventListener("change", () => { draft.인증등급 = gradeSel.value; paint(); });
 
     const powerInput = document.createElement("input");
-    powerInput.type = "number"; powerInput.min = "1"; powerInput.max = "2000"; powerInput.style.width = "5em";
-    powerInput.placeholder = "모름=239kW";
-    powerInput.value = t.엔진출력_kW ?? "";
-    powerInput.addEventListener("change", () => { const v = Number(powerInput.value); t.엔진출력_kW = powerInput.value === "" ? null : (Number.isFinite(v) ? v : null); onChange(); });
+    powerInput.type = "number"; powerInput.min = "1"; powerInput.max = "2000"; powerInput.placeholder = "모름=239kW";
+    powerInput.value = draft.엔진출력_kW;
+    powerInput.addEventListener("input", () => { draft.엔진출력_kW = powerInput.value; paint(); });
 
-    const startInput = document.createElement("input");
-    startInput.type = "datetime-local"; startInput.title = "비우면 1년 내내 가동으로 가정";
-    startInput.value = t.시작시각 ?? "";
-    startInput.addEventListener("change", () => { t.시작시각 = startInput.value || null; onChange(); });
+    // 날짜 + 시·분 선택 → "YYYY-MM-DDTHH:MM"
+    const dateTimePick = (key) => {
+      const wrap = document.createElement("div");
+      wrap.className = "time-pick dt";
+      const dIn = document.createElement("input");
+      dIn.type = "date";
+      const hSel = document.createElement("select");
+      const mSel = document.createElement("select");
+      hSel.innerHTML = `<option value="">시</option>` + hours.map((h) => `<option value="${h}">${h}시</option>`).join("");
+      mSel.innerHTML = mins.map((m) => `<option value="${m}">${m}분</option>`).join("");
+      if (draft[key]) {
+        const [d, hm] = draft[key].split("T"); const [hh, mm] = (hm ?? "").split(":");
+        dIn.value = d; hSel.value = hh ?? ""; mSel.value = mins.includes(mm) ? mm : "00";
+      }
+      const upd = () => {
+        draft[key] = dIn.value && hSel.value ? `${dIn.value}T${hSel.value}:${mSel.value}` : (dIn.value || hSel.value ? "__partial" : "");
+        paint();
+      };
+      dIn.addEventListener("input", upd); dIn.addEventListener("change", upd);
+      hSel.addEventListener("change", upd); mSel.addEventListener("change", upd);
+      wrap.append(dIn, hSel, mSel);
+      return wrap;
+    };
+    const startPick = dateTimePick("시작시각");
+    const setupPick = dateTimePick("셋업시작");
 
-    const setupInput = document.createElement("input");
-    setupInput.type = "datetime-local"; setupInput.title = "공연 시작 시각을 먼저 넣어야 의미가 있어요";
-    setupInput.value = t.셋업시작 ?? "";
-    setupInput.addEventListener("change", () => { t.셋업시작 = setupInput.value || null; onChange(); });
-
-    const delBtn = document.createElement("button");
-    delBtn.type = "button"; delBtn.textContent = "삭제";
-    delBtn.addEventListener("click", () => {
-      state.trucks = state.trucks.filter((x) => x.id !== t.id);
-      renderTruckTable(onChange);
+    const actions = document.createElement("div");
+    actions.className = "ev-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
+    saveBtn.addEventListener("click", () => {
+      if (!draft.site) { paint("위치를 골라 주세요"); return; }
+      const num = (v) => (v === "" || v === null ? null : Number(v));
+      const cnt = num(draft.발전기수), kw = num(draft.엔진출력_kW);
+      if (cnt !== null && !(Number.isInteger(cnt) && cnt >= 1 && cnt <= 4)) { paint("발전기 수는 1~4"); return; }
+      if (kw !== null && !(Number.isFinite(kw) && kw >= 1 && kw <= 2000)) { paint("엔진 출력은 1~2000 kW"); return; }
+      if (draft.시작시각 === "__partial" || draft.셋업시작 === "__partial") { paint("날짜와 시를 함께 넣어 주세요"); return; }
+      if (draft.셋업시작 && !draft.시작시각) { paint("셋업 시작은 공연 시작과 함께 넣어 주세요"); return; }
+      if (draft.셋업시작 && draft.셋업시작 >= draft.시작시각) { paint("셋업 시작은 공연 시작보다 앞이어야 해요"); return; }
+      Object.assign(t, { site: draft.site, 발전기수: cnt, 인증등급: draft.인증등급, 엔진출력_kW: kw, 시작시각: draft.시작시각 || null, 셋업시작: draft.셋업시작 || null });
+      editingTruckIds.delete(t.id);
+      renderTruckTable(onChange); // 저장하면 입력칸을 접고 한 줄 요약으로
       onChange();
     });
+    const delBtn = document.createElement("button");
+    delBtn.type = "button"; delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => delTruck(t));
+    actions.append(status, delBtn, saveBtn);
 
-    for (const el of [siteSel, countInput, gradeSel, powerInput, startInput, setupInput, delBtn]) {
+    for (const el of [siteSel, countInput, gradeSel, powerInput, startPick, setupPick, actions]) {
       const td = document.createElement("td");
       td.appendChild(el);
       tr.appendChild(td);
     }
+    paint();
     tbody.appendChild(tr);
   }
 }
@@ -242,7 +318,7 @@ function renderAutoEvents(hourIso) {
     }
     const dp = Object.fromEntries(fmt.formatToParts(new Date(`${day}T12:00:00+09:00`)).map((x) => [x.type, x.value]));
     const label = `${dp.month}월 ${dp.day}일 (${dp.weekday})`;
-    const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예보 범위 밖";
+    const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예측 범위 밖";
     blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
       <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${label}</b><small>${hint}</small></button>
       ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}${e.수동 ? ' <span class="tag">직접 입력</span>' : ""}<br><span>${e.title}</span></div>`).join("")}

@@ -167,6 +167,20 @@
       .brand b { font-size: 17px; }
       .tab-btn { min-height: 44px; }
     }
+    /* 공연 일정: 앞으로 2주, 날짜별 (11/28) */
+    #auto-events section.day { border-top: 1px solid var(--line-soft); padding-bottom: 8px; }
+    #auto-events section.day:first-child { border-top: 0; }
+    #auto-events section.day.sel { background: var(--tint, #F2F7FB); box-shadow: inset 3px 0 0 var(--k-blue); }
+    #auto-events .day-head { display: flex; align-items: baseline; width: 100%; padding: 10px 10px 4px; border: 0; background: none; text-align: left; font: inherit; cursor: pointer; }
+    #auto-events .day-head b { font-size: 13.5px; color: var(--text); }
+    #auto-events .day-head small { margin-left: auto; font-size: 12px; color: var(--k-blue); }
+    #auto-events .day-head:hover small { text-decoration: underline; }
+    #auto-events .day-head:disabled { cursor: default; }
+    #auto-events .day-head:disabled small { color: var(--sub); text-decoration: none; }
+    #auto-events section.day.sel .day-head small { color: var(--text); text-decoration: none; }
+    #auto-events div.ev { padding: 3px 10px 3px 22px; border: 0; font-size: 13px; line-height: 1.45; }
+    #auto-events div.ev span { color: var(--sub); }
+    #auto-events p.muted { margin: 0; padding: 10px; color: var(--sub); font-size: 13px; }
   </style>
 </head>
 <body>
@@ -261,7 +275,7 @@
           </div>
           <div class="ig">
             <h3>지도 무늬</h3>
-            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 일부 음원 제외 또는 발전차 근거리</span></div>
+            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 발전차 100m 이내 또는 일부 음원 제외</span></div>
             <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">계산 불가. 약풍 등이며 안전하다는 뜻은 아님</span></div>
             <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
           </div>

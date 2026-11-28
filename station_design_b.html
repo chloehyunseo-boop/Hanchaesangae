@@ -313,7 +313,9 @@
     .cards tr.compact td { flex-direction: row; align-items: center; gap: 10px; grid-column: auto; }
     .cards tr.compact .ev-sum { flex: 1; min-width: 0; font-size: 13px; color: var(--text); line-height: 1.45; }
     .cards tr.compact .ev-sum span { color: var(--sub); font-size: 12px; }
-    #event-table tr.compact td::before { content: none; }
+    #event-table tr.compact td::before, #truck-table tr.compact td::before { content: none; }
+    #truck-table td:nth-child(5), #truck-table td:nth-child(6) { grid-column: 1 / -1; }
+    .time-pick.dt input { flex: 1.6; min-width: 0; }
     .cards tr.compact .ev-btns { display: flex; gap: 4px; flex: none; }
     .cards tr.compact .ev-btns button { height: 26px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; color: var(--sub); }
     .cards tr.compact .ev-btns button:hover { border-color: var(--k-blue); color: var(--k-blue); }
@@ -381,6 +383,7 @@
             <div class="w-head"><h3>발전차</h3><span class="spacer"></span><button type="button" class="btn" id="add-truck">추가</button></div>
             <p class="w-note">한 카드 = 발전차 한 대. 셋업 시작을 비우면 공연 2시간 전부터 가동. 모르는 값은 비우면 대표모델 가정값.</p>
             <table class="cards" id="truck-table"><thead><tr><th>위치</th><th>발전기 수</th><th>인증 등급</th><th>엔진 출력(kW)</th><th>공연 시작</th><th>셋업 시작</th><th></th></tr></thead><tbody id="truck-rows"></tbody></table>
+            <p class="w-note">인증 등급: 발전기 엔진의 배출가스 인증. 인증 = 미국 EPA Tier 4 Final(NOx 0.40 g/kWh 한도), 비인증 = 인증 표기 없음(비제어 평균 18.8 g/kWh).</p>
             <div class="w-row">등급 모를 때 <select id="scenario-default"><option value="인증" selected>인증으로 가정(기본)</option><option value="비인증">비인증으로 가정(비교)</option></select></div>
           </div>
           <div class="w-sec">
@@ -409,6 +412,7 @@
             <div class="ir"><span class="k">음량</span><span class="v">가정값. 옥외는 공단 기준 65 dB 역산, 실내는 건물 외피 추정</span></div>
             <div class="ir"><span class="k">발전차</span><span class="v" id="generator-count-note"></span></div>
             <div class="ir"><span class="k">계산</span><span class="v">시민 화면과 같은 엔진. 소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</span></div>
+            <div class="ir"><span class="k">인증 등급</span><span class="v">발전기 엔진의 배출가스 인증. 인증 = 미국 EPA Tier 4 Final(NOx 0.40 g/kWh 한도), 비인증 = 인증 표기 없음(비제어 평균 18.8 g/kWh). 모르면 인증으로 계산</span></div>
             <div class="ir"><span class="k">저장</span><span class="v">입력값은 이 브라우저에만 저장(서버 없음)</span></div>
           </div>
           <div class="ig">
@@ -419,7 +423,7 @@
           </div>
           <div class="ig">
             <h3>지도 무늬</h3>
-            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 일부 음원 제외 또는 발전차 근거리</span></div>
+            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">등급 보류. 발전차 100m 이내 또는 일부 음원 제외</span></div>
             <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">계산 불가. 약풍 등이며 안전하다는 뜻은 아님</span></div>
             <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
           </div>
@@ -484,7 +488,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station_design.js?v=7"></script>
+  <script type="module" src="./app/station_design.js?v=8"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {

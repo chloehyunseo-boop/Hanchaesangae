@@ -16,7 +16,7 @@
 import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
-  hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
+  hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, kstParts, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
   allCellsUnknown, uniformUnknownMessage, initTabs,
 } from "./shared.js";
@@ -202,16 +202,45 @@ async function main() {
   }
 
   const autoEventsEl = document.getElementById("auto-events");
+  // 11/28 하린: 공단 화면과 같이 앞으로 2주 공연을 날짜별로 보여주고, 날짜를 누르면 시간 막대가
+  // 그날 첫 공연 시각으로 이동해요(72시간 예측 범위 안일 때만).
+  const SCHEDULE_DAYS = 14;
+  const ymdOf = (d) => { const { y, m, d: dd } = kstParts(d); return `${y}-${m}-${dd}`; };
   function renderAutoEvents(hourIso) {
-    const items = listTodaysRealEvents(state.events, hourIso);
-    // 디자인: 선택한 시각의 날짜를 맨 위에 보여줘요(예: 11월 28일 (토))
-    const dp = Object.fromEntries(new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" })
-      .formatToParts(new Date(hourIso)).map((x) => [x.type, x.value]));
-    const dateHead = `<div class="ev-date">${dp.month}월 ${dp.day}일 (${dp.weekday})</div>`;
-    autoEventsEl.innerHTML = dateHead + (items.length
-      ? items.map((e) => `<div><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span style="color:var(--sub)">${e.title}</span></div>`).join("")
-      : "<div style=\"color:var(--sub)\">이 날짜의 공연 없음</div>");
+    const selDay = ymdOf(new Date(hourIso));
+    const start = hourSlotDate(0);
+    const fmt = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short" });
+    const blocks = [];
+    for (let i = 0; i < SCHEDULE_DAYS; i++) {
+      const day = ymdOf(new Date(start.getTime() + i * 86400e3));
+      const items = listTodaysRealEvents(state.events, `${day}T12:00:00+09:00`)
+        .sort((p, q) => String(p.startTimeStr ?? "99").localeCompare(String(q.startTimeStr ?? "99")));
+      if (!items.length) continue;
+      const firstHour = items.find((x) => x.startTimeStr)?.startTimeStr?.slice(0, 2) ?? null;
+      let offset = -1;
+      for (let o = 0; o < NUM_HOURS; o++) {
+        const d = hourSlotDate(o);
+        if (ymdOf(d) !== day) continue;
+        if (offset < 0) offset = o;
+        if (firstHour && kstParts(d).h === firstHour) { offset = o; break; }
+      }
+      const dp = Object.fromEntries(fmt.formatToParts(new Date(`${day}T12:00:00+09:00`)).map((x) => [x.type, x.value]));
+      const hint = offset >= 0 ? (day === selDay ? "지도에 표시 중" : "지도에서 보기") : "예측 범위 밖";
+      blocks.push(`<section class="day${day === selDay ? " sel" : ""}">
+        <button type="button" class="day-head" ${offset >= 0 ? `data-offset="${offset}"` : "disabled"}><b>${dp.month}월 ${dp.day}일 (${dp.weekday})</b><small>${hint}</small></button>
+        ${items.map((e) => `<div class="ev"><b>${e.startTimeStr ?? "시각 미상"}</b> · ${e.site}<br><span>${e.title}</span></div>`).join("")}
+      </section>`);
+    }
+    autoEventsEl.innerHTML = blocks.length ? blocks.join("") : `<p class="muted">앞으로 2주 공연 없음</p>`;
   }
+  autoEventsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".day-head[data-offset]");
+    if (!btn) return;
+    slider.value = btn.dataset.offset;
+    slider.dispatchEvent(new Event("input"));
+    slider.dispatchEvent(new Event("change"));
+  });
+
 
   let refreshSeq = 0;
   function renderCells(cells, warning, date) {
