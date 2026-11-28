@@ -21,7 +21,7 @@ import {
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildDemoStageSources, kstParts, allCellsUnknown, uniformUnknownMessage,
   buildGeneratorSourcesFromTruckRecords, localInputToIso,
-} from "./shared.js?v=20261129-3";
+} from "./shared.js?v=20261129-4";
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_agency_trucks_v1";

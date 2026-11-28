@@ -77,6 +77,7 @@
     #slider-label { font-size: 18px; font-weight: 700; color: var(--k-blue); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
     #slider-warning { font-size: 12px; color: var(--sub); }
     #slider-warning:empty, #band-note:empty { display: none; }
+    @media (min-width: 641px) { #band-note .cond { display: none; } #band-note > span + span { margin-left: 10px; } }
     .tb-head .spacer { flex: 1; }
     #band-note { font-size: 12px; color: var(--sub); }
     #band-note i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
@@ -355,14 +356,18 @@
     .gen-pin-wrap { display: flex !important; justify-content: center; align-items: center; }
     .mk-gen { display: inline-flex; align-items: center; justify-content: center; height: 14px; padding: 0 3px; border-radius: 3px; background: #3D2466; vertical-align: -2px; margin-right: 4px; }
     .mk-gen svg { width: 15px; height: 10px; display: block; } .mk-gen .cut { fill: #3D2466; } .mk-gen .whl { fill: #fff; stroke: #3D2466; stroke-width: 1.2; }
-    /* 11/28: 휴대폰 시간 막대 하루씩 보기(app/day_slider.js) — 넓은 화면에선 JS가 숨김 */
-    .day-chips { display: flex; gap: 6px; margin: 10px 0 2px; overflow-x: auto; scrollbar-width: none; }
-    .day-chips::-webkit-scrollbar { display: none; }
-    .day-chips button { flex: none; height: 30px; padding: 0 11px; border: 1px solid var(--line); border-radius: 15px; background: #fff; color: var(--sub); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
-    .day-chips button b { color: var(--text); font-weight: 700; }
-    .day-chips button small { font-size: 11.5px; }
-    .day-chips button.on { background: var(--k-blue); border-color: var(--k-blue); color: #fff; }
-    .day-chips button.on b { color: #fff; }
+    /* 11/29 하린: 휴대폰 날짜 고르기는 "오늘 · 내일 · 모레" 작은 글자 탭(예측 시각 줄 오른쪽 끝). 넓은 화면에선 JS가 숨김 */
+    .day-chips { display: flex; margin-left: auto; font-size: 12.5px; }
+    .day-chips button { border: 0; background: none; padding: 4px 0 4px 9px; min-height: 32px; color: var(--sub); font: inherit; cursor: pointer; white-space: nowrap; }
+    .day-chips button + button::before { content: "·"; color: #C3C9D0; margin-right: 9px; }
+    .day-chips button.on { color: var(--k-blue); font-weight: 700; }
+    @media (max-width: 640px) {
+      .tb-head { flex-wrap: nowrap; gap: 8px; }
+      .tb-head .spacer { display: none; }
+      #slider-label { font-size: 16px; }
+      #band-note { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 2px; font-size: 11px; }
+      #band-note i { width: 12px; height: 5px; margin-right: 4px; }
+    }
   </style>
 </head>
 <body>
@@ -516,7 +521,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station.js?v=20261129-3"></script>
+  <script type="module" src="./app/station.js?v=20261129-4"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {

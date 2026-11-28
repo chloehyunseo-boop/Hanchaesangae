@@ -75,6 +75,7 @@
     #slider-label { font-size: 18px; font-weight: 700; color: var(--k-blue); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
     #slider-warning { font-size: 12px; color: var(--sub); }
     #slider-warning:empty, #band-note:empty { display: none; }
+    @media (min-width: 641px) { #band-note .cond { display: none; } #band-note > span + span { margin-left: 10px; } }
     .tb-head .spacer { flex: 1; }
     #band-note { font-size: 12px; color: var(--sub); }
     #band-note i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
@@ -196,14 +197,46 @@
     .gen-pin-wrap { display: flex !important; justify-content: center; align-items: center; }
     .mk-gen { display: inline-flex; align-items: center; justify-content: center; height: 14px; padding: 0 3px; border-radius: 3px; background: #3D2466; vertical-align: -2px; margin-right: 4px; }
     .mk-gen svg { width: 15px; height: 10px; display: block; } .mk-gen .cut { fill: #3D2466; } .mk-gen .whl { fill: #fff; stroke: #3D2466; stroke-width: 1.2; }
-    /* 11/28: 휴대폰 시간 막대 하루씩 보기(app/day_slider.js) — 넓은 화면에선 JS가 숨김 */
-    .day-chips { display: flex; gap: 6px; margin: 10px 0 2px; overflow-x: auto; scrollbar-width: none; }
-    .day-chips::-webkit-scrollbar { display: none; }
-    .day-chips button { flex: none; height: 30px; padding: 0 11px; border: 1px solid var(--line); border-radius: 15px; background: #fff; color: var(--sub); font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
-    .day-chips button b { color: var(--text); font-weight: 700; }
-    .day-chips button small { font-size: 11.5px; }
-    .day-chips button.on { background: var(--k-blue); border-color: var(--k-blue); color: #fff; }
-    .day-chips button.on b { color: #fff; }
+    /* 11/29 하린: 휴대폰은 표시 항목을 지도 위 한 줄 막대로 올리고(오른쪽 위), 범례는 눌렀을 때만 작은 카드로.
+       오른쪽 '표시 항목' 상자는 숨겨서 요약·공연 일정·안내가 예측 시각 바로 밑에 오게 해요. 체크는 원래 체크박스를 대신 눌러요. */
+    .m-layers, .m-legend { display: none; }
+    @media (max-width: 640px) {
+      aside > section[aria-label="표시 항목"] { display: none; }
+      .m-layers { display: flex; position: absolute; top: 10px; right: 10px; z-index: 900; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+      .m-layers label, .m-layers button { display: flex; align-items: center; gap: 5px; height: 36px; padding: 0 9px; font-size: 13px; font-weight: 700; cursor: pointer; background: none; border: 0; white-space: nowrap; }
+      .m-layers > * + * { border-left: 1px solid var(--line-soft); }
+      .m-layers input { width: 15px; height: 15px; margin: 0; accent-color: var(--k-blue); }
+      .m-layers .sw { display: flex; gap: 1px; } .m-layers .sw i { width: 6px; height: 8px; }
+      .m-layers label:not(:has(input:checked)) .sw { opacity: .3; }
+      .m-layers button { font-weight: 500; color: var(--sub); gap: 2px; }
+      .m-layers button[aria-expanded="true"] { color: var(--k-blue); font-weight: 700; }
+      .m-layers button[aria-expanded="true"] svg { transform: rotate(180deg); }
+      .m-legend:not([hidden]) { display: block; position: absolute; top: 52px; right: 10px; width: 232px; z-index: 900; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 9px 11px 8px; font-size: 11.5px; }
+      .m-legend .r { display: grid; grid-template-columns: 46px repeat(3, 1fr); gap: 3px; align-items: center; font-variant-numeric: tabular-nums; }
+      .m-legend .r + .r { margin-top: 5px; }
+      .m-legend .r span { display: flex; flex-direction: column; gap: 1px; color: var(--sub); font-size: 10.5px; }
+      .m-legend .r span i { height: 6px; }
+      .m-legend .u { margin: 2px 0 0 49px; font-size: 10.5px; color: var(--sub); }
+      .m-legend .mk { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line-soft); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; color: var(--sub); font-size: 11px; }
+      .m-legend .mk > span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+      .m-legend .mk .hatch, .m-legend .mk .dots { flex: none; width: 16px; height: 9px; }
+      .m-legend .mk .mk-gen { margin-right: 0; }
+      .m-legend .n { margin-top: 6px; font-size: 10.5px; color: var(--sub); }
+      #layer-warning { top: 56px; left: 10px; right: 10px; }
+      .m-legend:not([hidden]) ~ #layer-warning { display: none; }
+    }
+    /* 11/29 하린: 휴대폰 날짜 고르기는 "오늘 · 내일 · 모레" 작은 글자 탭(예측 시각 줄 오른쪽 끝). 넓은 화면에선 JS가 숨김 */
+    .day-chips { display: flex; margin-left: auto; font-size: 12.5px; }
+    .day-chips button { border: 0; background: none; padding: 4px 0 4px 9px; min-height: 32px; color: var(--sub); font: inherit; cursor: pointer; white-space: nowrap; }
+    .day-chips button + button::before { content: "·"; color: #C3C9D0; margin-right: 9px; }
+    .day-chips button.on { color: var(--k-blue); font-weight: 700; }
+    @media (max-width: 640px) {
+      .tb-head { flex-wrap: nowrap; gap: 8px; }
+      .tb-head .spacer { display: none; }
+      #slider-label { font-size: 16px; }
+      #band-note { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 2px; font-size: 11px; }
+      #band-note i { width: 12px; height: 5px; margin-right: 4px; }
+    }
   </style>
 </head>
 <body>
@@ -226,6 +259,18 @@
   <main>
     <div class="left">
       <section class="box map-box" aria-label="확산 지도">
+        <div class="m-layers" role="group" aria-label="표시 항목">
+          <label><input type="checkbox" checked data-for="toggle-noise" />소음<span class="sw"><i style="background:rgba(253,216,53,0.85)"></i><i style="background:rgba(251,140,0,0.8)"></i><i style="background:rgba(198,40,40,0.85)"></i></span></label>
+          <label><input type="checkbox" checked data-for="toggle-exhaust" />배출가스<span class="sw"><i style="background:rgba(206,147,216,0.8)"></i><i style="background:rgba(171,71,188,0.8)"></i><i style="background:rgba(106,27,154,0.85)"></i></span></label>
+          <button type="button" id="m-legend-btn" aria-expanded="false" aria-controls="m-legend">범례<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+        </div>
+        <div class="m-legend" id="m-legend" hidden>
+          <div class="r"><b>소음</b><span><i style="background:rgba(253,216,53,0.85)"></i>약 45</span><span><i style="background:rgba(251,140,0,0.8)"></i>중 55</span><span><i style="background:rgba(198,40,40,0.85)"></i>강 65</span></div>
+          <div class="r"><b>배출가스</b><span><i style="background:rgba(206,147,216,0.8)"></i>약 0.002</span><span><i style="background:rgba(171,71,188,0.8)"></i>중 0.01</span><span><i style="background:rgba(106,27,154,0.85)"></i>강 0.05</span></div>
+          <div class="u">이상 · dB(A) / NO₂ ppm</div>
+          <div class="mk"><span><span class="hatch"></span>등급 보류</span><span><span class="dots"></span>소음 계산 불가</span><span><i class="mk-gen"><svg viewBox="0 0 24 16" aria-hidden="true"><rect x="0.5" y="1" width="14" height="9.5" rx="1" fill="#fff"/><path d="M15.5 4h4.2l3.3 3.6V10.5h-7.5z" fill="#fff"/><path class="cut" d="M17 5.4h2.3l2 2.2H17z"/><rect x="0.5" y="10.5" width="22.5" height="1.6" fill="#fff"/><circle class="whl" cx="5" cy="13" r="2.2"/><circle class="whl" cx="18.5" cy="13" r="2.2"/></svg></i>발전차(숫자 = 대수)</span></div>
+          <div class="n">공연·발전차 영향만 계산 (평소 소음·대기 제외)</div>
+        </div>
         <div id="layer-warning"></div>
         <div id="map"></div>
       </section>
@@ -317,7 +362,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen.js?v=20261129-3"></script>
+  <script type="module" src="./app/citizen.js?v=20261129-4"></script>
   <script>
     // 시간 막대의 채워진 부분(연한 하늘색) 폭을 손잡이 위치에 맞춰요
     (function () {
@@ -331,6 +376,18 @@
       s.addEventListener("input", upd); s.addEventListener("change", upd);
       new MutationObserver(upd).observe(s, { attributes: true, attributeFilter: ["min", "max", "value"] });
       upd();
+    })();
+  </script>
+  <script>
+    // 11/29 하린: 휴대폰 지도 위 표시 항목 — 원래 체크박스(#toggle-noise 등)를 대신 눌러요(계산·레이어 코드는 그대로).
+    document.querySelectorAll(".m-layers input[data-for]").forEach((m) => {
+      const real = document.getElementById(m.dataset.for);
+      m.addEventListener("change", () => { if (real.checked !== m.checked) { real.checked = m.checked; real.dispatchEvent(new Event("change", { bubbles: true })); } });
+      real.addEventListener("change", () => { m.checked = real.checked; });
+    });
+    (() => {
+      const b = document.getElementById("m-legend-btn"), lg = document.getElementById("m-legend");
+      b.addEventListener("click", () => { const open = lg.hidden; lg.hidden = !open; b.setAttribute("aria-expanded", String(open)); });
     })();
   </script>
 </body>

@@ -13,17 +13,17 @@
 //  - 풍향·풍속 직접 설정 없음 — 기상청 예보만 써요.
 //  - 장소별 보기(파란 점) 없음 — 사용자 요청으로 뺌(포크 세션 결정, decisions.md 참고).
 
-import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-3";
+import { placeCellsForHour, buildForecastSentences, DEFAULT_PLACE_NAMES } from "../engine/forecast_text.js?v=20261129-4";
 import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, kstParts, formatSlotLabel, loadCommonData,
   buildRealEventStageSources, buildCitizenGeneratorSources, listTodaysRealEvents,
   allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness, initTabs,
-} from "./shared.js?v=20261129-3";
-import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-3"; // 11/28: 공연 일정 수집 실패·멈춤 안내
-import { ContourCellLayer } from "./contour_layer.js?v=20261129-3"; // 디자인 사본: 블러 대신 등치선 면
-import { setupDaySlider } from "./day_slider.js?v=20261129-3"; // 11/28: 휴대폰에서 시간 막대 하루씩
-import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-3"; // 11/28: 지도에 발전차 위치
+} from "./shared.js?v=20261129-4";
+import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=20261129-4"; // 11/28: 공연 일정 수집 실패·멈춤 안내
+import { ContourCellLayer } from "./contour_layer.js?v=20261129-4"; // 디자인 사본: 블러 대신 등치선 면
+import { setupDaySlider } from "./day_slider.js?v=20261129-4"; // 11/28: 휴대폰에서 시간 막대 하루씩
+import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-4"; // 11/28: 지도에 발전차 위치
 import { generatorActivityAtHour } from "../engine/combine.js";
 import { stageActiveMinutes } from "../engine/noise.js";
 
@@ -348,9 +348,11 @@ async function main() {
     const noteEl = document.getElementById("band-note");
     if (noteEl) {
       const notes = [];
-      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>소음·배출가스 있는 시간');
-      if (segs.some((x) => x.includes("impossible"))) notes.push('<i class="sw-impossible"></i>약풍이어서 배출가스 계산 불가');
-      noteEl.innerHTML = notes.join("  ");
+      // 11/29 하린: 휴대폰에선 두 설명을 늘 보여요(범례처럼). 넓은 화면은 전처럼 색 칸이 있을 때만(.cond는 CSS로 숨김).
+      const hasA = segs.some((x) => x.includes(" active")), hasX = segs.some((x) => x.includes("impossible"));
+      notes.push(`<span${hasA ? "" : ' class="cond"'}><i class="sw-active"></i>소음·배출가스 있는 시간</span>`);
+      notes.push(`<span${hasX ? "" : ' class="cond"'}><i class="sw-impossible"></i>약풍이어서 배출가스 계산 불가</span>`);
+      noteEl.innerHTML = notes.join(" ");
     }
   }
 

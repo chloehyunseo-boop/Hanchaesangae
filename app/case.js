@@ -16,8 +16,8 @@ import { placeCellState } from "../engine/place_view.js";
 import {
   PARK_CENTER, NOISE_PALETTE, CanvasCellLayer, createGridWorker, loadCommonData,
   buildDemoStageSources, allCellsUnknown, uniformUnknownMessage, initTabs,
-} from "./shared.js?v=20261129-3";
-import { ContourCellLayer } from "./contour_layer.js?v=20261129-3";
+} from "./shared.js?v=20261129-4";
+import { ContourCellLayer } from "./contour_layer.js?v=20261129-4";
 
 const HOURS = [16, 17, 18, 19, 20, 21];
 const DEFAULT_HOUR = 18;
