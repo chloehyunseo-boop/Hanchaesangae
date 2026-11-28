@@ -308,11 +308,11 @@ async function main() {
   }
 
   const sliderBandEl = document.getElementById("slider-band");
-  // 11/28 친구 요청: 드래그하다 지도가 비어 보이면 "공연이 없어서"인지 "계산 중"인지
-  // 구분이 안 돼요 — 공연·발전차 중 하나라도 "그 시각에 실제로 가동 중"이면 노란 칸으로
-  // 미리 표시해요(impossible이 아니면). buildStageSources/buildGeneratorSourcesForHour는
+  // 11/28 친구 요청: 드래그하다 지도가 비어 보이면 "소음·배출가스가 없어서"인지 "계산 중"인지
+  // 구분이 안 돼요 — 공연(소음)·발전차(배출가스) 중 하나라도 "그 시각에 실제로 가동 중"이면
+  // 색 칸으로 미리 표시해요(impossible이 아니면). buildStageSources/buildGeneratorSourcesForHour는
   // 그날 등록된 음원을 전부 돌려줄 뿐 그 시각 가동 여부는 안 걸러서(공연 당일 이른 아침에도
-  // 노랗게 보이는 버그, 11/29 발견) stageActiveMinutes/generatorActivityAtHour로 한 번 더
+  // 색이 보이는 버그, 11/29 발견) stageActiveMinutes/generatorActivityAtHour로 한 번 더
   // 걸러요 — 실제 엔진이 그 칸을 계산할 때 쓰는 것과 같은 기준이에요.
   function refreshSliderBand() {
     const segs = [];
@@ -324,16 +324,16 @@ async function main() {
       const impossible = activeGenerators && weather && weather.wsd10m < 1.0;
       const active = !impossible && (activeGenerators || activeStage);
       const cls = impossible ? " impossible" : active ? " active" : "";
-      const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "공연 있음" : "";
+      const title = impossible ? "약풍이어서 배출가스 계산 불가" : active ? "소음·배출가스 있음" : "";
       segs.push(`<div class="slider-seg${cls}" title="${title}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
-    // 디자인 사본: 회색·노란 칸이 있을 때만 무슨 뜻인지 한 줄 표시
+    // 디자인 사본: 색 칸이 있을 때만 무슨 뜻인지 한 줄 표시(소음·배출가스 먼저, 약풍 안내는 뒤)
     const noteEl = document.getElementById("band-note");
     if (noteEl) {
       const notes = [];
+      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>소음·배출가스 있는 시간');
       if (segs.some((x) => x.includes("impossible"))) notes.push('<i class="sw-impossible"></i>약풍이어서 배출가스 계산 불가');
-      if (segs.some((x) => x.includes(" active"))) notes.push('<i class="sw-active"></i>공연 있는 시간');
       noteEl.innerHTML = notes.join("  ");
     }
   }
