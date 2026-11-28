@@ -14,7 +14,7 @@ import {
   PARK_CENTER, NOISE_PALETTE, EXHAUST_PALETTE, CanvasCellLayer, createGridWorker,
   hourSlotIso, weatherKey, toEngineWeather, hourSlotDate, formatSlotLabel, loadCommonData,
   buildDemoStageSources, buildRealEventStageSources, listTodaysRealEvents, allCellsUnknown, uniformUnknownMessage,
-} from "./shared.js?v=20261129-2";
+} from "./shared.js?v=20261129-3";
 
 const NUM_HOURS = 72; // 로드맵: 지금부터 6시간(초단기)+3일(단기), 1시간 단위
 
