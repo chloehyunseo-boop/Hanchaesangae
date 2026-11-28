@@ -29,7 +29,7 @@ import { setupEventsNotice, eventsEmptyMessage } from "./events_notice.js?v=2026
 import { ContourCellLayer } from "./contour_layer.js?v=20261129-2";
 import { setupDaySlider } from "./day_slider.js?v=20261129-2"; // 11/28: 휴대폰에서 시간 막대 하루씩
 import { createGeneratorMarkers } from "./generator_markers.js?v=20261129-2"; // 11/28: 지도에 발전차 위치
-import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition } from "../engine/event_generators.js";
+import { buildRealEventGeneratorSources, defaultGeneratorCount, generatorPosition, venueOfSite } from "../engine/event_generators.js";
 
 const NUM_HOURS = 72;
 // 11/28 최종 점검: 공연명·장소는 공단 홈페이지 글(자동 수집)이나 공단 직원이 입력한 글이라 그대로 innerHTML에
@@ -187,7 +187,7 @@ function buildGeneratorSources(hourIso) {
     if (!n || !feature) continue;
     const pos = generatorPosition(o.site, feature, state.assumptions);
     const time = occurrenceTime(o);
-    const 대수근거 = state.assumptions.발전차_기본대수?.공연장별?.[o.site] ? "공단확인값" : "확인된최소";
+    const 대수근거 = state.assumptions.발전차_기본대수?.공연장별?.[venueOfSite(o.site)] ? "공단확인값" : "확인된최소";
     for (let i = 0; i < n; i++) manual.push({ lat: pos.lat, lon: pos.lon, 위치출처: pos.위치출처, site: o.site, 정보출처: "공연일정자동_대수가정", 대수근거, time });
   }
   return [...base, ...manual];
@@ -491,12 +491,22 @@ function renderManualEventsTable(onChange) {
   tbody.innerHTML = "";
   // 11/28 친구 요청: site.geojson엔 공연장 외에 소음 수음점용 아파트(풍납극동아파트 등)도
   // 같이 들어있어서 "공연 위치" 목록에 섞여 나왔어요 — 공연 위치가 아니라서 빼요.
-  // 11/29 하린: 공연 추가 위치는 공연장·무대만. 주거지·강습 영향(수영장)은 공연장이 아니라 빼고,
+  // 11/29 하린: 공연 추가 위치는 공연장만. 주거지·강습 영향(수영장)은 공연장이 아니라 빼고,
   // K아트홀(11/27 제외)·테니스경기장·벨로드롬(공연 여부 미확인, 계산 대상 아님)도 뺐어요.
-  const EXCLUDED_VENUES = new Set(["올림픽공원 K아트홀", "올림픽공원 테니스경기장", "올림픽공원 벨로드롬"]);
-  const venueNames = [...state.siteByName.entries()]
-    .filter(([n, f]) => /^(공연장|음원)/.test(f.properties?.type ?? "") && !EXCLUDED_VENUES.has(n))
-    .map(([n]) => n);
+  // 야외는 소음이 무대에서 나오니 값은 무대 이름(site.geojson 음원 점, 공단 일정 자동 매칭과 같음)으로
+  // 저장하고, 보이는 이름만 공연장 이름으로 줄여요. 평화의광장은 무대 A·B를 골라요(CLAUDE.md §6).
+  const VENUE_CHOICES = [
+    ["KSPO DOME", "KSPO DOME"],
+    ["티켓링크 라이브 아레나(SK올림픽핸드볼경기장)", "티켓링크 라이브 아레나(SK올림픽핸드볼경기장)"],
+    ["올림픽홀", "올림픽홀"],
+    ["우리금융아트홀", "우리금융아트홀"],
+    ["88잔디마당 무대", "88잔디마당"],
+    ["88호수 수변무대 무대", "88호수 수변무대"],
+    ["평화의광장 무대 A", "평화의광장 무대 A"],
+    ["평화의광장 무대 B(세계평화의문 앞)", "평화의광장 무대 B(세계평화의문 앞)"],
+    ["장미광장", "장미광장"],
+  ].filter(([v]) => state.siteByName.has(v));
+  const venueLabel = (v) => VENUE_CHOICES.find(([x]) => x === v)?.[1] ?? v;
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
   for (const ev of state.manualEvents) {
@@ -507,7 +517,7 @@ function renderManualEventsTable(onChange) {
       tr.className = "compact";
       const td = document.createElement("td");
       const [, mm, dd] = ev.날짜.split("-");
-      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${esc(ev.시작)}</b> · ${esc(ev.site)}<br><span>${esc(ev.title)}${ev.소요분 ? ` · ${ev.소요분}분` : ""} · ${ev.셋업 ? `셋업 ${fmtLocal(ev.셋업)}부터 발전차 가동` : "발전차 공연 2시간 전부터"}</span></div>`;
+      td.innerHTML = `<div class="ev-sum"><b>${Number(mm)}/${Number(dd)} ${esc(ev.시작)}</b> · ${esc(venueLabel(ev.site))}<br><span>${esc(ev.title)}${ev.소요분 ? ` · ${ev.소요분}분` : ""} · ${ev.셋업 ? `셋업 ${fmtLocal(ev.셋업)}부터 발전차 가동` : "발전차 공연 2시간 전부터"}</span></div>`;
       const btns = document.createElement("div");
       btns.className = "ev-btns";
       const edit = document.createElement("button");
@@ -545,7 +555,7 @@ function renderManualEventsTable(onChange) {
     titleInput.addEventListener("input", () => { draft.title = titleInput.value.trim(); paint(); });
 
     const siteSel = document.createElement("select");
-    siteSel.innerHTML = `<option value="">위치 고르기</option>` + venueNames.map((n) => `<option value="${n}">${n}</option>`).join("");
+    siteSel.innerHTML = `<option value="">위치 고르기</option>` + VENUE_CHOICES.map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
     siteSel.value = draft.site;
     siteSel.addEventListener("change", () => { draft.site = siteSel.value; paint(); });
 

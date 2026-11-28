@@ -36,9 +36,22 @@ function weekdayOf(dateStr) {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
+/** 11/29 버그 수정(하린 발견): 공연 위치가 '무대' 이름(site.geojson 음원 점, 예: "88잔디마당 무대")이면
+ * 발전차 대수·위치·실내외 규칙은 그 무대가 속한 공연장(assumptions 기본안_계산대상·발전차_위치의 이름)으로
+ * 찾아야 해요. 전에는 무대 이름 그대로 찾아서 0대가 됐어요(공단 일정의 88잔디마당·수변무대 공연 포함). */
+const VENUE_OF_STAGE = {
+  "88잔디마당 무대": "88잔디마당",
+  "88호수 수변무대 무대": "88호수 수변무대",
+  "평화의광장 무대 A": "평화의광장",
+  "평화의광장 무대 B(세계평화의문 앞)": "평화의광장",
+};
+export function venueOfSite(site) {
+  return VENUE_OF_STAGE[site] ?? site;
+}
+
 /** 공연장별 발전차 위치: 공단이 알려준 위치(assumptions.발전차_위치)가 있으면 그 좌표, 없으면 공연장 좌표. */
 export function generatorPosition(site, feature, assumptions) {
-  const p = assumptions?.발전차_위치?.공연장별?.[site];
+  const p = assumptions?.발전차_위치?.공연장별?.[venueOfSite(site)];
   if (p && Number.isFinite(p.lat) && Number.isFinite(p.lon)) return { lat: p.lat, lon: p.lon, 위치출처: "공단회신" };
   const [lon, lat] = feature.geometry.coordinates;
   return { lat, lon, 위치출처: "공연장좌표" };
@@ -47,11 +60,12 @@ export function generatorPosition(site, feature, assumptions) {
 /** 공연장 이름 → 기본 대수. 매연 계산 대상이 아니면 0. */
 export function defaultGeneratorCount(site, assumptions) {
   const venues = assumptions?.기본안_계산대상?.venues ?? [];
-  const v = venues.find((x) => x.site === site);
+  const venue = venueOfSite(site);
+  const v = venues.find((x) => x.site === venue);
   if (!v || v.매연_포함 !== true) return 0;
   const rule = assumptions?.발전차_기본대수;
   if (!rule) return 0; // 규칙이 없으면 만들지 않음(지어내지 않음)
-  const n = rule.공연장별?.[site]?.대수 ?? rule.확인안된_공연장;
+  const n = rule.공연장별?.[venue]?.대수 ?? rule.확인안된_공연장;
   return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
@@ -85,7 +99,7 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
     if (!feature) continue;
     const pos = generatorPosition(ev.site, feature, assumptions);
     const { lat, lon } = pos;
-    const indoor = INDOOR_KINDS.test(venues.find((x) => x.site === ev.site)?.종류 ?? "");
+    const indoor = INDOOR_KINDS.test(venues.find((x) => x.site === venueOfSite(ev.site))?.종류 ?? "");
 
     let time;
     const startStr = ev.일자별시작?.[dateStr];
@@ -104,7 +118,7 @@ export function buildRealEventGeneratorSources(events, siteByName, assumptions, 
         출처: "공단일정페이지_종료시각가정(마지막 공연+3시간 또는 21:30 중 먼저)",
       };
     }
-    const 대수근거 = assumptions.발전차_기본대수.공연장별?.[ev.site] ? "공단확인값" : "확인된최소";
+    const 대수근거 = assumptions.발전차_기본대수.공연장별?.[venueOfSite(ev.site)] ? "공단확인값" : "확인된최소";
     for (let i = 0; i < count; i++) {
       out.push({ lat, lon, 위치출처: pos.위치출처, site: ev.site, 정보출처: "공연일정자동_대수가정", 대수근거, time });
     }
