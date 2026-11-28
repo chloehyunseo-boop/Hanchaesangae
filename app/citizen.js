@@ -314,12 +314,12 @@ async function main() {
       const hourIso = hourSlotIso(hourSlotDate(offset));
       const hasGenerators = buildGeneratorSourcesForHour(hourIso).length > 0;
       const impossible = hasGenerators && weather && weather.wsd10m < 1.0;
-      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "약풍, 배출가스 계산 불가" : ""}"></div>`);
+      segs.push(`<div class="slider-seg${impossible ? " impossible" : ""}" title="${impossible ? "약풍이어서 배출가스 계산 불가" : ""}"></div>`);
     }
     sliderBandEl.innerHTML = segs.join("");
     // 디자인 사본: 회색 칸이 있을 때만 무슨 뜻인지 한 줄 표시
     const noteEl = document.getElementById("band-note");
-    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍 · 배출가스 계산 불가" : "";
+    if (noteEl) noteEl.innerHTML = segs.some((x) => x.includes("impossible")) ? "<i></i>약풍이어서 배출가스 계산 불가" : "";
   }
 
   const sentencesEl = document.getElementById("forecast-sentences");
