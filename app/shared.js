@@ -296,10 +296,12 @@ export function buildWeatherByHour(forecastItems) {
 
 /** weather.json의 한 시각 기록(TMP·REH·VEC·WSD·SKY) → combine.js가 받는 weather 모양. */
 export function toEngineWeather(rec, hourIso) {
-  if (!rec || rec.TMP === undefined || rec.REH === undefined || rec.VEC === undefined || rec.WSD === undefined || rec.SKY === undefined) {
+  // 11/28: 단기예보 기온(TMP)이 없으면 같은 시각 초단기예보 기온(T1H)을 써요 — 둘 다 그 시각 기온(°C).
+  const tmp = rec?.TMP ?? rec?.T1H;
+  if (!rec || tmp === undefined || rec.REH === undefined || rec.VEC === undefined || rec.WSD === undefined || rec.SKY === undefined) {
     return null; // 자료 부족 — 지어내지 않음(CLAUDE.md 2번)
   }
-  const tempC = Number(rec.TMP);
+  const tempC = Number(tmp);
   const rhPercent = Number(rec.REH);
   const windVecFromDeg = Number(rec.VEC);
   const wsd10m = Number(rec.WSD);
@@ -312,7 +314,7 @@ export function toEngineWeather(rec, hourIso) {
   } catch {
     return null;
   }
-  return { tempC, rhPercent, windVecFromDeg, wsd10m, stability, tmp: tempC };
+  return { tempC, rhPercent, windVecFromDeg, wsd10m, stability, tmp: tempC, 기온출처: rec.TMP !== undefined ? "단기예보TMP" : "초단기예보T1H" };
 }
 
 // 11/25 하린 결정: 그 시각 한 레이어의 칸이 "전부" 모름(unknown, 예: 약풍이라 발전차
