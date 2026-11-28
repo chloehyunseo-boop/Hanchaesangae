@@ -3,7 +3,7 @@
 // 공단 데이터 2곳을 받아 data/events.json을 갱신해요.
 // 인증키는 환경변수(KCISA_SERVICE_KEY)로만 받아요 — 코드·커밋에는 절대 안 넣어요.
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { fetchPerformances, parsePerformanceResponse, fetchUpcomingSchedulePage, parseUpcomingScheduleHtml,
   fetchScheduleMonth, parseScheduleMonthJson, mergeScheduleLists } from "../engine/events.js";
 
@@ -47,6 +47,12 @@ async function main() {
   }
   공연.push(...mergeScheduleLists(...months));
 
+  // 11/28: 원문에서 시각을 못 읽은 날만, 다른 공개 출처로 직접 확인한 시각으로 채워요(data/events_time_supplement.json).
+  try {
+    const sup = JSON.parse(await readFile(new URL("../data/events_time_supplement.json", import.meta.url), "utf8")).보충 ?? [];
+    applyTimeSupplement(공연, sup);
+  } catch { /* 보충 파일이 없거나 깨졌으면 그냥 원문만 */ }
+
   const record = {
     _설명: "GitHub Actions가 매시 50분에 갱신해요. 출처 '공단API'는 과거 공연 기록(사례 재현용), '공단일정페이지'는 앞으로 있을 공연(공단 홈페이지 일정안내의 이번 달·다음 달)이에요. 수동 입력은 agency.html의 이 브라우저 저장소(localStorage)에 따로 있어요.",
     저장시각: now.toISOString(),
@@ -64,4 +70,24 @@ async function main() {
   }
 }
 
-main();
+/** 원문 시각이 없는 날짜만 채워요(원문이 우선). 채운 날짜와 출처를 공연에 같이 적어요. */
+export function applyTimeSupplement(list, sup) {
+  for (const it of sup) {
+    const ev = list.find((e) => e.출처 === "공단일정페이지" && ((it.공단일정번호 && e.공단일정번호 === it.공단일정번호) || (e.title === it.title && e.site === it.site)));
+    if (!ev) continue;
+    ev.일자별시작 = ev.일자별시작 ?? {};
+    const filled = [];
+    for (const [d, t] of Object.entries(it.일자별시작 ?? {})) {
+      if (ev.일자별시작[d]) continue;
+      ev.일자별시작[d] = t;
+      filled.push(d);
+    }
+    if (!filled.length) continue;
+    ev.시각보충 = { 날짜: filled, 출처: it.출처, 출처주소: it.출처주소, 확인일: it.확인일 };
+    ev.flags = (ev.flags ?? []).filter((f) => f !== "시작시각미확인");
+    if (!ev.flags.includes("시각_외부출처보충")) ev.flags.push("시각_외부출처보충");
+  }
+  return list;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) main();
