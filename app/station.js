@@ -274,7 +274,7 @@ function renderTruckTable(onChange) {
         const r = resolveTruck(t, occs);
         head = `${fmtMD(occ.day)} ${occ.시작 ?? ""} · ${occ.site}`;
         when = r?.시간미확인 ? "공연 시각 미확인 → 가동 시간 모름(그 칸은 계산 안 함)"
-          : `가동 ${fmtLocal(r.셋업시작) || `${fmtLocal(r.시작시각)} 2시간 전`}부터${r.셋업시작 ? "(셋업)" : ""} ~ ${fmtLocal(r.종료시각) || "종료 미상"}`;
+          : `가동 ${r.셋업시작 ? `${fmtLocal(r.셋업시작)}부터(셋업)` : `${fmtLocal(isoToLocalInput(new Date(new Date(`${r.시작시각}:00+09:00`).getTime() - 2 * 3600e3).toISOString()))}부터(공연 2시간 전)`} ~ ${fmtLocal(r.종료시각) || "종료 미상"}`;
         head += ` · ${occ.title}`;
       } else {
         head = t.공연표시 ? `${fmtMD(t.공연표시.day)} · ${t.공연표시.site} · ${t.공연표시.title}` : "공연 정보 없음";
