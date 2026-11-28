@@ -195,28 +195,79 @@ function buildGeneratorSources(hourIso) {
 // '발전차 사용 안 함' 표 (agency.js와 같은 기능, 11/27 하린). 이 화면의 지도에도 반영돼요
 // (agency.js는 트럭 표 그대로만 계산해서 영향 없지만, station.js는 citizen.js와 같은 자동
 // 대수 가정을 쓰기 때문에 여기 적은 날은 이 화면 지도에서도 기본 대수가 안 들어가요).
+const editingNoGenIds = new Set();
 function renderNoGenTable(onChange) {
+  // 11/28 하린: 발전차 카드와 같이 '어느 공연'만 고르면 그 공연장·날짜가 '발전차 사용 안 함'이 돼요.
+  // 저장하면 한 줄 요약(수정·삭제)으로 접혀요. 계산에는 예전처럼 site·날짜만 써요.
   const tbody = document.getElementById("nogen-rows");
   tbody.innerHTML = "";
-  const venues = (state.assumptions?.기본안_계산대상?.venues ?? []).filter((v) => v.매연_포함).map((v) => v.site);
+  const occs = eventOccurrences();
+  const occLabel = (o) => `${fmtMD(o.day)} ${o.시작 ?? "시각 미확인"} · ${o.site ?? "장소 미확인"} · ${o.title}`;
+  const delRow = (r) => {
+    state.noGeneratorDays = state.noGeneratorDays.filter((x) => x.id !== r.id);
+    editingNoGenIds.delete(r.id);
+    renderNoGenTable(onChange);
+    onChange();
+  };
   for (const r of state.noGeneratorDays) {
+    const saved = r.site && r.날짜;
+    if (saved && !editingNoGenIds.has(r.id)) {
+      const tr = document.createElement("tr");
+      tr.className = "compact";
+      const td = document.createElement("td");
+      const occ = r.공연키 ? occs.find((x) => x.key === r.공연키) : null;
+      const head = occ ? occLabel(occ) : r.공연표시 ? `${fmtMD(r.공연표시.day)} · ${r.공연표시.site} · ${r.공연표시.title}` : `${fmtMD(r.날짜)} · ${r.site}`;
+      td.innerHTML = `<div class="ev-sum"><b>${head}</b><br><span>이 공연장·날짜는 발전차 기본 대수를 넣지 않음</span></div>`;
+      const btns = document.createElement("div");
+      btns.className = "ev-btns";
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.textContent = "수정";
+      edit.addEventListener("click", () => { editingNoGenIds.add(r.id); renderNoGenTable(onChange); });
+      const del = document.createElement("button");
+      del.type = "button"; del.textContent = "삭제";
+      del.addEventListener("click", () => delRow(r));
+      btns.append(edit, del);
+      td.appendChild(btns);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      continue;
+    }
     const tr = document.createElement("tr");
-    const sel = document.createElement("select");
-    sel.innerHTML = `<option value="">공연장 고르기</option>` + venues.map((n) => `<option value="${n}">${n}</option>`).join("");
-    sel.value = r.site ?? "";
-    sel.addEventListener("change", () => { r.site = sel.value || null; onChange(); });
-    const date = document.createElement("input");
-    date.type = "date";
-    date.value = r.날짜 ?? "";
-    date.addEventListener("change", () => { r.날짜 = date.value || null; onChange(); });
-    const del = document.createElement("button");
-    del.type = "button"; del.textContent = "삭제";
-    del.addEventListener("click", () => {
-      state.noGeneratorDays = state.noGeneratorDays.filter((x) => x.id !== r.id);
+    let draftKey = r.공연키 ?? "";
+    const status = document.createElement("span");
+    status.className = "ev-status";
+    const paint = (msg) => {
+      if (msg) { status.textContent = msg; status.dataset.state = "error"; return; }
+      if (draftKey !== (r.공연키 ?? "")) { status.textContent = "저장 안 됨"; status.dataset.state = "dirty"; }
+      else if (r.site && r.날짜) { status.textContent = "반영됨"; status.dataset.state = "ok"; }
+      else { status.textContent = "입력 필요"; status.dataset.state = "dirty"; }
+    };
+    const occSel = document.createElement("select");
+    const byDay = new Map();
+    for (const o of occs) { if (!byDay.has(o.day)) byDay.set(o.day, []); byDay.get(o.day).push(o); }
+    occSel.innerHTML = `<option value="">공연 고르기</option>` + [...byDay].map(([day, list]) =>
+      `<optgroup label="${fmtMD(day)}">${list.map((o) => `<option value="${o.key}">${occLabel(o).replace(/"/g, "&quot;")}</option>`).join("")}</optgroup>`).join("");
+    occSel.value = draftKey;
+    if (draftKey && occSel.value !== draftKey) occSel.value = "";
+    occSel.addEventListener("change", () => { draftKey = occSel.value; paint(); });
+    const actions = document.createElement("div");
+    actions.className = "ev-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button"; saveBtn.className = "save"; saveBtn.textContent = "저장";
+    saveBtn.addEventListener("click", () => {
+      const o = occs.find((x) => x.key === draftKey);
+      if (!o || !o.site) { paint("공연을 골라 주세요"); return; }
+      Object.assign(r, { 공연키: o.key, 공연표시: { day: o.day, site: o.site, title: o.title }, site: o.site, 날짜: o.day });
+      editingNoGenIds.delete(r.id);
       renderNoGenTable(onChange);
       onChange();
     });
-    for (const el of [sel, date, del]) { const td = document.createElement("td"); td.appendChild(el); tr.appendChild(td); }
+    const delBtn = document.createElement("button");
+    delBtn.type = "button"; delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => delRow(r));
+    actions.append(status, delBtn, saveBtn);
+    for (const el of [occSel, actions]) { const td = document.createElement("td"); td.appendChild(el); tr.appendChild(td); }
+    paint();
     tbody.appendChild(tr);
   }
 }
@@ -745,6 +796,7 @@ async function main() {
     invalidateSummary();
     saveList(NOGEN_STORAGE_KEY, state.noGeneratorDays);
     state.cellCache.clear();
+    refreshSliderBand();
     refresh();
   }
   renderNoGenTable(onNoGenChange);
@@ -782,6 +834,7 @@ async function main() {
     saveManualEvents();
     state.cellCache.clear(); // 11/26: 이제 계산에 들어가니 agency.js와 달리 캐시도 비워요
     renderTruckTable(onTruckChange); // 11/28: 발전차의 공연 목록·가동 시간이 공연에서 오니 같이 갱신
+    renderNoGenTable(onNoGenChange);
     refreshSliderBand();
     refresh();
   }

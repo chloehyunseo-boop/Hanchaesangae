@@ -81,7 +81,7 @@
     #band-note { font-size: 12px; color: var(--sub); }
     #band-note i { display: inline-block; width: 14px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
     #band-note i.sw-impossible { background: #A9B4C0; }
-    #band-note i.sw-active { background: #FBEAF3; }
+    #band-note i.sw-active { background: #EC8DB8; }
     /* 막대: 바탕선 → 채워진 부분(연한 하늘) → 회색 구간(막대 위에 얹음) → 손잡이 순으로 겹침 */
     .tb-track { margin-top: 8px; position: relative; height: 18px; --fill: #A9D6EC; }
     .tb-track .rail, .tb-track .fill, #slider-band { position: absolute; left: 0; right: 0; top: 6px; height: 6px; border-radius: 3px; }
@@ -90,7 +90,7 @@
     #slider-band { display: flex; overflow: hidden; pointer-events: none; left: 9px; right: 9px; border-radius: 0; } /* 손잡이 중심이 움직이는 범위와 맞춤 */
     #slider-band .slider-seg { flex: 1; }
     #slider-band .slider-seg.impossible { background: #A9B4C0; }
-    #slider-band .slider-seg.active { background: #FBEAF3; } /* 11/28 친구 요청: 소음·배출가스 있는 시간 미리 표시(연한 핑크) */
+    #slider-band .slider-seg.active { background: #EC8DB8; } /* 11/28 친구 요청: 소음·배출가스 있는 시간 미리 표시. 하린 요청으로 더 진한 핑크 */
     #time-slider { position: relative; z-index: 2; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
     #time-slider::-webkit-slider-runnable-track { height: 18px; background: transparent; }
     #time-slider::-moz-range-track { height: 18px; background: transparent; }
@@ -266,7 +266,8 @@
     #truck-table td:nth-child(1) { grid-column: 1 / -1; }
     #truck-table td:nth-child(1)::before { content: "공연"; } #truck-table td:nth-child(2)::before { content: "발전기 수"; } #truck-table td:nth-child(3)::before { content: "인증 등급"; }
     #truck-table td:nth-child(4)::before { content: "엔진 출력(kW)"; }
-    #nogen-table td:nth-child(1)::before { content: "공연장"; } #nogen-table td:nth-child(2)::before { content: "날짜"; }
+    #nogen-table td:nth-child(1)::before { content: "공연"; } #nogen-table tr.compact td::before { content: none; }
+    #nogen-table td:nth-child(1) { grid-column: 1 / -1; }
 
     /* 오른쪽 상태 */
     .col-right .r-sec { padding: 16px; border-bottom: 1px solid var(--line); }
@@ -406,8 +407,8 @@
           </div>
           <div class="w-sec">
             <div class="w-head"><h3>발전차 사용 안 함</h3><span class="spacer"></span><button type="button" class="btn" id="add-nogen">추가</button></div>
-            <p class="w-note">공연은 있지만 발전차가 오지 않는 공연장·날짜. 미입력 시 시민 화면은 기본 대수(KSPO DOME 5대, 그 외 1대)로 계산.</p>
-            <table class="cards" id="nogen-table"><thead><tr><th>공연장</th><th>날짜</th><th></th></tr></thead><tbody id="nogen-rows"></tbody></table>
+            <p class="w-note">발전차가 오지 않는 공연을 고르면 그 공연장·날짜엔 기본 대수를 넣지 않음. 미입력 시 기본 대수(KSPO DOME 5대, 그 외 1대)로 계산.</p>
+            <table class="cards" id="nogen-table"><thead><tr><th>공연</th><th></th></tr></thead><tbody id="nogen-rows"></tbody></table>
           </div>
           <div class="w-sec">
             <div class="w-head"><h3>시민 화면에 반영</h3></div>
@@ -507,7 +508,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/station.js?v=20261128p"></script>
+  <script type="module" src="./app/station.js?v=20261128q"></script>
   <script>
     // 오른쪽 탭(공연 일정 / 영향 강습)
     document.querySelectorAll(".gtab-btn").forEach((b) => b.addEventListener("click", () => {
