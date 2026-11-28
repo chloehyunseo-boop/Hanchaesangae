@@ -1,6 +1,6 @@
 {
   "_설명": "GitHub Actions가 매시 50분에 갱신해요. 값이 없는 시각은 비워 둬요(임의로 채우지 않음).",
-  "저장시각": "2026-11-28T09:59:20.429Z",
+  "저장시각": "2026-11-28T10:37:24.667Z",
   "예보": [
     {
       "baseDate": "20261128",
@@ -9163,36 +9163,6 @@
       "category": "T1H",
       "value": "2",
       "source": "ultra"
-    },
-    {
-      "baseDate": "20261128",
-      "baseTime": "1700",
-      "fcstDate": "20261128",
-      "fcstTime": "1800",
-      "category": "LGT",
-      "value": "0",
-      "source": "ultra",
-      "유지": "직전갱신"
-    },
-    {
-      "baseDate": "20261128",
-      "baseTime": "1700",
-      "fcstDate": "20261128",
-      "fcstTime": "1800",
-      "category": "RN1",
-      "value": "강수없음",
-      "source": "ultra",
-      "유지": "직전갱신"
-    },
-    {
-      "baseDate": "20261128",
-      "baseTime": "1700",
-      "fcstDate": "20261128",
-      "fcstTime": "1800",
-      "category": "T1H",
-      "value": "6",
-      "source": "ultra",
-      "유지": "직전갱신"
     }
   ],
   "실패기록": []
