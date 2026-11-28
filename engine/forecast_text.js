@@ -102,7 +102,7 @@ function dayLabel(date, nowIso) {
   const n = kstParts(nowIso);
   if (!n) return "";
   const diff = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${n.date}T00:00:00Z`)) / 86400000);
-  return diff === 0 ? "" : diff === 1 ? "내일 " : diff === 2 ? "모레 " : `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))} `;
+  return diff === 0 ? "오늘 " : diff === 1 ? "내일 " : diff === 2 ? "모레 " : `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))} `;
 }
 function spanText(startIso, hoursLong, nowIso) {
   const s = kstParts(startIso);

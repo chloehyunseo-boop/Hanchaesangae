@@ -22,7 +22,7 @@ ok(windName(NaN) === null && windName(undefined) === null, "풍향 없음 → nu
 {
   const series = [{ hour: H(23, 20), weather: { windVecFromDeg: 270 }, cellsByPlace: { 올림픽수영장: { exhaust: ex("중") }, "올림픽공원 테니스경기장": { exhaust: ex("중") } } }];
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out[0] === "20~21시 서풍, 발전차 배출가스 수영장·테니스장 쪽 확산 가능('중')", "장소 합치기", out[0]);
+  ok(out[0] === "오늘 20~21시 서풍, 발전차 배출가스 수영장·테니스장 쪽 확산 가능('중')", "장소 합치기", out[0]);
 }
 // 3) 아무것도 없음
 {
@@ -56,7 +56,7 @@ ok(cellState({ layer: "exhaust", value: null, level: null, flags: ["발전차시
 {
   const series = [23, 24].map((h, i) => ({ hour: i === 0 ? H(23, 23) : H(24, 0), weather: { windVecFromDeg: 0 }, cellsByPlace: { 장미광장: { noise: no("중") } } }));
   const out = buildForecastSentences({ series, now: NOW });
-  ok(out[0].startsWith("23시~다음 날 1시"), "자정 넘기는 시간대 표기", out[0]);
+  ok(out[0].startsWith("오늘 23시~다음 날 1시"), "자정 넘기는 시간대 표기", out[0]);
 }
 
 // 11/24 수정: 사흘치(72시간) 연속으로 "없음" 상태가 이어지면(예: 발전차·공연 아예 선택
@@ -66,7 +66,7 @@ ok(cellState({ layer: "exhaust", value: null, level: null, flags: ["발전차시
   for (let d = 24; d <= 26; d++) for (let h = 0; h < 24; h++) hours.push(H(d, h));
   const series = hours.slice(16, 16 + 60).map((hour) => ({ hour, weather: { windVecFromDeg: 0 }, cellsByPlace: {} })); // 24일 16시부터 60시간
   const out = buildForecastSentences({ series, now: H(24, 15) });
-  ok(out[0].startsWith("16시~11/27 0시") && !out[0].includes("54시"), "사흘치 연속 구간도 24시 넘는 엉뚱한 시각이 안 나옴", out[0]);
+  ok(out[0].startsWith("오늘 16시~11/27 0시") && !out[0].includes("54시"), "사흘치 연속 구간도 24시 넘는 엉뚱한 시각이 안 나옴", out[0]);
 }
 
 console.log(fails ? `\n실패 ${fails}건` : "\n전부 통과");
