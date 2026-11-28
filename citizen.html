@@ -185,13 +185,15 @@
     #auto-events p.muted { margin: 0; padding: 10px; color: var(--sub); font-size: 13px; }
     /* 지도 발전차 위치 (11/28) */
     .gen-pin-wrap { background: none; border: 0; }
-    .gen-pin { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 5px 0 4px; border-radius: 5px; background: #3D2466; color: #fff; font: 700 12px/1 Pretendard, system-ui, sans-serif; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); box-sizing: border-box; white-space: nowrap; }
+    .gen-pin { position: relative; display: block; width: 20px; height: 14px; color: #4B2E83; filter: drop-shadow(0 0 1px rgba(255,255,255,.95)) drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
     .gen-pin svg { width: 20px; height: 14px; display: block; }
-    .gen-pin .cut { fill: #3D2466; } .gen-pin .whl { fill: #fff; stroke: #3D2466; stroke-width: 1.2; }
-    .gen-pin.unk { background: #7D8894; } .gen-pin.unk .cut { fill: #7D8894; } .gen-pin.unk .whl { stroke: #7D8894; }
-    .gen-pin-wrap { display: flex !important; justify-content: center; align-items: center; }
-    .mk-gen { display: inline-flex; align-items: center; justify-content: center; height: 14px; padding: 0 3px; border-radius: 3px; background: #3D2466; vertical-align: -2px; margin-right: 4px; }
-    .mk-gen svg { width: 15px; height: 10px; display: block; } .mk-gen .cut { fill: #3D2466; } .mk-gen .whl { fill: #fff; stroke: #3D2466; stroke-width: 1.2; }
+    .gen-pin .win { fill: #fff; } .gen-pin .whl { fill: currentColor; stroke: #fff; stroke-width: 1.3; }
+    .gen-pin b { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -2px); min-width: 13px; height: 13px; padding: 0 3px; box-sizing: border-box; border-radius: 7px; background: currentColor; font: 700 9.5px/13px Pretendard, system-ui, sans-serif; text-align: center; }
+    .gen-pin b span { color: #fff; }
+    .gen-pin.unk { color: #7D8894; }
+    .gen-pin-wrap { overflow: visible; }
+    .mk-gen { display: inline-block; color: #4B2E83; vertical-align: -2px; margin-right: 4px; }
+    .mk-gen svg { width: 17px; height: 11px; display: block; } .mk-gen .win { fill: #fff; } .mk-gen .whl { fill: currentColor; stroke: #fff; stroke-width: 1.3; }
   </style>
 </head>
 <body>
@@ -251,7 +253,7 @@
           </label>
         </div>
         <div class="panel-sec">
-          <div class="marks"><span><span class="hatch"></span>등급 보류</span><span><span class="dots"></span>계산 불가</span><span><i class="mk-gen"><svg viewBox="0 0 24 16" aria-hidden="true"><rect x="0.5" y="1" width="14" height="9.5" rx="1" fill="#fff"/><path d="M15.5 4h4.2l3.3 3.6V10.5h-7.5z" fill="#fff"/><path class="cut" d="M17 5.4h2.3l2 2.2H17z"/><rect x="0.5" y="10.5" width="22.5" height="1.6" fill="#fff"/><circle class="whl" cx="5" cy="13" r="2.2"/><circle class="whl" cx="18.5" cy="13" r="2.2"/></svg></i>발전차(숫자 = 대수)</span></div>
+          <div class="marks"><span><span class="hatch"></span>등급 보류</span><span><span class="dots"></span>계산 불가</span><span><i class="mk-gen"><svg viewBox="0 0 24 16" aria-hidden="true"><rect x="0.5" y="1" width="14" height="9.5" rx="1" fill="currentColor"/><path d="M15.5 4h4.2l3.3 3.6V11.5h-7.5z" fill="currentColor"/><path class="win" d="M17 5.4h2.3l2 2.2H17z"/><rect x="0.5" y="10" width="22.5" height="1.8" fill="currentColor"/><circle class="whl" cx="5" cy="13" r="2.3"/><circle class="whl" cx="18.5" cy="13" r="2.3"/></svg></i>발전차(위 숫자 = 대수)</span></div>
         </div>
         <div class="panel-sec note">공연·발전차 영향만 계산 (평소 소음·대기 제외)</div>
       </section>
@@ -305,7 +307,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
-  <script type="module" src="./app/citizen.js?v=20261128i"></script>
+  <script type="module" src="./app/citizen.js?v=20261128j"></script>
   <script>
     // 시간 막대의 채워진 부분(연한 하늘색) 폭을 손잡이 위치에 맞춰요
     (function () {

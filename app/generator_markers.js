@@ -2,8 +2,8 @@
 // 그 시각 가동 중(또는 가동 시간을 모르는) 발전차를 위치별로 묶어 작은 표식 + 대수로 보여줘요.
 // 표식에 마우스를 올리면 대수·위치의 근거(공단 확인값/가정)를 알려줘요.
 
-// 11/28 하린: 표식은 탑차(박스 트럭) 모양 + 대수. 직접 그린 단순 도형(외부 아이콘 안 씀).
-const TRUCK_SVG = '<svg viewBox="0 0 24 16" aria-hidden="true"><rect x="0.5" y="1" width="14" height="9.5" rx="1" fill="#fff"/><path d="M15.5 4h4.2l3.3 3.6V10.5h-7.5z" fill="#fff"/><path class="cut" d="M17 5.4h2.3l2 2.2H17z"/><rect x="0.5" y="10.5" width="22.5" height="1.6" fill="#fff"/><circle class="whl" cx="5" cy="13" r="2.2"/><circle class="whl" cx="18.5" cy="13" r="2.2"/></svg>';
+// 11/28 하린: 표식은 작은 탑차(박스 트럭) 모양, 대수는 그 위 작은 동그라미. 직접 그린 단순 도형(외부 아이콘 안 씀).
+const TRUCK_SVG = '<svg viewBox="0 0 24 16" aria-hidden="true"><rect x="0.5" y="1" width="14" height="9.5" rx="1" fill="currentColor"/><path d="M15.5 4h4.2l3.3 3.6V11.5h-7.5z" fill="currentColor"/><path class="win" d="M17 5.4h2.3l2 2.2H17z"/><rect x="0.5" y="10" width="22.5" height="1.8" fill="currentColor"/><circle class="whl" cx="5" cy="13" r="2.3"/><circle class="whl" cx="18.5" cy="13" r="2.3"/></svg>';
 const COUNT_BASIS = { 공단확인값: "대수: 공단 확인값", 확인된최소: "대수: 최소 1대 가정" };
 const POS_BASIS = { 공단회신: "위치: 공단 회신", 공연장좌표: "위치: 공연장 위치로 가정" };
 
@@ -26,12 +26,12 @@ export function createGeneratorMarkers(map, activityAtHour) {
       for (const e of byPos.values()) {
         const icon = L.divIcon({
           className: "gen-pin-wrap",
-          html: `<span class="gen-pin${e.unknown ? " unk" : ""}">${TRUCK_SVG}${e.n}</span>`,
-          iconSize: [40, 22], iconAnchor: [20, 11],
+          html: `<span class="gen-pin${e.unknown ? " unk" : ""}"><b><span>${e.n}</span></b>${TRUCK_SVG}</span>`,
+          iconSize: [20, 14], iconAnchor: [10, 7],
         });
         const basis = e.g.공단입력 ? "공단 입력" : [COUNT_BASIS[e.g.대수근거], POS_BASIS[e.g.위치출처]].filter(Boolean).join(" · ");
         const tip = `${e.site ?? "발전차"} 발전차 ${e.n}대${e.unknown ? " (가동 시간 미확인)" : ""}${basis ? `<br><small>${basis}</small>` : ""}`;
-        L.marker([e.lat, e.lon], { icon, keyboard: false }).bindTooltip(tip, { direction: "top", offset: [0, -12] }).addTo(group);
+        L.marker([e.lat, e.lon], { icon, keyboard: false }).bindTooltip(tip, { direction: "top", offset: [0, -24] }).addTo(group);
       }
       if (!visible) map.removeLayer(group);
     },
