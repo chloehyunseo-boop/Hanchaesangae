@@ -429,7 +429,9 @@ function renderManualEventsTable(onChange) {
   // 시작 시각은 브라우저마다 다르게 동작하는 시계 입력 대신 '시'·'분' 선택으로 받아요(Safari에서 입력이 안 되던 문제).
   const tbody = document.getElementById("event-rows");
   tbody.innerHTML = "";
-  const venueNames = [...state.siteByName.keys()];
+  // 11/28 친구 요청: site.geojson엔 공연장 외에 소음 수음점용 아파트(풍납극동아파트 등)도
+  // 같이 들어있어서 "공연 위치" 목록에 섞여 나왔어요 — 공연 위치가 아니라서 빼요.
+  const venueNames = [...state.siteByName.keys()].filter((n) => !n.includes("아파트"));
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const mins = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
   for (const ev of state.manualEvents) {
