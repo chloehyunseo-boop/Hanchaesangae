@@ -25,6 +25,7 @@ import {
   buildGeneratorSourcesFromTruckRecords, localInputToIso, initTabs,
 } from "./shared.js";
 import { ContourCellLayer } from "./contour_layer.js";
+import { createGeneratorMarkers } from "./generator_markers.js"; // 11/28: 지도에 발전차 위치
 
 const NUM_HOURS = 72;
 const STORAGE_KEY = "olpak_station_trucks_v1";
@@ -614,6 +615,7 @@ async function main() {
   }).addTo(map);
   const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
   const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
+  const genMarkers = createGeneratorMarkers(map, generatorActivityAtHour);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
   // 11/27: 컴퓨터 화면 레이아웃(지도+오른쪽 박스)은 지도 칸 크기가 창 크기에 따라 바뀌어서 필요
@@ -688,7 +690,7 @@ async function main() {
     if (e.target.checked) noiseLayer.addTo(map); else map.removeLayer(noiseLayer);
   });
   document.getElementById("toggle-exhaust").addEventListener("change", (e) => {
-    if (e.target.checked) exhaustLayer.addTo(map); else map.removeLayer(exhaustLayer);
+    if (e.target.checked) exhaustLayer.addTo(map); else map.removeLayer(exhaustLayer); genMarkers.setVisible(e.target.checked);
   });
 
   document.getElementById("download-csv").addEventListener("click", async (e) => {
@@ -759,6 +761,7 @@ async function main() {
     const exhaustCells = cells.filter((c) => c.layer === "exhaust");
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
     exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
+    genMarkers.update(buildGeneratorSources(hourIso), hourIso);
     renderAutoEvents(hourIso);
 
     const places = DEFAULT_PLACE_NAMES.map((name) => ({ name, ...pt(name) })).filter((p) => p.lat !== undefined);

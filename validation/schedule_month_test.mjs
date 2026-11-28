@@ -1,0 +1,21 @@
+// 월별 일정 조회(12월 공연 누락 수정) 검증 (하린 11/28). 실행: node validation/schedule_month_test.mjs
+import { readFileSync } from "node:fs";
+import { parseScheduleMonthJson, mergeScheduleLists } from "../engine/events.js";
+let fails = 0;
+const ok = (c, m, x = "") => { console.log(`${c ? "✓" : "✗"} ${m}${x ? `  → ${x}` : ""}`); if (!c) fails++; };
+const f = JSON.parse(readFileSync(new URL("./fixtures/schedule_months_20261128.json", import.meta.url)));
+const nov = parseScheduleMonthJson([f["202611"], []]);
+const dec = parseScheduleMonthJson([f["202612"], []]);
+const all = mergeScheduleLists(nov, dec);
+const find = (t) => all.find((e) => e.title.includes(t));
+ok(all.length === 14, "11월 3건 + 12월 12건, 두 달에 걸친 최현우 공연은 한 번만", `${all.length}건`);
+const lee = find("이승철");
+ok(lee?.site === "KSPO DOME" && lee.일자별시작["2026-12-04"] === "19:00" && lee.일자별시작["2026-12-05"] === "16:00", "12/4~6 이승철(KSPO DOME) 시각", JSON.stringify(lee?.일자별시작));
+const rain = find("RAIN");
+ok(rain?.site === "올림픽홀" && rain.일자별시작["2026-12-05"] === "18:00", "12/5~6 비(올림픽홀) 시각", JSON.stringify(rain?.일자별시작));
+ok(lee?.원본소요시간텍스트 === "약 120분 (인터미션 20분)" && lee?.소요분 === null, "소요 시간은 원문만 남기고 계산엔 안 씀");
+ok(all.every((e) => e.출처 === "공단일정페이지"), "출처는 기존과 같은 '공단일정페이지'(지도 연결 코드 그대로 씀)");
+const davichi = find("DAVICHI");
+ok(Object.keys(davichi?.일자별시작 ?? {}).length === 0 && davichi.flags.includes("시작시각미확인"), "'6시'처럼 오전·오후 없는 글은 지어내지 않고 '시작시각미확인'");
+console.log(fails ? `\n실패 ${fails}건` : "\n전부 통과");
+if (fails) process.exitCode = 1;

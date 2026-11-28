@@ -21,6 +21,8 @@ import {
   allCellsUnknown, uniformUnknownMessage, setupWeatherFreshness, initTabs,
 } from "./shared.js";
 import { ContourCellLayer } from "./contour_layer.js"; // 디자인 사본: 블러 대신 등치선 면
+import { createGeneratorMarkers } from "./generator_markers.js"; // 11/28: 지도에 발전차 위치
+import { generatorActivityAtHour } from "../engine/combine.js";
 
 const NUM_HOURS = 72;
 const EMPTY_VENUES = new Set(); // 체크박스가 없어서 "데모로 추가한 장소"는 항상 없음
@@ -147,6 +149,7 @@ async function main() {
 
   const noiseLayer = new ContourCellLayer({ palette: NOISE_PALETTE }).addTo(map);
   const exhaustLayer = new ContourCellLayer({ palette: EXHAUST_PALETTE }).addTo(map);
+  const genMarkers = createGeneratorMarkers(map, generatorActivityAtHour);
 
   L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
   // 창 크기가 바뀌면 지도 칸 크기도 바뀌어서 다시 맞춰요(친구 11/27 원본 수정 반영)
@@ -182,7 +185,7 @@ async function main() {
     if (e.target.checked) noiseLayer.addTo(map); else map.removeLayer(noiseLayer);
   });
   document.getElementById("toggle-exhaust").addEventListener("change", (e) => {
-    if (e.target.checked) exhaustLayer.addTo(map); else map.removeLayer(exhaustLayer);
+    if (e.target.checked) exhaustLayer.addTo(map); else map.removeLayer(exhaustLayer); genMarkers.setVisible(e.target.checked);
   });
 
   const slider = document.getElementById("time-slider");
@@ -252,6 +255,7 @@ async function main() {
     renderLayerWarnings(cells, weather);
     noiseLayer.setCells(allCellsUnknown(noiseCells) ? [] : noiseCells, 25);
     exhaustLayer.setCells(allCellsUnknown(exhaustCells) ? [] : exhaustCells, 25);
+    genMarkers.update(buildGeneratorSourcesForHour(hourSlotIso(date)), hourSlotIso(date));
     renderAutoEvents(hourSlotIso(date));
     refreshForecastSentences();
   }

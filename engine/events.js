@@ -421,30 +421,86 @@ export function parseUpcomingScheduleHtml(html) {
   const itemRe = /<em class="place">([\s\S]*?)<\/em>\s*<strong class="title">([\s\S]*?)<\/strong>[\s\S]*?<span class="date">([\s\S]*?)<\/span>\s*<small class="time"\s*>?([\s\S]*?)<\/small>/g;
   const out = [];
   for (const m of section.matchAll(itemRe)) {
-    const spatial = decodeXmlEntities(m[1]);
-    const title = decodeXmlEntities(m[2]);
-    const dateText = decodeXmlEntities(m[3]);
-    const timeText = decodeXmlEntities(m[4]);
-    const { site, flags } = matchSite(spatial);
-    const { 기간시작, 기간끝 } = parseDateRange(dateText);
-    if (!기간시작) flags.push("날짜미확인");
-    let 일자별시작 = parseDailyStartTimes(timeText);
-    let 일자별최종공연시작 = {};
-    let 공연요일 = null;
-    // 11/27: 날짜가 박힌 형식("2026년 11월 27일(금) 8PM")으로 하나도 못 읽었으면, 요일만
-    // 적힌 자유문장("수목금 19시 30분 / 토 15시, 19시 / 일 14시")으로 다시 시도해요.
-    if (Object.keys(일자별시작).length === 0) {
-      const expanded = expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝);
-      일자별시작 = expanded.일자별시작;
-      일자별최종공연시작 = expanded.일자별최종공연시작;
-      공연요일 = expanded.공연요일;
-    }
-    if (Object.keys(일자별시작).length === 0) flags.push("시작시각미확인");
-    out.push({
-      title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null, 일자별시작,
-      일자별최종공연시작, 공연요일,
-      출처: "공단일정페이지", flags, 원본장소텍스트: spatial, 원본시간텍스트: timeText || null,
+    out.push(buildUpcomingItem({
+      spatial: decodeXmlEntities(m[1]), title: decodeXmlEntities(m[2]),
+      dateText: decodeXmlEntities(m[3]), timeText: decodeXmlEntities(m[4]),
+    }));
+  }
+  return out;
+}
+
+/** 일정 한 건(장소·제목·기간 글·시간 글) → events.json 공연 한 건. 페이지(HTML)와 월별 조회(JSON)가 같이 써요. */
+function buildUpcomingItem({ spatial, title, dateText, timeText, durationText = null, evtSeq = null }) {
+  const { site, flags } = matchSite(spatial);
+  const { 기간시작, 기간끝 } = parseDateRange(dateText);
+  if (!기간시작) flags.push("날짜미확인");
+  let 일자별시작 = parseDailyStartTimes(timeText);
+  let 일자별최종공연시작 = {};
+  let 공연요일 = null;
+  // 11/27: 날짜가 박힌 형식("2026년 11월 27일(금) 8PM")으로 하나도 못 읽었으면, 요일만
+  // 적힌 자유문장("수목금 19시 30분 / 토 15시, 19시 / 일 14시")으로 다시 시도해요.
+  if (Object.keys(일자별시작).length === 0) {
+    const expanded = expandWeekdayScheduleToDates(timeText, 기간시작, 기간끝);
+    일자별시작 = expanded.일자별시작;
+    일자별최종공연시작 = expanded.일자별최종공연시작;
+    공연요일 = expanded.공연요일;
+  }
+  if (Object.keys(일자별시작).length === 0) flags.push("시작시각미확인");
+  return {
+    title, site, 날짜: null, 기간시작, 기간끝, 시작: null, 소요분: null, 일자별시작,
+    일자별최종공연시작, 공연요일,
+    출처: "공단일정페이지", flags, 원본장소텍스트: spatial, 원본시간텍스트: timeText || null,
+    // 11/28: 월별 조회에서만 오는 값. 소요 시간은 원문 그대로 남기고 계산(종료 3시간 가정)엔 아직 안 써요.
+    ...(durationText !== null ? { 원본소요시간텍스트: String(durationText).trim() || null } : {}),
+    ...(evtSeq !== null ? { 공단일정번호: evtSeq } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 11/28 하린 발견: 일정안내 페이지(HTML)는 "이번 달"만 보여줘서 다음 달 공연(예: 12/4 KSPO DOME)이
+// 빠졌어요. 같은 페이지가 월 버튼을 누를 때 부르는 월별 조회 주소(eventInfoListAjax.es,
+// 요청 {nowYM:"YYYYMM", plcCd:""} → 응답 [ [이번 달 공연...], [지난 공연...] ])로 이번 달·다음 달을
+// 받아요. 이것도 공식 API가 아니라 페이지 내부 주소라 사이트가 바뀌면 깨질 수 있어요 — 실패하면
+// update-events.mjs가 예전 방식(HTML 페이지)으로 돌아가요.
+// ---------------------------------------------------------------------------
+const SCHEDULE_MONTH_URL = "https://www.ksponco.or.kr/olympicpark/eventInfo/eventInfoListAjax.es";
+
+/** 월별 일정 JSON을 그대로 가져와요. ym = "YYYYMM". */
+export async function fetchScheduleMonth(ym) {
+  try {
+    const res = await fetch(SCHEDULE_MONTH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json;charset=UTF-8" },
+      body: JSON.stringify({ nowYM: ym, plcCd: "" }),
     });
+    if (!res.ok) return { ok: false, 사유: `HTTP ${res.status}` };
+    const json = await res.json();
+    if (!Array.isArray(json) || !Array.isArray(json[0])) return { ok: false, 사유: "응답 모양이 바뀐 것 같아요(첫 칸이 목록이 아님)" };
+    return { ok: true, json };
+  } catch (err) {
+    return { ok: false, 사유: `호출 실패: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/** 월별 일정 JSON → 공연 목록(HTML 파서와 같은 모양). 응답 첫 칸(그 달 공연)만 써요. */
+export function parseScheduleMonthJson(json) {
+  const list = Array.isArray(json?.[0]) ? json[0] : [];
+  return list.filter((x) => x && x.delYn !== "Y").map((x) => buildUpcomingItem({
+    spatial: String(x.plc ?? "").trim(), title: String(x.title ?? "").trim(),
+    dateText: `${x.beginDt ?? ""} ~ ${x.endDt ?? ""}`, timeText: String(x.tm ?? "").trim(),
+    durationText: x.ndTm ?? "", evtSeq: x.evtSeq ?? null,
+  }));
+}
+
+/** 여러 달 결과를 합치며 같은 공연(공단일정번호, 없으면 제목+시작일)은 한 번만 남겨요. */
+export function mergeScheduleLists(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const it of lists.flat()) {
+    const k = it.공단일정번호 ?? `${it.title}|${it.기간시작}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(it);
   }
   return out;
 }

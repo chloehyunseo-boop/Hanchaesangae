@@ -225,9 +225,10 @@ export function buildGeneratorSourcesFromTruckRecords(trucks, siteByName, assump
     const feature = siteByName.get(t.site);
     if (!feature) continue; // 위치를 아직 안 고른 트럭은 계산에서 빼요
     // 11/27 하린: 공단이 알려준 공연장별 발전차 위치가 있으면 그 좌표(assumptions.발전차_위치)
-    const { lat, lon } = generatorPosition(t.site, feature, assumptions);
+    const pos = generatorPosition(t.site, feature, assumptions);
+    const { lat, lon } = pos;
     out.push({
-      lat, lon,
+      lat, lon, site: t.site, 위치출처: pos.위치출처, 공단입력: true, // site·위치출처·공단입력은 지도 표시용(11/28), 계산엔 안 씀
       ...(Number.isFinite(t.발전기수) ? { 발전기수: t.발전기수 } : {}),
       ...(t.인증등급 && t.인증등급 !== "모름" ? { 인증등급: t.인증등급 } : {}),
       ...(Number.isFinite(t.엔진출력_kW) ? { 엔진출력_kW: t.엔진출력_kW } : {}),
