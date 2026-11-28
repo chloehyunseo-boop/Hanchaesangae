@@ -159,7 +159,8 @@
     .ir .k i { flex: none; width: 14px; height: 10px; margin-top: 4px; }
     .ir .v .l { display: grid; grid-template-columns: 54px 1fr; gap: 6px; }
     .ir .v .l + .l { margin-top: 4px; }
-    .ir .v small { color: var(--sub); font-size: 12px; line-height: 1.75; }
+    .ir .v small { color: var(--sub); font-size: 12px; line-height: 1.75; display: inline-flex; align-items: center; gap: 4px; }
+    .ir .v small i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 
     footer { border-top: 1px solid var(--line); background: #F5F6F8; }
     footer .inner { max-width: 1440px; margin: 0 auto; padding: 14px 20px 18px; font-size: 12px; color: var(--sub); }
@@ -438,6 +439,19 @@
 
         <div class="tab-panel info" data-tab="info">
           <div class="ig">
+            <h3>단계의 의미</h3>
+            <div class="ir"><span class="k">강</span><span class="v"><span class="l"><small><i style="background:rgba(198,40,40,0.85)"></i>소음</small><span>공단 옥외 공연 소음 기준(65 dB) 이상</span></span><span class="l"><small><i style="background:rgba(106,27,154,0.85)"></i>배출가스</small><span>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></span></span></div>
+            <div class="ir"><span class="k">중</span><span class="v"><span class="l"><small><i style="background:rgba(251,140,0,0.8)"></i>소음</small><span>주거지역 낮 소음 환경기준(55 dB) 이상</span></span><span class="l"><small><i style="background:rgba(171,71,188,0.8)"></i>배출가스</small><span>대기환경기준의 10% 이상 50% 미만</span></span></span></div>
+            <div class="ir"><span class="k">약</span><span class="v"><span class="l"><small><i style="background:rgba(253,216,53,0.85)"></i>소음</small><span>주거지역 밤 소음 환경기준(45 dB) 이상</span></span><span class="l"><small><i style="background:rgba(206,147,216,0.8)"></i>배출가스</small><span>대기환경기준의 2% 이상 10% 미만</span></span></span></div>
+          </div>
+          <div class="ig">
+            <h3>지도 무늬</h3>
+            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">소음·배출가스 등급 보류. 값은 계산됐지만 단계를 정하지 않음(발전차 100m 이내, 일부 공연 정보 빠짐)</span></div>
+            <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">소음 계산 불가(공연장 100m 이내 등)</span></div>
+            <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
+            <div class="ir"><span class="k"><i style="height:0;border-top:2px solid #7D8894;margin-top:9px"></i>경계</span><span class="v">대략적인 위치. 25m 칸 계산 결과를 부드럽게 이은 선</span></div>
+          </div>
+          <div class="ig">
             <h3>계산 근거</h3>
             <div class="ir"><span class="k">기상</span><span class="v">기상청 단기예보</span></div>
             <div class="ir"><span class="k">공연</span><span class="v">공연 일정 자동 수집 + 수동 입력</span></div>
@@ -446,19 +460,6 @@
             <div class="ir"><span class="k">계산</span><span class="v">시민 화면과 같은 엔진. 소음 CONCAWE, 배출가스 가우시안 플룸(공개 표준 단순화)</span></div>
             <div class="ir"><span class="k">인증 등급</span><span class="v">발전기 엔진의 배출가스 인증. 인증 = 미국 EPA Tier 4 Final(NOx 0.40 g/kWh 한도), 비인증 = 인증 표기 없음(비제어 평균 18.8 g/kWh). 모르면 인증으로 계산</span></div>
             <div class="ir"><span class="k">저장</span><span class="v">입력값은 이 브라우저에만 저장(서버 없음)</span></div>
-          </div>
-          <div class="ig">
-            <h3>단계의 의미</h3>
-            <div class="ir"><span class="k">강</span><span class="v"><span class="l"><small>소음</small><span>공단 옥외 공연 소음 기준(65 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준(NO₂ 1시간 0.10 ppm)의 50% 이상</span></span></span></div>
-            <div class="ir"><span class="k">중</span><span class="v"><span class="l"><small>소음</small><span>주거지역 낮 소음 환경기준(55 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준의 10% 이상 50% 미만</span></span></span></div>
-            <div class="ir"><span class="k">약</span><span class="v"><span class="l"><small>소음</small><span>주거지역 밤 소음 환경기준(45 dB) 이상</span></span><span class="l"><small>배출가스</small><span>대기환경기준의 2% 이상 10% 미만</span></span></span></div>
-          </div>
-          <div class="ig">
-            <h3>지도 무늬</h3>
-            <div class="ir"><span class="k"><i class="hatch"></i>빗금</span><span class="v">소음·배출가스 등급 보류. 값은 계산됐지만 단계를 정하지 않음(발전차 100m 이내, 일부 공연 정보 빠짐)</span></div>
-            <div class="ir"><span class="k"><i class="dots"></i>점무늬</span><span class="v">소음 계산 불가(공연장 100m 이내 등)</span></div>
-            <div class="ir"><span class="k"><i style="background:#A9B4C0;height:4px;margin-top:7px;border-radius:2px"></i>회색</span><span class="v">시간 막대의 회색 구간. 약풍으로 배출가스 계산 불가</span></div>
-            <div class="ir"><span class="k"><i style="height:0;border-top:2px solid #7D8894;margin-top:9px"></i>경계</span><span class="v">대략적인 위치. 25m 칸 계산 결과를 부드럽게 이은 선</span></div>
           </div>
         </div>
       </div>
