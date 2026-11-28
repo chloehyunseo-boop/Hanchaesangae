@@ -85,7 +85,7 @@ export const ContourCellLayer = CanvasCellLayer.extend({
     const sctx = small.getContext("2d");
     const big = document.createElement("canvas");
     big.width = W; big.height = H;
-    const bctx = big.getContext("2d", { willReadFrequently: true });
+    const bctx = big.getContext("2d");
     bctx.imageSmoothingEnabled = true;
     bctx.imageSmoothingQuality = "high";
 
